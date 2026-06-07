@@ -1,0 +1,22 @@
+package com.example.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+// Light Palette (Claude Classic Warm Off-White & Terracotta)
+val ClaudeTerracotta = Color(0xFFD97757) // Earthy Ginger Orange
+val ClaudeSoftTomato = Color(0xFFE08E73)
+val ClaudeAlabaster = Color(0xFFFAF9F8) // Soft Warm Off-White
+val ClaudeCharcoal = Color(0xFF201F1E) // Earthy Charcoal Slate
+val ClaudeMutedText = Color(0xFF6B6865)
+val ClaudeSandBorder = Color(0xFFEDE9E3) // Warm border lines
+val ClaudeSelectedBg = Color(0xFFF9EFEA) // Active hover/selection tint
+val ClaudeWhite = Color(0xFFFFFFFF)
+
+// Dark Palette
+val ClaudeOnyx = Color(0xFF161514) // Ground Slate black
+val ClaudeDarkSurface = Color(0xFF232220) // Off-black card surface
+val ClaudeDarkBorder = Color(0xFF383633)
+val ClaudeDarkText = Color(0xFFF0EDE9)
+val ClaudeDarkMutedText = Color(0xFFA6A29E)
+val ClaudeDarkSelectedBg = Color(0xFF3B2A22)
+val ClaudeOrangeAccent = Color(0xFFE89D82)
