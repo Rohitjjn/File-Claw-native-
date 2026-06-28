@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -63,6 +65,16 @@ import com.example.ui.component.formatElapsedTime
 import com.example.viewmodel.MainViewModel
 import java.io.File
 import coil.compose.AsyncImage
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.LightMode
 
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
@@ -74,7 +86,16 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroidSize
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -90,6 +111,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import io.iamjosephmj.flinger.flings.flingBehavior
+import io.iamjosephmj.flinger.FlingPresets
+import androidx.compose.foundation.lazy.rememberLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,6 +130,7 @@ fun FilePreviewScreen(
     modifier: Modifier = Modifier
 ) {
     val fileState by viewModel.currentFileState.collectAsState()
+    val expandedZipPaths by viewModel.expandedZipPaths.collectAsState()
     val settings by viewModel.settingsState.collectAsState()
     
     val activeFile = remember(fileState) {
@@ -116,6 +147,8 @@ fun FilePreviewScreen(
         }
     }
 
+    var isBarsVisible by remember { mutableStateOf(true) }
+
     val isHtmlFile = remember(activeFile) {
         activeFile?.extension?.lowercase() in setOf("html", "htm")
     }
@@ -125,10 +158,40 @@ fun FilePreviewScreen(
     }
 
     val canBeRenderedInWeb = remember(activeFile) {
-        activeFile?.extension?.lowercase() in setOf("html", "htm", "js", "ts", "css", "xml", "txt", "json", "md")
+        activeFile?.extension?.lowercase() in setOf("html", "htm", "js", "ts", "css", "xml", "txt", "json", "md", "pdf")
     }
     
+    var currentPdfPage by remember { mutableStateOf(1) }
+    var totalPdfPages by remember { mutableStateOf(0) }
     var showPropertiesDialog by remember { mutableStateOf(false) }
+
+    var isPdfNightMode by remember { mutableStateOf(false) }
+    var scrollToPage by remember { mutableStateOf<Int?>(null) }
+    var pendingLinkToOpen by remember { mutableStateOf<String?>(null) }
+    var showJumpDialog by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+
+    // Restore previously opened file state on recreate
+    LaunchedEffect(fileState) {
+        if (fileState is MainViewModel.FileContentState.Idle) {
+            val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+            val lastPath = prefs.getString("last_previewed_file_path", null)
+            if (lastPath != null) {
+                val file = java.io.File(lastPath)
+                if (file.exists()) {
+                    val entity = RecentFileEntity(
+                        path = file.absolutePath,
+                        name = file.name,
+                        size = file.length(),
+                        extension = file.extension.lowercase(),
+                        lastOpened = System.currentTimeMillis()
+                    )
+                    viewModel.openFile(entity)
+                }
+            }
+        }
+    }
 
     val handleBack = {
         val parentPath = activeFile?.parentZipPath
@@ -145,159 +208,219 @@ fun FilePreviewScreen(
 
     Scaffold(
         topBar = {
-            val titleText = when (val state = fileState) {
-                is MainViewModel.FileContentState.TextSuccess -> state.file.name
-                is MainViewModel.FileContentState.CsvSuccess -> state.file.name
-                is MainViewModel.FileContentState.ZipSuccess -> state.file.name
-                is MainViewModel.FileContentState.ImageSuccess -> state.file.name
-                is MainViewModel.FileContentState.PdfSuccess -> state.file.name
-                is MainViewModel.FileContentState.DocxSuccess -> state.file.name
-                is MainViewModel.FileContentState.MediaSuccess -> state.file.name
-                is MainViewModel.FileContentState.BinarySuccess -> state.file.name
-                else -> "Preview"
-            }
-            
-            var showMenu by remember { mutableStateOf(false) }
-            val context = LocalContext.current
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isBarsVisible,
+                enter = androidx.compose.animation.slideInVertically(initialOffsetY = { -it }) + androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it }) + androidx.compose.animation.fadeOut()
+            ) {
+                val titleText = when (val state = fileState) {
+                    is MainViewModel.FileContentState.TextSuccess -> state.file.name
+                    is MainViewModel.FileContentState.CsvSuccess -> state.file.name
+                    is MainViewModel.FileContentState.ZipSuccess -> state.file.name
+                    is MainViewModel.FileContentState.ImageSuccess -> state.file.name
+                    is MainViewModel.FileContentState.PdfSuccess -> state.file.name
+                    is MainViewModel.FileContentState.DocxSuccess -> state.file.name
+                    is MainViewModel.FileContentState.MediaSuccess -> state.file.name
+                    is MainViewModel.FileContentState.BinarySuccess -> state.file.name
+                    else -> "Preview"
+                }
+                
+                var showMenu by remember { mutableStateOf(false) }
+                val context = LocalContext.current
 
-            ClaudeAppBar(
-                title = titleText,
-                onNavIconClick = handleBack,
-                navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                actions = {
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More Options")
-                        }
+                ClaudeAppBar(
+                    title = titleText,
+                    onNavIconClick = handleBack,
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    actions = {
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More Options")
+                            }
 
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Share file") },
-                                onClick = {
-                                    showMenu = false
-                                    activeFile?.let { fileEntity ->
-                                        shareFile(context, File(fileEntity.path), fileEntity.extension)
-                                    }
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = "Share file"
-                                    )
-                                }
-                            )
-
-                            if (canBeRenderedInWeb) {
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
                                 DropdownMenuItem(
-                                    text = { 
-                                        Text(if (isWebRenderActive) "Show Syntax Code" else "App Browser Preview") 
-                                    },
+                                    text = { Text("Share file") },
                                     onClick = {
                                         showMenu = false
-                                        isWebRenderActive = !isWebRenderActive
+                                        activeFile?.let { fileEntity ->
+                                            shareFile(context, File(fileEntity.path), fileEntity.extension)
+                                        }
                                     },
                                     leadingIcon = {
                                         Icon(
-                                            imageVector = if (isWebRenderActive) Icons.Outlined.Code else Icons.Outlined.Language,
-                                            contentDescription = "Toggle Web Preview"
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "Share file"
+                                        )
+                                    }
+                                )
+
+                                val isPdf = activeFile?.extension?.lowercase() == "pdf"
+                                val isDocx = activeFile?.extension?.lowercase() == "docx"
+                                if (isPdf || isDocx) {
+                                    DropdownMenuItem(
+                                        text = { Text("Go to Page ($currentPdfPage / $totalPdfPages)") },
+                                        onClick = {
+                                            showMenu = false
+                                            showJumpDialog = true
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.InsertDriveFile,
+                                                contentDescription = "Go to Page"
+                                            )
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(if (isPdfNightMode) "Light Mode" else "Dark Mode") },
+                                        onClick = {
+                                            showMenu = false
+                                            isPdfNightMode = !isPdfNightMode
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = if (isPdfNightMode) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                                                contentDescription = "Toggle Dark Mode"
+                                             )
+                                        }
+                                    )
+                                    if (isPdf) {
+                                        DropdownMenuItem(
+                                            text = { Text("Open in System Viewer") },
+                                            onClick = {
+                                                showMenu = false
+                                                activeFile?.let { fileEntity ->
+                                                    openPdfInBrowser(context, java.io.File(fileEntity.path))
+                                                }
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Language,
+                                                    contentDescription = "Open in System Viewer"
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+
+                                if (canBeRenderedInWeb && activeFile?.extension?.lowercase() != "pdf") {
+                                    DropdownMenuItem(
+                                        text = { 
+                                            Text(if (isWebRenderActive) "Show Syntax Code" else "App Browser Preview") 
+                                        },
+                                        onClick = {
+                                            showMenu = false
+                                            isWebRenderActive = !isWebRenderActive
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = if (isWebRenderActive) Icons.Outlined.Code else Icons.Outlined.Language,
+                                                contentDescription = "Toggle Web Preview"
+                                            )
+                                        }
+                                    )
+                                }
+
+                                DropdownMenuItem(
+                                    text = { Text("Properties") },
+                                    onClick = {
+                                        showMenu = false
+                                        showPropertiesDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Info,
+                                            contentDescription = "Properties"
+                                        )
+                                    }
+                                )
+
+                                DropdownMenuItem(
+                                    text = { Text("Remove from history", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        showMenu = false
+                                        activeFile?.let { fileEntity ->
+                                            viewModel.deleteRecentFile(fileEntity)
+                                            handleBack()
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Remove from history",
+                                            tint = MaterialTheme.colorScheme.error
                                         )
                                     }
                                 )
                             }
-
-                            DropdownMenuItem(
-                                text = { Text("Properties") },
-                                onClick = {
-                                    showMenu = false
-                                    showPropertiesDialog = true
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Info,
-                                        contentDescription = "Properties"
-                                    )
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text("Remove from history", color = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    showMenu = false
-                                    activeFile?.let { fileEntity ->
-                                        viewModel.deleteRecentFile(fileEntity)
-                                        handleBack()
-                                    }
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Remove from history",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            )
                         }
                     }
-                }
-            )
+                )
+            }
         },
         bottomBar = {
-            // Only show edit controls for editable text/markdown files
-            val isEditable = when (val state = fileState) {
-                is MainViewModel.FileContentState.TextSuccess -> {
-                    state.file.extension.lowercase() != "zip" && state.file.extension.lowercase() != "csv"
-                }
-                else -> false
-            }
-
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                modifier = Modifier.fillMaxWidth()
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isBarsVisible,
+                enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut()
             ) {
-                Row(
-                    modifier = Modifier
-                        .navigationBarsPadding()
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Properties trigger
-                    OutlinedButton(
-                        onClick = { showPropertiesDialog = true },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-                    ) {
-                        Icon(Icons.Outlined.Info, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Properties", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                // Only show edit controls for editable text/markdown files
+                val isEditable = when (val state = fileState) {
+                    is MainViewModel.FileContentState.TextSuccess -> {
+                        state.file.extension.lowercase() != "zip" && state.file.extension.lowercase() != "csv"
                     }
+                    else -> false
+                }
 
-                    // Edit trigger if valid text asset
-                    if (isEditable) {
-                        Button(
-                            onClick = onNavigateToEditor,
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .navigationBarsPadding()
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Properties trigger
+                        OutlinedButton(
+                            onClick = { showPropertiesDialog = true },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = null)
+                            Icon(Icons.Outlined.Info, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Edit", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("Properties", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+
+                        // Edit trigger if valid text asset
+                        if (isEditable) {
+                            Button(
+                                onClick = onNavigateToEditor,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Edit", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
                         }
                     }
                 }
@@ -309,12 +432,18 @@ fun FilePreviewScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .let {
+                    if (isBarsVisible) {
+                        it.padding(innerPadding)
+                    } else {
+                        it
+                    }
+                }
         ) {
             when (val state = fileState) {
                 is MainViewModel.FileContentState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        com.example.ui.component.PremiumLoadingIndicator(text = "Loading file...")
                     }
                 }
                 is MainViewModel.FileContentState.Error -> {
@@ -384,6 +513,10 @@ fun FilePreviewScreen(
                     ZipPreview(
                         zipRoot = state.root,
                         fileEntity = state.file,
+                        expandedPaths = expandedZipPaths,
+                        onToggleExpand = { path ->
+                            viewModel.toggleZipPathExpanded(path)
+                        },
                         onZipEntryClick = { node ->
                             viewModel.openZipEntry(state.file, node)
                         },
@@ -399,14 +532,30 @@ fun FilePreviewScreen(
                 is MainViewModel.FileContentState.PdfSuccess -> {
                     PdfPreview(
                         fileEntity = state.file,
-                        modifier = Modifier.fillMaxSize()
+                        isNightMode = isPdfNightMode,
+                        scrollToPage = scrollToPage,
+                        onScrollToPageHandled = { scrollToPage = null },
+                        onLinkClicked = { _ -> },
+                        modifier = Modifier.fillMaxSize(),
+                        onSingleTap = { isBarsVisible = !isBarsVisible },
+                        onPageChanged = { page, total ->
+                            currentPdfPage = page
+                            totalPdfPages = total
+                        }
                     )
                 }
                 is MainViewModel.FileContentState.DocxSuccess -> {
-                    DocxPreview(
-                        docxElements = state.elements,
+                    DocxPreviewWebView(
+                        base64Docx = state.base64Data,
                         fileEntity = state.file,
-                        modifier = Modifier.fillMaxSize()
+                        isNightMode = isPdfNightMode,
+                        modifier = Modifier.fillMaxSize(),
+                        onPageChanged = { page, total ->
+                            currentPdfPage = page
+                            totalPdfPages = total
+                        },
+                        scrollToPage = scrollToPage,
+                        onScrollProgressHandled = { scrollToPage = null }
                     )
                 }
                 is MainViewModel.FileContentState.MediaSuccess -> {
@@ -466,6 +615,78 @@ fun FilePreviewScreen(
                 containerColor = MaterialTheme.colorScheme.surface
             )
         }
+    }
+
+    if (showJumpDialog) {
+        var pageInput by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showJumpDialog = false },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val pNum = pageInput.toIntOrNull()
+                        if (pNum != null && pNum in 1..totalPdfPages) {
+                            scrollToPage = pNum - 1
+                        } else {
+                            android.widget.Toast.makeText(context, "Invalid page number", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        showJumpDialog = false
+                    }
+                ) {
+                    Text("Go")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showJumpDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+            title = { Text("Go to Page") },
+            text = {
+                Column {
+                    Text("Enter page number (1 to $totalPdfPages):")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pageInput,
+                        onValueChange = { pageInput = it.filter { char -> char.isDigit() } },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        )
+    }
+
+    if (pendingLinkToOpen != null) {
+        AlertDialog(
+            onDismissRequest = { pendingLinkToOpen = null },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingLinkToOpen?.let { url ->
+                            try {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.widget.Toast.makeText(context, "Failed to open link", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        pendingLinkToOpen = null
+                    }
+                ) {
+                    Text("Open")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingLinkToOpen = null }) {
+                    Text("Cancel")
+                }
+            },
+            title = { Text("Open Link") },
+            text = { Text("Do you want to open this link in your browser?\n\n$pendingLinkToOpen") }
+        )
     }
 }
 
@@ -650,7 +871,7 @@ fun MarkdownCodeBlockRenderer(
             .padding(vertical = 6.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            containerColor = Color(0xFFF4F4F4)
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
@@ -734,252 +955,333 @@ fun MarkdownPreview(
     fontSizeSetting: String,
     modifier: Modifier = Modifier
 ) {
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val onBackgroundColor = MaterialTheme.colorScheme.onBackground
-    val bodySize = when (fontSizeSetting) {
-        "Small" -> 13.sp
-        "Large" -> 18.sp
-        else -> 15.sp
-    }
+    val isNightMode = androidx.compose.foundation.isSystemInDarkTheme()
+    var generatedHtml by remember(markdownText, isNightMode, fontSizeSetting) { mutableStateOf<String?>(null) }
+    var isWebViewLoading by remember(markdownText) { mutableStateOf(true) }
 
-    val parsedElements = remember(markdownText) {
-        val elements = mutableListOf<MarkdownElement>()
-        val lines = markdownText.split("\n")
-        var idx = 0
-        while (idx < lines.size) {
-            val line = lines[idx]
-            val trimmedLine = line.trim()
-            
-            if (trimmedLine.startsWith("```")) {
-                val language = trimmedLine.substring(3).trim()
-                val codeBuilder = StringBuilder()
-                idx++
-                while (idx < lines.size) {
-                    val currentLine = lines[idx]
-                    if (currentLine.trim().startsWith("```")) {
-                        break
-                    }
-                    if (codeBuilder.isNotEmpty()) {
-                        codeBuilder.append("\n")
-                    }
-                    codeBuilder.append(currentLine)
-                    idx++
-                }
-                elements.add(MarkdownElement.CodeBlock(language = language, content = codeBuilder.toString()))
-            } else if (trimmedLine.startsWith(">")) {
-                val quoteBuilder = StringBuilder()
-                while (idx < lines.size && lines[idx].trim().startsWith(">")) {
-                    val qLine = lines[idx].trim()
-                    val textContent = if (qLine.startsWith("> ")) qLine.substring(2) else qLine.substring(1)
-                    if (quoteBuilder.isNotEmpty()) {
-                        quoteBuilder.append("\n")
-                    }
-                    quoteBuilder.append(textContent)
-                    idx++
-                }
-                idx--
-                elements.add(MarkdownElement.Blockquote(quoteBuilder.toString()))
-            } else if (trimmedLine.startsWith("# ")) {
-                elements.add(MarkdownElement.Header(1, trimmedLine.substring(2)))
-            } else if (trimmedLine.startsWith("## ")) {
-                elements.add(MarkdownElement.Header(2, trimmedLine.substring(3)))
-            } else if (trimmedLine.startsWith("### ")) {
-                elements.add(MarkdownElement.Header(3, trimmedLine.substring(4)))
-            } else if (trimmedLine.startsWith("* ") || trimmedLine.startsWith("- ")) {
-                elements.add(MarkdownElement.ListItem(trimmedLine.substring(2)))
-            } else if (trimmedLine.startsWith("---")) {
-                elements.add(MarkdownElement.Rule)
-            } else if (trimmedLine.startsWith("|")) {
-                val tableRows = mutableListOf<String>()
-                while (idx < lines.size && lines[idx].trim().startsWith("|")) {
-                    tableRows.add(lines[idx].trim())
-                    idx++
-                }
-                idx--
-                if (tableRows.isNotEmpty()) {
-                    elements.add(MarkdownElement.Table(tableRows))
-                }
-            } else if (trimmedLine.isNotEmpty()) {
-                elements.add(MarkdownElement.Paragraph(line))
-            }
-            idx++
-        }
-        elements
-    }
+    LaunchedEffect(markdownText, isNightMode, fontSizeSetting) {
+        val htmlContent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val parser = org.intellij.markdown.parser.MarkdownParser(org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor())
+            val parsedTree = parser.buildMarkdownTreeFromString(markdownText)
+            val rawHtml = org.intellij.markdown.html.HtmlGenerator(markdownText, parsedTree, org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor()).generateHtml()
 
-    LazyColumn(
-        modifier = modifier.padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        // Tag info row bunder
-        item(key = "header_info", contentType = "info_row") {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    modifier = Modifier.padding(end = 12.dp)
-                ) {
-                    Text(
-                        text = fileEntity.extension.uppercase(),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                    )
-                }
-                Text(
-                    text = "${formatFileSize(fileEntity.size)} • Modified ${formatElapsedTime(fileEntity.lastOpened)}",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = "Editable",
-                    fontSize = 11.sp,
-                    color = Color(0xFF427A5B),
-                    fontWeight = FontWeight.Bold
-                )
+            val fontSize = when (fontSizeSetting) {
+                "Small" -> "14px"
+                "Large" -> "20px"
+                else -> "16px"
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-        }
 
-        itemsIndexed(
-            items = parsedElements,
-            key = { index, element ->
-                when (element) {
-                    is MarkdownElement.Header -> "h_${index}_${element.level}"
-                    is MarkdownElement.ListItem -> "li_${index}"
-                    is MarkdownElement.Rule -> "rule_${index}"
-                    is MarkdownElement.Table -> "table_${index}"
-                    is MarkdownElement.Paragraph -> "p_${index}"
-                    is MarkdownElement.CodeBlock -> "code_${index}"
-                    is MarkdownElement.Blockquote -> "quote_${index}"
-                }
-            },
-            contentType = { _, element ->
-                when (element) {
-                    is MarkdownElement.Header -> "header"
-                    is MarkdownElement.ListItem -> "list_item"
-                    is MarkdownElement.Rule -> "rule"
-                    is MarkdownElement.Table -> "table"
-                    is MarkdownElement.Paragraph -> "paragraph"
-                    is MarkdownElement.CodeBlock -> "code_block"
-                    is MarkdownElement.Blockquote -> "blockquote"
-                }
-            }
-        ) { _, element ->
-            when (element) {
-                is MarkdownElement.Header -> {
-                    val size = when (element.level) {
-                        1 -> 24.sp
-                        2 -> 20.sp
-                        else -> 16.sp
+            // Claude Theme Colors (EXACT from File Claw - MD Preview Theme Fix Prompt)
+            val bgColor = if (isNightMode) "#151514" else "#faf9f5" // canvas
+            val textPrimary = if (isNightMode) "#f5f5f3" else "#141413" // ink
+            val textBody = if (isNightMode) "#d1cfc7" else "#3d3d3a" // body
+            val textBodyStrong = if (isNightMode) "#faf9f5" else "#252523" // body_strong
+            val textSecondary = if (isNightMode) "#a39f93" else "#6c6a64" // muted
+            val textSecondarySoft = if (isNightMode) "#8e8779" else "#8e8b82" // muted_soft
+            val accent = if (isNightMode) "#e08567" else "#cc785c" // primary (coral)
+            val accentActive = if (isNightMode) "#f09a7d" else "#a9583e" // primary_active
+            val border = if (isNightMode) "#2d2b28" else "#e6dfd8" // hairline
+            val borderSoft = if (isNightMode) "#211f1d" else "#ebe6df" // hairline_soft
+            val cardBg = if (isNightMode) "#2a2723" else "#efe9de" // surface_card
+            val quoteBg = if (isNightMode) "#1c1a18" else "#f5f0e8" // surface_soft
+            val inlineCodeBg = if (isNightMode) "#2d2823" else "#e8e0d2" // surface_cream_strong
+            val codeBlockOuterBg = if (isNightMode) "#0d0d0c" else "#181715" // surface_dark
+            val codeBlockInnerBg = if (isNightMode) "#161513" else "#1f1e1b" // surface_dark_soft
+            val codeBlockHeaderBg = if (isNightMode) "#1d1b19" else "#252320" // surface_dark_elevated
+            val codeBlockText = if (isNightMode) "#f5f5f3" else "#faf9f5" // on_dark
+            val codeBlockButtons = if (isNightMode) "#a09d96" else "#8e8b82" // on_dark_soft
+
+            """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+                <style>
+                    :root {
+                        --bg-color: $bgColor;
+                        --text-primary: $textPrimary;
+                        --text-body: $textBody;
+                        --text-body-strong: $textBodyStrong;
+                        --text-secondary: $textSecondary;
+                        --text-secondary-soft: $textSecondarySoft;
+                        --accent: $accent;
+                        --accent-active: $accentActive;
+                        --border: $border;
+                        --border-soft: $borderSoft;
+                        --card-bg: $cardBg;
+                        --quote-bg: $quoteBg;
+                        --inline-code-bg: $inlineCodeBg;
+                        --code-block-outer: $codeBlockOuterBg;
+                        --code-block-inner: $codeBlockInnerBg;
+                        --code-block-header: $codeBlockHeaderBg;
+                        --code-text: $codeBlockText;
+                        --code-buttons: $codeBlockButtons;
                     }
-                    Column(modifier = Modifier.padding(vertical = if (element.level == 1) 8.dp else 4.dp)) {
-                        Text(
-                            text = element.text,
-                            fontSize = size,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        if (element.level == 1) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f), thickness = 1.5.dp)
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                        background-color: var(--bg-color);
+                        color: var(--text-body);
+                        font-size: $fontSize;
+                        line-height: 1.55;
+                        padding: 16px;
+                        margin: 0;
+                        word-wrap: break-word;
+                    }
+                    h1, h2, h3, h4, h5, h6 {
+                        color: var(--text-primary);
+                        margin-top: 24px;
+                        margin-bottom: 16px;
+                        font-weight: 700;
+                    }
+                    h1 {
+                        font-size: 28px;
+                        border-bottom: 2px solid var(--border);
+                        padding-bottom: 8px;
+                    }
+                    h2 { font-size: 22px; }
+                    h3 { font-size: 18px; font-weight: 600; }
+                    p {
+                        margin-top: 0;
+                        margin-bottom: 16px;
+                    }
+                    li {
+                        margin: 8px 0;
+                    }
+                    ul, ol {
+                        padding-left: 24px;
+                    }
+                    a {
+                        color: var(--accent);
+                        text-decoration: none;
+                    }
+                    a:hover {
+                        color: var(--accent-active);
+                        text-decoration: underline;
+                    }
+                    code {
+                        font-family: "JetBrains Mono", ui-monospace, Consolas, Monaco, monospace;
+                        background-color: var(--inline-code-bg);
+                        color: var(--accent);
+                        padding: 2px 6px;
+                        border-radius: 4px;
+                        font-size: 14px;
+                    }
+                    pre {
+                        background-color: transparent;
+                        margin: 0;
+                        padding: 0;
+                        overflow: visible;
+                    }
+                    .code-block-container {
+                        background-color: var(--code-block-outer);
+                        border-radius: 12px;
+                        margin-bottom: 16px;
+                        overflow: hidden;
+                        border: 1px solid var(--border);
+                    }
+                    .code-header {
+                        background-color: var(--code-block-header);
+                        padding: 8px 16px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    }
+                    .code-lang {
+                        color: var(--text-secondary-soft);
+                        font-size: 12px;
+                        font-family: monospace;
+                        text-transform: uppercase;
+                    }
+                    .copy-btn {
+                        background: transparent;
+                        border: 1px solid var(--code-buttons);
+                        color: var(--text-secondary-soft);
+                        padding: 4px 12px;
+                        border-radius: 6px;
+                        font-size: 12px;
+                        cursor: pointer;
+                        transition: background 0.2s;
+                    }
+                    .copy-btn:hover {
+                        background: rgba(255, 255, 255, 0.1);
+                    }
+                    .code-content {
+                        background-color: var(--code-block-inner);
+                        padding: 16px;
+                        overflow-x: auto;
+                    }
+                    .code-content code {
+                        background-color: transparent;
+                        color: var(--code-text);
+                        padding: 0;
+                        font-size: 14px;
+                        line-height: 1.6;
+                    }
+                    blockquote {
+                        margin: 0 0 16px 0;
+                        padding: 12px 20px;
+                        color: var(--text-body);
+                        border-left: 4px solid var(--accent);
+                        background-color: var(--quote-bg);
+                        border-radius: 0 8px 8px 0;
+                    }
+                    table {
+                        border-collapse: collapse;
+                        width: 100%;
+                        margin-bottom: 16px;
+                        display: block;
+                        overflow-x: auto;
+                        border: 1px solid var(--border);
+                    }
+                    th, td {
+                        border: 1px solid var(--border);
+                        padding: 12px;
+                    }
+                    th {
+                        background-color: var(--quote-bg);
+                        font-weight: 600;
+                        color: var(--text-body-strong);
+                    }
+                    tr:nth-child(even) {
+                        background-color: var(--bg-color);
+                    }
+                    tr:nth-child(odd) {
+                        background-color: var(--bg-color);
+                    }
+                    hr {
+                        border: 0;
+                        border-top: 2px solid var(--border);
+                        margin: 24px 0;
+                    }
+                    img {
+                        max-width: 100%;
+                        border-radius: 8px;
+                    }
+                </style>
+                <script>
+                    function copyCode(btn, codeId) {
+                        var codeText = document.getElementById(codeId).innerText;
+                        if(window.Android) {
+                            window.Android.copyToClipboard(codeText);
+                            var originalText = btn.innerText;
+                            btn.innerText = 'Copied!';
+                            setTimeout(function() {
+                                btn.innerText = originalText;
+                            }, 2000);
                         }
                     }
-                }
-                is MarkdownElement.ListItem -> {
-                    val parsedText = remember(element.text, primaryColor, onBackgroundColor) {
-                        parseInlineMarkdown(element.text, primaryColor, onBackgroundColor)
+                    
+                    document.addEventListener("DOMContentLoaded", function() {
+                        var pres = document.querySelectorAll('pre');
+                        pres.forEach(function(pre, index) {
+                            if (pre.parentNode.className === 'code-content') return;
+                            
+                            var code = pre.querySelector('code');
+                            var lang = 'Code';
+                            if (code && code.className) {
+                                var match = code.className.match(/language-(\w+)/);
+                                if (match) lang = match[1];
+                            }
+                            
+                            var codeId = 'code-' + index;
+                            if (code) { code.id = codeId; } else { pre.id = codeId; }
+                            
+                            var container = document.createElement('div');
+                            container.className = 'code-block-container';
+                            
+                            var header = document.createElement('div');
+                            header.className = 'code-header';
+                            
+                            var langSpan = document.createElement('span');
+                            langSpan.className = 'code-lang';
+                            langSpan.innerText = lang;
+                            
+                            var copyBtn = document.createElement('button');
+                            copyBtn.className = 'copy-btn';
+                            copyBtn.innerText = 'Copy';
+                            copyBtn.onclick = function() { copyCode(this, codeId); };
+                            
+                            header.appendChild(langSpan);
+                            header.appendChild(copyBtn);
+                            
+                            var content = document.createElement('div');
+                            content.className = 'code-content';
+                            
+                            pre.parentNode.insertBefore(container, pre);
+                            container.appendChild(header);
+                            container.appendChild(content);
+                            content.appendChild(pre);
+                        });
+                    });
+                </script>
+            </head>
+            <body>
+                $rawHtml
+            </body>
+            </html>
+            """.trimIndent()
+        }
+        generatedHtml = htmlContent
+    }
+
+    Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
+        if (generatedHtml != null) {
+            androidx.compose.ui.viewinterop.AndroidView(
+                factory = { context ->
+                    android.webkit.WebView(context).apply {
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            loadWithOverviewMode = true
+                            useWideViewPort = true
+                            builtInZoomControls = true
+                            displayZoomControls = false
+                            setSupportZoom(true)
+                        }
+                        setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+                        setInitialScale(0)
+                        addJavascriptInterface(WebAppInterface(context), "Android")
+                        
+                        webViewClient = object : android.webkit.WebViewClient() {
+                            override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                isWebViewLoading = false
+                            }
+                        }
+                        
+                        loadDataWithBaseURL(null, generatedHtml!!, "text/html", "UTF-8", null)
                     }
-                    Row(modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.Top) {
-                        Text(
-                            text = "•",
-                            fontSize = bodySize,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 10.dp)
-                        )
-                        Text(
-                            text = parsedText,
-                            fontSize = bodySize,
-                            lineHeight = bodySize * 1.45f,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                }
-                is MarkdownElement.Rule -> {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-                is MarkdownElement.Table -> {
-                    MarkdownTableRenderer(tableRows = element.rows)
-                }
-                is MarkdownElement.Paragraph -> {
-                    val parsedText = remember(element.text, primaryColor, onBackgroundColor) {
-                        parseInlineMarkdown(element.text, primaryColor, onBackgroundColor)
-                    }
-                    Text(
-                        text = parsedText,
-                        fontSize = bodySize,
-                        lineHeight = bodySize * 1.5f,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    )
-                }
-                is MarkdownElement.CodeBlock -> {
-                    MarkdownCodeBlockRenderer(
-                        language = element.language,
-                        content = element.content,
-                        fontSize = bodySize * 0.9f
-                    )
-                }
-                is MarkdownElement.Blockquote -> {
-                    val parsedText = remember(element.text, primaryColor, onBackgroundColor) {
-                        parseInlineMarkdown(element.text, primaryColor, onBackgroundColor)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
-                                shape = RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp)
-                            )
-                            .height(IntrinsicSize.Min)
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Spacer(
-                            modifier = Modifier
-                                .width(4.dp)
-                                .fillMaxHeight()
-                                .background(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    shape = RoundedCornerShape(2.dp)
-                                )
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = parsedText,
-                            fontSize = bodySize,
-                            fontStyle = FontStyle.Italic,
-                            lineHeight = bodySize * 1.5f,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
-                            modifier = Modifier.padding(top = 6.dp, bottom = 6.dp, end = 12.dp)
-                        )
-                    }
-                }
+                },
+                update = { webView ->
+                    // No-op
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        if (generatedHtml == null || isWebViewLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
+                contentAlignment = Alignment.Center
+            ) {
+                com.example.ui.component.PremiumLoadingIndicator(text = "Preparing Document...")
             }
         }
     }
 }
 
-val StyleSpanBold = SpanStyle(fontWeight = FontWeight.Bold)
+class WebAppInterface(private val context: android.content.Context) {
+    @android.webkit.JavascriptInterface
+    fun copyToClipboard(text: String) {
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("Code", text)
+        clipboard.setPrimaryClip(clip)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(context, "Copied!", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+}
 
 @Composable
 fun MarkdownTableRenderer(tableRows: List<String>) {
@@ -1204,44 +1506,50 @@ fun CodePreview(
                 }
             }
  
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                itemsIndexed(annotatedLines) { index, annotatedLine ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (showLineNumbers) {
-                            Text(
-                                text = "${index + 1}",
-                                fontSize = bodySize * 0.85f,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                                textAlign = TextAlign.End,
-                                modifier = Modifier
-                                    .padding(end = 12.dp)
-                                    .width(32.dp)
-                            )
-                        }
-                        
-                        val rowScroll = if (horScrollState != null) rememberScrollState() else null
-                        Box(
+            androidx.compose.foundation.text.selection.SelectionContainer {
+                LazyColumn(
+                    state = rememberLazyListState(),
+                    flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    itemsIndexed(annotatedLines, key = { index, _ -> index }, contentType = { _, _ -> "Line" }) { index, annotatedLine ->
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .let { 
-                                    if (rowScroll != null) it.horizontalScroll(rowScroll) else it 
-                                }
+                                .fillMaxWidth()
+                                .animateItemPlacement(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = annotatedLine,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = bodySize,
-                                lineHeight = bodySize * 1.5f,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = if (rowScroll != null) 1 else Int.MAX_VALUE
-                            )
+                            if (showLineNumbers) {
+                                Text(
+                                    text = "${index + 1}",
+                                    fontSize = bodySize * 0.85f,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                                    textAlign = TextAlign.End,
+                                    modifier = Modifier
+                                        .padding(end = 12.dp)
+                                        .width(32.dp)
+                                )
+                            }
+                            
+                            val rowScroll = if (horScrollState != null) rememberScrollState() else null
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .let { 
+                                        if (rowScroll != null) it.horizontalScroll(rowScroll) else it 
+                                    }
+                            ) {
+                                Text(
+                                    text = annotatedLine,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = bodySize,
+                                    lineHeight = bodySize * 1.5f,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = if (rowScroll != null) 1 else Int.MAX_VALUE
+                                )
+                            }
                         }
                     }
                 }
@@ -1257,7 +1565,6 @@ fun CsvPreview(
     fileEntity: RecentFileEntity,
     modifier: Modifier = Modifier
 ) {
-    val verScroll = rememberScrollState()
     val horScroll = rememberScrollState()
 
     Column(modifier = modifier) {
@@ -1300,11 +1607,15 @@ fun CsvPreview(
                 .weight(1f)
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
-                .verticalScroll(verScroll)
-                .horizontalScroll(horScroll)
         ) {
-            Column {
-                csvRows.forEachIndexed { rIdx, row ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .horizontalScroll(horScroll),
+                state = rememberLazyListState(),
+                flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth())
+            ) {
+                itemsIndexed(csvRows, contentType = { _, _ -> "CsvRow" }) { rIdx, row ->
                     val isHeader = (rIdx == 0)
                     val rowColor = if (isHeader) {
                         MaterialTheme.colorScheme.surfaceVariant
@@ -1367,15 +1678,21 @@ fun CsvPreview(
 fun ZipPreview(
     zipRoot: FileManager.ZipNode,
     fileEntity: RecentFileEntity,
+    expandedPaths: Set<String>,
+    onToggleExpand: (String) -> Unit,
     onZipEntryClick: (FileManager.ZipNode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Keep track of which folders are expanded
-    val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
-    
-    // Automatically expand the root ZIP node
+    // Keep list state
+    val listState = rememberSaveable(saver = LazyListState.Saver) {
+        LazyListState()
+    }
+
+    // Automatically expand the root ZIP node if not expanded
     LaunchedEffect(zipRoot) {
-        expandedStates[""] = true
+        if (!expandedPaths.contains("")) {
+            onToggleExpand("")
+        }
     }
 
     Column(modifier = modifier) {
@@ -1413,6 +1730,8 @@ fun ZipPreview(
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
         LazyColumn(
+            state = listState,
+            flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -1420,7 +1739,7 @@ fun ZipPreview(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // Nested Header card
-            item {
+            item(contentType = "ZipHeader") {
                 ClaudeCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
@@ -1459,16 +1778,17 @@ fun ZipPreview(
 
             // Recursive flat structure listing to handle animations correctly in LazyColumn
             val nodesList = mutableListOf<NodeWithDepth>()
-            buildNodesList(zipRoot, 0, expandedStates, nodesList)
+            buildNodesList(zipRoot, 0, expandedPaths, nodesList)
 
-            items(nodesList, key = { it.node.path + "_" + it.depth }) { (node, depth) ->
-                val isExpanded = expandedStates[node.path] ?: false
+            items(nodesList, key = { it.node.path + "_" + it.depth }, contentType = { "ZipNode" }) { (node, depth) ->
+                val isExpanded = expandedPaths.contains(node.path)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .animateItemPlacement()
                         .clickable {
                             if (node.isDirectory) {
-                                expandedStates[node.path] = !isExpanded
+                                onToggleExpand(node.path)
                             } else {
                                 onZipEntryClick(node)
                             }
@@ -1547,7 +1867,7 @@ fun countTotalFiles(root: FileManager.ZipNode): Int {
 fun buildNodesList(
     node: FileManager.ZipNode,
     currentDepth: Int,
-    expandedStates: Map<String, Boolean>,
+    expandedPaths: Set<String>,
     result: MutableList<NodeWithDepth>
 ) {
     // We omit the root node itself since it is already rendered in the beautiful header card!
@@ -1555,10 +1875,10 @@ fun buildNodesList(
         result.add(NodeWithDepth(node, currentDepth))
     }
 
-    val isExpanded = expandedStates[node.path] ?: false
+    val isExpanded = expandedPaths.contains(node.path)
     if (isExpanded || node.path.isEmpty()) {
         node.children.forEach { child ->
-            buildNodesList(child, if (node.path.isEmpty()) 0 else currentDepth + 1, expandedStates, result)
+            buildNodesList(child, if (node.path.isEmpty()) 0 else currentDepth + 1, expandedPaths, result)
         }
     }
 }
@@ -1567,17 +1887,15 @@ fun buildNodesList(
 fun ZoomableContainer(
     maxScale: Float = 5f,
     modifier: Modifier = Modifier,
+    onVerticalScroll: ((Float) -> Unit)? = null,
+    onSingleTap: (() -> Unit)? = null,
     content: @Composable BoxScope.(scale: Float, scrollEnabled: Boolean) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     
-    val scaleAnim = remember { Animatable(1f) }
-    val offsetXAnim = remember { Animatable(0f) }
-    val offsetYAnim = remember { Animatable(0f) }
-    
-    val scale = scaleAnim.value
-    val offsetX = offsetXAnim.value
-    val offsetY = offsetYAnim.value
+    var scale by remember { mutableStateOf(1f) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
     
     var pointerCount by remember { mutableStateOf(0) }
     
@@ -1606,18 +1924,17 @@ fun ZoomableContainer(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer(
-                    scaleX = scale,
-                    scaleY = scale,
-                    translationX = offsetX,
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offsetX
                     translationY = offsetY
-                )
-                // Stable double-tap gesture binding, never cancelled during zooms
-                .pointerInput(Unit) {
+                }
+                // Stable double-tap and single-tap gesture binding, never cancelled during zooms
+                .pointerInput(onSingleTap) {
                     detectTapGestures(
                         onDoubleTap = { tapOffset ->
-                            val currentScale = scaleAnim.value
-                            val targetScale = if (currentScale > 1.1f) 1f else 2.5f
+                            val targetScale = if (scale > 1.1f) 1f else 2.5f
                             val targetOffsetX = if (targetScale == 1f) 0f else {
                                 val centerX = size.width / 2f
                                 val dx = centerX - tapOffset.x
@@ -1631,43 +1948,49 @@ fun ZoomableContainer(
                                 (dy * targetScale).coerceIn(-maxTy, maxTy)
                             }
                             coroutineScope.launch {
-                                launch {
-                                    scaleAnim.animateTo(
-                                        targetScale,
-                                        tween(300, easing = FastOutSlowInEasing)
-                                    )
-                                }
-                                launch {
-                                    offsetXAnim.animateTo(
-                                        targetOffsetX,
-                                        tween(300, easing = FastOutSlowInEasing)
-                                    )
-                                }
-                                launch {
-                                    offsetYAnim.animateTo(
-                                        targetOffsetY,
-                                        tween(300, easing = FastOutSlowInEasing)
-                                    )
+                                val startScale = scale
+                                val startOffsetX = offsetX
+                                val startOffsetY = offsetY
+                                androidx.compose.animation.core.animate(
+                                    initialValue = 0f,
+                                    targetValue = 1f,
+                                    animationSpec = tween(100, easing = FastOutSlowInEasing)
+                                ) { fraction, _ ->
+                                    scale = startScale + (targetScale - startScale) * fraction
+                                    offsetX = startOffsetX + (targetOffsetX - startOffsetX) * fraction
+                                    offsetY = startOffsetY + (targetOffsetY - startOffsetY) * fraction
                                 }
                             }
+                        },
+                        onTap = {
+                            onSingleTap?.invoke()
                         }
                     )
                 }
                 // Persistent transform gesture stream (pinch & rotate & pan), never disconnected across recompositions
-                .pointerInput(Unit) {
+                .pointerInput(onVerticalScroll) {
                     detectTransformGestures(panZoomLock = false) { _, pan, zoom, _ ->
-                        val currentScale = scaleAnim.value
-                        val newScale = (currentScale * zoom).coerceIn(1f, maxScale)
+                        val newScale = (scale * zoom).coerceIn(1f, maxScale)
                         val maxTx = (widthPx * (newScale - 1f)) / 2f
                         val maxTy = (heightPx * (newScale - 1f)) / 2f
-                        val nextOffsetX = if (newScale == 1f) 0f else (offsetXAnim.value + pan.x).coerceIn(-maxTx, maxTx)
-                        val nextOffsetY = if (newScale == 1f) 0f else (offsetYAnim.value + pan.y).coerceIn(-maxTy, maxTy)
                         
-                        coroutineScope.launch {
-                            scaleAnim.snapTo(newScale)
-                            offsetXAnim.snapTo(nextOffsetX)
-                            offsetYAnim.snapTo(nextOffsetY)
+                        val nextOffsetX = if (newScale == 1f) 0f else (offsetX + pan.x).coerceIn(-maxTx, maxTx)
+                        
+                        // Handle vertical translation smoothly and programmatically scroll only when scale is 1
+                        val nextOffsetY = if (newScale == 1f) {
+                            0f
+                        } else {
+                            (offsetY + pan.y).coerceIn(-maxTy, maxTy)
                         }
+
+                        // Propagate scroll to parent container ONLY if scale is 1 and dragging vertically
+                        if (newScale == 1f && pan.y != 0f && onVerticalScroll != null) {
+                            onVerticalScroll(-pan.y)
+                        }
+                        
+                        scale = newScale
+                        offsetX = nextOffsetX
+                        offsetY = nextOffsetY
                     }
                 }
         ) {
@@ -1733,104 +2056,80 @@ fun ImagePreview(
     }
 }
 
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun PdfPreview(
     fileEntity: RecentFileEntity,
-    modifier: Modifier = Modifier
+    isNightMode: Boolean,
+    scrollToPage: Int?,
+    onScrollToPageHandled: () -> Unit,
+    onLinkClicked: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onSingleTap: () -> Unit = {},
+    onPageChanged: (Int, Int) -> Unit = { _, _ -> }
 ) {
-    val context = LocalContext.current
-    var pageCount by remember { mutableStateOf(0) }
-    var bitmaps by remember { mutableStateOf<List<Bitmap>>(emptyList()) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    LaunchedEffect(fileEntity) {
-        withContext(Dispatchers.IO) {
-            try {
-                val file = File(fileEntity.path)
-                val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-                val renderer = PdfRenderer(pfd)
-                pageCount = renderer.pageCount
-                val pageBitmaps = mutableListOf<Bitmap>()
-                // Render up to 50 pages or all to keep it highly responsive and prevent out of memory
-                val loadLimit = minOf(renderer.pageCount, 50)
-                for (i in 0 until loadLimit) {
-                    val page = renderer.openPage(i)
-                    // High-resolution rendering factor of 3.0f ensures ultra-sharp detail on high zoom scales
-                    val width = (context.resources.displayMetrics.widthPixels * 3.0f).toInt()
-                    val height = (page.height * (width.toFloat() / page.width)).toInt()
-                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                    
-                    // Clear with white background since PDFs usually have transparent/white layout
-                    bitmap.eraseColor(android.graphics.Color.WHITE)
-                    
-                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    pageBitmaps.add(bitmap)
-                    page.close()
+    val originalFile = remember(fileEntity) { java.io.File(fileEntity.path) }
+    var isReady by remember { mutableStateOf(false) }
+    
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(if (isNightMode) Color(0xFF121212) else Color(0xFFF4F4F9))
+    ) {
+        androidx.compose.ui.viewinterop.AndroidView(
+            factory = { context ->
+                com.github.barteksc.pdfviewer.PDFView(context, null).apply {
+                    layoutParams = android.view.ViewGroup.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                    )
                 }
-                renderer.close()
-                pfd.close()
-                bitmaps = pageBitmaps
-                isLoading = false
-            } catch (e: Exception) {
-                errorMessage = e.message ?: "Failed to render PDF"
-                isLoading = false
-            }
-        }
-    }
-
-    ZoomableContainer(
-        modifier = modifier.fillMaxSize()
-    ) { scale, scrollEnabled ->
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-        } else if (errorMessage != null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = errorMessage ?: "Error loading PDF", color = MaterialTheme.colorScheme.error)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
-                userScrollEnabled = scrollEnabled,
-                contentPadding = PaddingValues(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(
-                    count = bitmaps.size,
-                    key = { index -> "pdf_page_$index" },
-                    contentType = { "pdf_page" }
-                ) { index ->
-                    Card(
-                        shape = RoundedCornerShape(8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White)
-                    ) {
-                        Column {
-                            Image(
-                                bitmap = bitmaps[index].asImageBitmap(),
-                                contentDescription = "Page ${index + 1}",
-                                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-                                contentScale = ContentScale.FillWidth
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFF1F1F1))
-                                    .padding(vertical = 4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "Page ${index + 1} of $pageCount",
-                                    fontSize = 11.sp,
-                                    color = Color.Gray
-                                )
+            },
+            modifier = Modifier.fillMaxSize(),
+            update = { pdfView ->
+                if (!isReady && originalFile.exists()) {
+                    pdfView.fromFile(originalFile)
+                        .enableSwipe(true)
+                        .swipeHorizontal(false)
+                        .enableDoubletap(true)
+                        .defaultPage(scrollToPage ?: 0)
+                        .onPageChange { page, pageCount ->
+                            onPageChanged(page + 1, pageCount)
+                        }
+                        .enableAnnotationRendering(true)
+                        .password(null)
+                        .scrollHandle(com.github.barteksc.pdfviewer.scroll.DefaultScrollHandle(pdfView.context))
+                        .enableAntialiasing(true)
+                        .spacing(0)
+                        .autoSpacing(false)
+                        .pageFitPolicy(com.github.barteksc.pdfviewer.util.FitPolicy.WIDTH)
+                        .nightMode(isNightMode)
+                        .onLoad {
+                            isReady = true
+                            if (scrollToPage != null) {
+                                onScrollToPageHandled()
                             }
                         }
-                    }
+                        .onTap {
+                            onSingleTap()
+                            true
+                        }
+                        .load()
+                } else if (isReady && scrollToPage != null) {
+                    pdfView.jumpTo(scrollToPage, true)
+                    onScrollToPageHandled()
                 }
+                
+                if (isReady) {
+                    pdfView.setNightMode(isNightMode)
+                }
+            }
+        )
+        
+        if (!isReady) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                com.example.ui.component.PremiumLoadingIndicator(text = "Loading perfect PDF...")
             }
         }
     }
@@ -1852,13 +2151,25 @@ fun AudioPlayer(
             val mp = MediaPlayer().apply {
                 setDataSource(fileEntity.path)
                 prepare()
+                setOnCompletionListener {
+                    isPlaying = false
+                }
             }
             mediaPlayer = mp
             duration = mp.duration
             
             while (true) {
-                if (mp.isPlaying) {
-                    currentPos = mp.currentPosition
+                val mpActive = mediaPlayer
+                if (mpActive != null) {
+                    try {
+                        if (mpActive.isPlaying) {
+                            currentPos = mpActive.currentPosition
+                        }
+                    } catch (e: Exception) {
+                        break
+                    }
+                } else {
+                    break
                 }
                 delay(500)
             }
@@ -1869,7 +2180,15 @@ fun AudioPlayer(
 
     DisposableEffect(Unit) {
         onDispose {
-            mediaPlayer?.release()
+            mediaPlayer?.apply {
+                try {
+                    if (isPlaying) {
+                        stop()
+                    }
+                } catch (ignored: Exception) {}
+                release()
+            }
+            mediaPlayer = null
         }
     }
 
@@ -1919,12 +2238,17 @@ fun AudioPlayer(
         FloatingActionButton(
             onClick = {
                 val mp = mediaPlayer ?: return@FloatingActionButton
-                if (isPlaying) {
-                    mp.pause()
-                } else {
-                    mp.start()
+                try {
+                    if (isPlaying) {
+                        mp.pause()
+                        isPlaying = false
+                    } else {
+                        mp.start()
+                        isPlaying = true
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-                isPlaying = !isPlaying
             },
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = Color.White
@@ -2006,15 +2330,17 @@ fun HexViewer(
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
         LazyColumn(
+            state = rememberLazyListState(),
+            flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .background(Color(0xFF1E1E1E)) // Dark code editor styled background for hex contrast
                 .padding(8.dp)
         ) {
-            items(hexRows.size) { index ->
+            items(hexRows.size, key = { it }, contentType = { "HexRow" }) { index ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp).animateItemPlacement(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
@@ -2047,7 +2373,7 @@ private fun shareFile(context: android.content.Context, file: File, extension: S
     try {
         val uri = androidx.core.content.FileProvider.getUriForFile(
             context,
-            "com.example.fileprovider",
+            "${context.packageName}.fileprovider",
             file
         )
         val mimeType = when (extension.lowercase()) {
@@ -2083,39 +2409,260 @@ private fun shareFile(context: android.content.Context, file: File, extension: S
 @Composable
 fun WebViewPreview(
     fileEntity: RecentFileEntity,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSingleTap: () -> Unit = {}
 ) {
     val isDark = MaterialTheme.colorScheme.background == com.example.ui.theme.ClaudeOnyx
     val bgColor = if (isDark) com.example.ui.theme.ClaudeOnyx else Color.White
+
+    var base64Data by remember { mutableStateOf<String?>(null) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(fileEntity) {
+        if (fileEntity.extension.lowercase() == "pdf") {
+            withContext(Dispatchers.IO) {
+                try {
+                    val file = java.io.File(fileEntity.path)
+                    val bytes = file.readBytes()
+                    val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                    base64Data = base64
+                } catch (e: Exception) {
+                    loadError = e.message
+                }
+            }
+        }
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(bgColor)
     ) {
-        AndroidView(
-            factory = { ctx ->
-                android.webkit.WebView(ctx).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.builtInZoomControls = true
-                    settings.displayZoomControls = false
-                    settings.useWideViewPort = true
-                    settings.loadWithOverviewMode = true
-                    
-                    // Enable local file access
-                    settings.allowFileAccess = true
-                    settings.allowContentAccess = true
-                    
-                    setBackgroundColor(if (isDark) 0xFF181715.toInt() else 0xFFFAF9F5.toInt())
-                    webViewClient = android.webkit.WebViewClient()
-                }
-            },
-            update = { webView ->
-                val ext = fileEntity.extension.lowercase()
-                if (ext == "html" || ext == "htm") {
-                    webView.loadUrl("file://" + fileEntity.path)
-                } else {
+        val context = LocalContext.current
+        val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+
+        if (fileEntity.extension.lowercase() == "pdf" && base64Data == null && loadError == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                com.example.ui.component.PremiumLoadingIndicator(text = "Loading PDF...")
+            }
+        } else if (loadError != null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(text = "Error: $loadError", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
+            }
+        } else {
+            AndroidView(
+                factory = { ctx ->
+                    android.webkit.WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.builtInZoomControls = true
+                        settings.displayZoomControls = false
+                        settings.useWideViewPort = true
+                        settings.loadWithOverviewMode = true
+                        
+                        settings.allowFileAccess = true
+                        settings.allowContentAccess = true
+                        try {
+                            settings.allowFileAccessFromFileURLs = true
+                            settings.allowUniversalAccessFromFileURLs = true
+                        } catch (ignored: Exception) {}
+                        
+                        addJavascriptInterface(object {
+                            @android.webkit.JavascriptInterface
+                            fun performSingleTap() {
+                                mainHandler.post {
+                                    onSingleTap()
+                                }
+                            }
+                        }, "Android")
+
+                        setBackgroundColor(if (isDark) 0xFF181715.toInt() else 0xFFFAF9F5.toInt())
+                        webViewClient = android.webkit.WebViewClient()
+                        webChromeClient = android.webkit.WebChromeClient()
+                    }
+                },
+                update = { webView ->
+                    val ext = fileEntity.extension.lowercase()
+                    if (ext == "html" || ext == "htm") {
+                        webView.loadUrl("file://" + fileEntity.path)
+                    } else if (ext == "pdf") {
+                        try {
+                            val base64Pdf = base64Data ?: ""
+                            val htmlContent = """
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+                                    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
+                                    <style>
+                                        body {
+                                            margin: 0;
+                                            padding: 12px;
+                                            background-color: ${if (isDark) "#181715" else "#FAF9F5"};
+                                            display: flex;
+                                            flex-direction: column;
+                                            align-items: center;
+                                            font-family: -apple-system, sans-serif;
+                                            user-select: text !important;
+                                            -webkit-user-select: text !important;
+                                        }
+                                        .page-container {
+                                            position: relative;
+                                            margin-bottom: 20px;
+                                            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                                            background-color: white;
+                                            border-radius: 6px;
+                                            overflow: hidden;
+                                            max-width: 100%;
+                                            display: flex;
+                                            justify-content: center;
+                                        }
+                                        canvas {
+                                            display: block;
+                                            max-width: 100%;
+                                            height: auto !important;
+                                        }
+                                        .text-layer {
+                                            position: absolute;
+                                            left: 0;
+                                            top: 0;
+                                            right: 0;
+                                            bottom: 0;
+                                            overflow: hidden;
+                                            background: transparent;
+                                            pointer-events: auto;
+                                        }
+                                        .text-layer > span {
+                                            color: rgba(0,0,0,0);
+                                            position: absolute;
+                                            white-space: pre;
+                                            cursor: text;
+                                            transform-origin: 0% 0%;
+                                            pointer-events: auto;
+                                            user-select: text !important;
+                                            -webkit-user-select: text !important;
+                                        }
+                                        #loading {
+                                            margin-top: 40px;
+                                            color: ${if (isDark) "#CCCCCC" else "#333333"};
+                                            font-size: 15px;
+                                            font-weight: 500;
+                                        }
+                                    </style>
+                                </head>
+                                <body>
+                                    <div id="loading">Preparing PDF Browser Preview...</div>
+                                    <div id="viewer"></div>
+    
+                                    <script>
+                                        function transformMatrix(m1, m2) {
+                                            return [
+                                                m1[0] * m2[0] + m1[2] * m2[1],
+                                                m1[1] * m2[0] + m1[3] * m2[1],
+                                                m1[0] * m2[2] + m1[2] * m2[3],
+                                                m1[1] * m2[2] + m1[3] * m2[3],
+                                                m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+                                                m1[1] * m2[4] + m1[3] * m2[5] + m1[5]
+                                            ];
+                                        }
+    
+                                        function base64ToUint8Array(base64) {
+                                            var raw = window.atob(base64);
+                                            var rawLength = raw.length;
+                                            var array = new Uint8Array(new ArrayBuffer(rawLength));
+                                            for(var i = 0; i < rawLength; i++) {
+                                                array[i] = raw.charCodeAt(i);
+                                            }
+                                            return array;
+                                        }
+    
+                                        document.addEventListener('click', function(e) {
+                                            var selection = window.getSelection().toString();
+                                            if (!selection) {
+                                                if (typeof Android !== 'undefined' && Android.performSingleTap) {
+                                                    Android.performSingleTap();
+                                                }
+                                            }
+                                        });
+    
+                                        var pdfData = base64ToUint8Array("$base64Pdf");
+                                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.worker.min.js';
+    
+                                        var loadingTask = pdfjsLib.getDocument({data: pdfData});
+                                        loadingTask.promise.then(function(pdf) {
+                                            var loadingEl = document.getElementById('loading');
+                                            if (loadingEl) loadingEl.style.display = 'none';
+                                            var viewer = document.getElementById('viewer');
+                                            for (var pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                                                renderPage(pdf, pageNum, viewer);
+                                            }
+                                        }, function (reason) {
+                                            document.getElementById('loading').innerText = 'Error loading PDF: ' + reason.message;
+                                        });
+    
+                                        function renderPage(pdf, pageNum, container) {
+                                            pdf.getPage(pageNum).then(function(page) {
+                                                var scale = 1.5;
+                                                var viewport = page.getViewport({scale: scale});
+    
+                                                var pageDiv = document.createElement('div');
+                                                pageDiv.className = 'page-container';
+                                                pageDiv.style.width = viewport.width + 'px';
+                                                pageDiv.style.height = viewport.height + 'px';
+                                                
+                                                var canvas = document.createElement('canvas');
+                                                var context = canvas.getContext('2d');
+                                                canvas.height = viewport.height;
+                                                canvas.width = viewport.width;
+    
+                                                pageDiv.appendChild(canvas);
+                                                container.appendChild(pageDiv);
+    
+                                                var renderContext = {
+                                                    canvasContext: context,
+                                                    viewport: viewport
+                                                };
+                                                
+                                                var renderTask = page.render(renderContext);
+                                                renderTask.promise.then(function() {
+                                                    return page.getTextContent();
+                                                }).then(function(textContent) {
+                                                    var textLayerDiv = document.createElement('div');
+                                                    textLayerDiv.className = 'text-layer';
+                                                    pageDiv.appendChild(textLayerDiv);
+                                                    
+                                                    textContent.items.forEach(function(item) {
+                                                        var tx = transformMatrix(
+                                                            viewport.transform,
+                                                            item.transform
+                                                        );
+                                                        
+                                                        var span = document.createElement('span');
+                                                        span.textContent = item.str;
+                                                        span.style.fontFamily = item.fontName;
+                                                        var fontHeight = item.height * scale;
+                                                        span.style.fontSize = fontHeight + 'px';
+                                                        
+                                                        var textWidth = item.width * scale;
+                                                        span.style.width = textWidth + 'px';
+                                                        
+                                                        span.style.left = tx[4] + 'px';
+                                                        span.style.top = (tx[5] - fontHeight) + 'px';
+                                                        
+                                                        textLayerDiv.appendChild(span);
+                                                    });
+                                                });
+                                            });
+                                        }
+                                    </script>
+                                </body>
+                                </html>
+                            """.trimIndent()
+                            webView.loadDataWithBaseURL("https://cdn.jsdelivr.net/", htmlContent, "text/html", "UTF-8", null)
+                        } catch (e: Exception) {
+                            webView.loadDataWithBaseURL(null, "<html><body><h3>Error: ${e.message}</h3></body></html>", "text/html", "UTF-8", null)
+                        }
+                    } else {
                     try {
                         val content = java.io.File(fileEntity.path).readText()
                         val htmlContent = if (ext == "md") {
@@ -2212,6 +2759,7 @@ fun WebViewPreview(
             },
             modifier = Modifier.fillMaxSize()
         )
+        }
     }
 }
 
@@ -2407,6 +2955,8 @@ fun DocxPreview(
             .fillMaxSize()
     ) { scale, scrollEnabled ->
         LazyColumn(
+            state = rememberLazyListState(),
+            flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
             modifier = Modifier.fillMaxSize(),
             userScrollEnabled = scrollEnabled,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
@@ -2421,7 +2971,8 @@ fun DocxPreview(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 800.dp),
+                    .widthIn(max = 800.dp)
+                    .animateItemPlacement(),
                 shape = RoundedCornerShape(4.dp),
                 colors = CardDefaults.cardColors(containerColor = paperColor),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -2600,6 +3151,552 @@ fun DocxPreview(
             }
         }
     }
+}
+}
+
+private fun openPdfInBrowser(context: android.content.Context, file: File) {
+    try {
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/pdf")
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, "Open with Browser / Viewer"))
+    } catch (e: Exception) {
+         try {
+             val uri = androidx.core.content.FileProvider.getUriForFile(
+                 context,
+                 "${context.packageName}.fileprovider",
+                 file
+             )
+             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                 setDataAndType(uri, "text/html")
+                 addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                 addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+             }
+             context.startActivity(android.content.Intent.createChooser(intent, "Open in Browser"))
+         } catch (ex: Exception) {
+             android.widget.Toast.makeText(context, "No app available to open PDF: ${ex.message}", android.widget.Toast.LENGTH_LONG).show()
+         }
+    }
+}
+
+
+@Composable
+fun PdfPreviewWebView(
+    base64Pdf: String,
+    fileEntity: RecentFileEntity,
+    isNightMode: Boolean,
+    modifier: Modifier = Modifier,
+    onSingleTap: () -> Unit = {},
+    onPageChanged: (Int, Int) -> Unit = { _, _ -> },
+    scrollToPage: Int? = null,
+    onScrollProgressHandled: () -> Unit = {}
+) {
+    var isWebViewLoading by remember(base64Pdf) { mutableStateOf(true) }
+    var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    
+    val htmlContent = remember(base64Pdf, isNightMode) {
+        val bgColor = if (isNightMode) "#151514" else "#faf9f5"
+        val containerBg = if (isNightMode) "#1d1b19" else "white"
+        
+        """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+            <script src="file:///android_asset/pdfjs/build/pdf.js"></script>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 12px;
+                    background-color: $bgColor;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    font-family: -apple-system, sans-serif;
+                    user-select: text !important;
+                    -webkit-user-select: text !important;
+                }
+                .page-container {
+                    position: relative;
+                    margin-bottom: 20px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    background-color: $containerBg;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    max-width: 100%;
+                }
+                canvas {
+                    display: block;
+                    width: 100%;
+                    height: auto !important;
+                }
+                .textLayer {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    right: 0;
+                    bottom: 0;
+                    overflow: hidden;
+                    opacity: 1.0;
+                    line-height: 1.0;
+                    pointer-events: auto !important;
+                    user-select: text !important;
+                    -webkit-user-select: text !important;
+                }
+                .textLayer > span {
+                    color: transparent !important;
+                    position: absolute;
+                    white-space: pre;
+                    cursor: text !important;
+                    transform-origin: 0% 0%;
+                    user-select: text !important;
+                    -webkit-user-select: text !important;
+                }
+                .textLayer ::selection {
+                    background: rgba(0, 100, 255, 0.3) !important;
+                }
+            </style>
+        </head>
+        <body>
+            <div id="viewer"></div>
+            <script>
+                function base64ToUint8Array(base64) {
+                    var raw = window.atob(base64);
+                    var rawLength = raw.length;
+                    var array = new Uint8Array(new ArrayBuffer(rawLength));
+                    for(var i = 0; i < rawLength; i++) {
+                        array[i] = raw.charCodeAt(i);
+                    }
+                    return array;
+                }
+
+                var totalPagesCount = 0;
+
+                window.scrollToPage = function(pageNum) {
+                    var el = document.getElementById('page-' + pageNum);
+                    if (el) {
+                        el.scrollIntoView({behavior: 'smooth'});
+                    }
+                };
+
+                // Listen to scroll to update current page
+                window.addEventListener('scroll', function() {
+                    var pages = document.querySelectorAll('.page-container');
+                    var scrollPos = window.scrollY + window.innerHeight / 3;
+                    for (var i = 0; i < pages.length; i++) {
+                        var page = pages[i];
+                        var top = page.offsetTop;
+                        var bottom = top + page.offsetHeight;
+                        if (scrollPos >= top && scrollPos <= bottom) {
+                            var currentPage = i + 1;
+                            if (window.Android && window.Android.onPageChanged) {
+                                window.Android.onPageChanged(currentPage, pages.length);
+                            }
+                            break;
+                        }
+                    }
+                });
+
+                try {
+                    var pdfData = base64ToUint8Array("$base64Pdf");
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'file:///android_asset/pdfjs/build/pdf.worker.js';
+
+                    var loadingTask = pdfjsLib.getDocument({data: pdfData});
+                    loadingTask.promise.then(function(pdf) {
+                        var viewer = document.getElementById('viewer');
+                        var pagesToRender = pdf.numPages;
+                        totalPagesCount = pagesToRender;
+                        var renderedPages = 0;
+                        
+                        function renderPage(pageNum) {
+                            pdf.getPage(pageNum).then(function(page) {
+                                // Dynamic scale matching device DPI (bounded 2.0 to 3.0) for razor sharp view on zooming
+                                var dpr = window.devicePixelRatio || 2.0;
+                                var scale = Math.min(3.0, Math.max(2.0, dpr));
+                                var viewport = page.getViewport({scale: scale});
+                                
+                                var pageDiv = document.createElement('div');
+                                pageDiv.className = 'page-container';
+                                pageDiv.id = 'page-' + pageNum;
+                                pageDiv.style.width = '100%';
+                                
+                                var canvas = document.createElement('canvas');
+                                var context = canvas.getContext('2d');
+                                canvas.height = viewport.height;
+                                canvas.width = viewport.width;
+                                
+                                var renderContext = {
+                                    canvasContext: context,
+                                    viewport: viewport
+                                };
+                                
+                                pageDiv.appendChild(canvas);
+                                
+                                var textLayerDiv = document.createElement('div');
+                                textLayerDiv.className = 'textLayer';
+                                pageDiv.appendChild(textLayerDiv);
+                                
+                                viewer.appendChild(pageDiv);
+                                
+                                // Render page graphics
+                                var renderTask = page.render(renderContext);
+                                renderTask.promise.then(function() {
+                                    // Fetch text items to render selectable/copyable text Layer overlay
+                                    return page.getTextContent();
+                                }).then(function(textContent) {
+                                    return pdfjsLib.renderTextLayer({
+                                        textContent: textContent,
+                                        container: textLayerDiv,
+                                        viewport: viewport,
+                                        textDivs: []
+                                    }).promise;
+                                }).then(function() {
+                                    renderedPages++;
+                                    if (renderedPages === pagesToRender) {
+                                        if (window.Android && window.Android.onDocumentLoaded) {
+                                            window.Android.onDocumentLoaded(pagesToRender);
+                                        }
+                                    }
+                                    if (pageNum < pagesToRender) {
+                                        renderPage(pageNum + 1);
+                                    }
+                                }).catch(function(err) {
+                                    console.error("Error drawing textLayer: ", err);
+                                    // Fallback if text layer fails so the document remains available
+                                    renderedPages++;
+                                    if (renderedPages === pagesToRender) {
+                                        if (window.Android && window.Android.onDocumentLoaded) {
+                                            window.Android.onDocumentLoaded(pagesToRender);
+                                        }
+                                    }
+                                    if (pageNum < pagesToRender) {
+                                        renderPage(pageNum + 1);
+                                    }
+                                });
+                            });
+                        }
+                        
+                        renderPage(1);
+                    }, function (reason) {
+                        if (window.Android && window.Android.onDocumentError) {
+                            window.Android.onDocumentError(reason.message);
+                        }
+                    });
+                } catch (e) {
+                    if (window.Android && window.Android.onDocumentError) {
+                        window.Android.onDocumentError(e.message);
+                    }
+                }
+            </script>
+        </body>
+        </html>
+        """.trimIndent()
+    }
+
+    LaunchedEffect(scrollToPage) {
+        if (scrollToPage != null) {
+            val pageNum = scrollToPage + 1
+            webViewRef?.evaluateJavascript("if (typeof window.scrollToPage === 'function') { window.scrollToPage($pageNum); }", null)
+            onScrollProgressHandled()
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        
+        AndroidView(
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    webViewRef = this
+                    settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        allowFileAccess = true
+                        allowContentAccess = true
+                        builtInZoomControls = true
+                        displayZoomControls = false
+                        setSupportZoom(true)
+                        useWideViewPort = true
+                        loadWithOverviewMode = true
+                    }
+                    setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+                    
+                    addJavascriptInterface(object : Any() {
+                        @android.webkit.JavascriptInterface
+                        fun onDocumentLoaded(totalPages: Int) {
+                            post { 
+                                isWebViewLoading = false
+                                onPageChanged(1, totalPages)
+                            }
+                        }
+                        @android.webkit.JavascriptInterface
+                        fun onPageChanged(currentPage: Int, totalPages: Int) {
+                            post {
+                                onPageChanged(currentPage, totalPages)
+                            }
+                        }
+                        @android.webkit.JavascriptInterface
+                        fun onDocumentError(error: String) {
+                            post { 
+                                isWebViewLoading = false
+                                android.widget.Toast.makeText(context, "Error: $error", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }, "Android")
+                    
+                    webViewClient = object : android.webkit.WebViewClient() {
+                        override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                            postDelayed({ isWebViewLoading = false }, 500)
+                        }
+                    }
+                    loadDataWithBaseURL("file:///android_asset/", htmlContent, "text/html", "UTF-8", null)
+                }
+            },
+            update = { webView ->
+                // No-op
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        if (isWebViewLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
+                contentAlignment = Alignment.Center
+            ) {
+                com.example.ui.component.PremiumLoadingIndicator(text = "Preparing PDF Document...")
+            }
+        }
+    }
+}
+
+@Composable
+fun DocxPreviewWebView(
+    base64Docx: String,
+    fileEntity: RecentFileEntity,
+    isNightMode: Boolean,
+    modifier: Modifier = Modifier,
+    onPageChanged: (Int, Int) -> Unit = { _, _ -> },
+    scrollToPage: Int? = null,
+    onScrollProgressHandled: () -> Unit = {}
+) {
+    var isWebViewLoading by remember(base64Docx) { mutableStateOf(true) }
+    var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    
+    val htmlContent = remember(base64Docx, isNightMode) {
+        val bgColor = if (isNightMode) "#151514" else "#faf9f5"
+        val textPrimary = if (isNightMode) "#f5f5f3" else "#141413"
+        val textSecondary = if (isNightMode) "#a39f93" else "#6c6a64"
+        val accent = if (isNightMode) "#e08567" else "#cc785c"
+        val border = if (isNightMode) "#2d2b28" else "#e6dfd8"
+        val quoteBg = if (isNightMode) "#1c1a18" else "#f5f0e8"
+        
+        """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+            <script src="file:///android_asset/mammoth/mammoth.browser.js"></script>
+            <style>
+                :root {
+                    --bg-color: $bgColor;
+                    --text-primary: $textPrimary;
+                    --text-secondary: $textSecondary;
+                    --accent: $accent;
+                    --border: $border;
+                    --quote-bg: $quoteBg;
+                }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                    background-color: var(--bg-color);
+                    color: var(--text-primary);
+                    font-size: 16px;
+                    line-height: 1.6;
+                    padding: 16px;
+                    margin: 0;
+                    word-wrap: break-word;
+                }
+                h1, h2, h3, h4, h5, h6 {
+                    color: var(--text-primary);
+                    margin-top: 24px;
+                    margin-bottom: 16px;
+                    font-weight: 700;
+                }
+                p {
+                    margin-top: 0;
+                    margin-bottom: 16px;
+                }
+                a {
+                    color: var(--accent);
+                    text-decoration: none;
+                }
+                img {
+                    max-width: 100%;
+                    border-radius: 8px;
+                }
+                table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin-bottom: 16px;
+                    border: 1px solid var(--border);
+                }
+                th, td {
+                    border: 1px solid var(--border);
+                    padding: 10px;
+                }
+                th {
+                    background-color: var(--quote-bg);
+                }
+            </style>
+        </head>
+        <body>
+            <div id="output"></div>
+            <script>
+                function base64ToArrayBuffer(base64) {
+                    var binary_string = window.atob(base64);
+                    var len = binary_string.length;
+                    var bytes = new Uint8Array(len);
+                    for (var i = 0; i < len; i++) {
+                        bytes[i] = binary_string.charCodeAt(i);
+                    }
+                    return bytes.buffer;
+                }
+
+                var totalPages = 1;
+
+                window.scrollToPage = function(pageNum) {
+                    var height = document.documentElement.scrollHeight || document.body.scrollHeight;
+                    var targetScroll = (height - window.innerHeight) * ((pageNum - 1) / totalPages);
+                    window.scrollTo({top: targetScroll, behavior: 'smooth'});
+                };
+
+                window.addEventListener('scroll', function() {
+                    var scrollTop = window.scrollY;
+                    var docHeight = (document.documentElement.scrollHeight || document.body.scrollHeight) - window.innerHeight;
+                    if (docHeight <= 0) return;
+                    var pct = scrollTop / docHeight;
+                    var currentPage = Math.min(totalPages, Math.max(1, Math.round(pct * (totalPages - 1)) + 1));
+                    if (window.Android && window.Android.onPageChanged) {
+                        window.Android.onPageChanged(currentPage, totalPages);
+                    }
+                });
+
+                try {
+                    var arrayBuffer = base64ToArrayBuffer("$base64Docx");
+                    mammoth.convertToHtml({arrayBuffer: arrayBuffer})
+                        .then(function(result) {
+                            var content = result.value || "<p style='text-align:center;'>This document is empty.</p>";
+                            document.getElementById("output").innerHTML = content;
+                            
+                            // Estimate total pages: roughly 2500 characters of HTML content per page
+                            var textLen = content.length;
+                            totalPages = Math.max(1, Math.round(textLen / 2500));
+                            
+                            if (window.Android && window.Android.onDocumentLoaded) {
+                                window.Android.onDocumentLoaded(totalPages);
+                            }
+                        })
+                        .catch(function(err) {
+                            document.getElementById("output").innerHTML = "Error parsing DOCX: " + err.message;
+                            if (window.Android && window.Android.onDocumentError) {
+                                window.Android.onDocumentError(err.message);
+                            }
+                        });
+                } catch (e) {
+                    document.getElementById("output").innerHTML = "Error loading arraybuffer: " + e.message;
+                    if (window.Android && window.Android.onDocumentError) {
+                        window.Android.onDocumentError(e.message);
+                    }
+                }
+            </script>
+        </body>
+        </html>
+        """.trimIndent()
+    }
+
+    LaunchedEffect(scrollToPage) {
+        if (scrollToPage != null) {
+            val pageNum = scrollToPage + 1
+            webViewRef?.evaluateJavascript("if (typeof window.scrollToPage === 'function') { window.scrollToPage($pageNum); }", null)
+            onScrollProgressHandled()
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        
+        AndroidView(
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    webViewRef = this
+                    settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        allowFileAccess = true
+                        allowContentAccess = true
+                        builtInZoomControls = true
+                        displayZoomControls = false
+                        setSupportZoom(true)
+                        useWideViewPort = true
+                        loadWithOverviewMode = true
+                    }
+                    setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+                    
+                    addJavascriptInterface(object : Any() {
+                        @android.webkit.JavascriptInterface
+                        fun onDocumentLoaded(totalPages: Int) {
+                            post { 
+                                isWebViewLoading = false
+                                onPageChanged(1, totalPages)
+                            }
+                        }
+                        @android.webkit.JavascriptInterface
+                        fun onPageChanged(currentPage: Int, totalPages: Int) {
+                            post {
+                                onPageChanged(currentPage, totalPages)
+                            }
+                        }
+                        @android.webkit.JavascriptInterface
+                        fun onDocumentError(error: String) {
+                            post { 
+                                isWebViewLoading = false
+                                android.widget.Toast.makeText(context, "Error: $error", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }, "Android")
+                    
+                    webViewClient = object : android.webkit.WebViewClient() {
+                        override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                            postDelayed({ isWebViewLoading = false }, 500)
+                        }
+                    }
+                    loadDataWithBaseURL("file:///android_asset/", htmlContent, "text/html", "UTF-8", null)
+                }
+            },
+            update = { webView ->
+                // No-op
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        if (isWebViewLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
+                contentAlignment = Alignment.Center
+            ) {
+                com.example.ui.component.PremiumLoadingIndicator(text = "Preparing Word Document...")
+            }
+        }
     }
 }
 

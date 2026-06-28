@@ -1,5 +1,7 @@
 package com.example.ui.component
 
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,6 +12,10 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -19,6 +25,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.tween
+import kotlinx.coroutines.launch
 import com.example.ui.theme.ClaudeMutedText
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -115,6 +128,58 @@ fun ClaudeButton(
     }
 }
 
+
+fun Modifier.premiumLoadingPulse(isLoading: Boolean): Modifier = this.then(
+    if (isLoading) {
+        Modifier.graphicsLayer {
+            alpha = 0.5f // Simplified premium dim effect without heavy infinite animations
+        }
+    } else {
+        Modifier
+    }
+)
+
+@Composable
+fun PremiumSkeleton(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition()
+    val alpha by transition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+    Box(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = alpha), RoundedCornerShape(8.dp))
+    )
+}
+
+@Composable
+fun PremiumLoadingIndicator(modifier: Modifier = Modifier, text: String? = null) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        CircularProgressIndicator(
+            color = MaterialTheme.colorScheme.primary,
+            strokeWidth = 4.dp,
+            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+            modifier = Modifier.size(48.dp)
+        )
+        if (text != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                modifier = Modifier.premiumLoadingPulse(true)
+            )
+        }
+    }
+}
 
 @Composable
 fun ClaudeCard(

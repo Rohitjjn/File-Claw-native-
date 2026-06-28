@@ -41,19 +41,19 @@ fun SplashScreen(
             scaleAnim.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessHigh
                 )
             )
         }
         launch {
             alphaAnim.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 800)
+                animationSpec = tween(durationMillis = 250)
             )
         }
         
-        delay(1500)
+        delay(500)
         onNavigateToHome()
     }
 

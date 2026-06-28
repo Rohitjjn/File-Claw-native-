@@ -32,6 +32,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.component.ClaudeAppBar
 import com.example.viewmodel.MainViewModel
+import io.iamjosephmj.flinger.flings.flingBehavior
+import io.iamjosephmj.flinger.FlingPresets
+import androidx.compose.foundation.lazy.rememberLazyListState
+
+class TextUndoStack(private val capacity: Int = 50) {
+    private val buffer = ArrayDeque<TextFieldValue>()
+    
+    fun push(state: TextFieldValue) {
+        if (buffer.size >= capacity) buffer.removeFirst()
+        buffer.addLast(state)
+    }
+    
+    fun pop(): TextFieldValue? =
+        if (buffer.isEmpty()) null else buffer.removeLast()
+    
+    fun clear() = buffer.clear()
+    
+    val isEmpty get() = buffer.isEmpty()
+    val isNotEmpty get() = buffer.isNotEmpty()
+    val size get() = buffer.size
+    
+    fun lastOrNull(): TextFieldValue? = buffer.lastOrNull()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,8 +81,8 @@ fun EditorScreen(
     val hasUnsavedChanges = textValue.text != originalContent
 
     // Keep active undo/redo history caches
-    val undoStack = remember { mutableStateListOf<TextFieldValue>() }
-    val redoStack = remember { mutableStateListOf<TextFieldValue>() }
+    val undoStack = remember { TextUndoStack(50) }
+    val redoStack = remember { TextUndoStack(50) }
 
     val fontSize = when (settings.fontSize) {
         "Small" -> 13.sp
@@ -69,8 +92,8 @@ fun EditorScreen(
     
     val lineHeight = 20.sp
 
-    val linesCount = textValue.text.split("\n").size
-    val charsCount = textValue.text.length
+    val linesCount by remember { derivedStateOf { textValue.text.count { it == '\n' } + 1 } }
+    val charsCount by remember { derivedStateOf { textValue.text.length } }
 
     val handleExit = {
         if (hasUnsavedChanges) {
@@ -164,6 +187,8 @@ fun EditorScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 LazyRow(
+                    state = rememberLazyListState(),
+                    flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -175,14 +200,16 @@ fun EditorScreen(
                         InputChip(
                             selected = false,
                             onClick = {
-                                if (undoStack.isNotEmpty()) {
-                                    val prevState = undoStack.removeLast()
-                                    redoStack.add(textValue)
-                                    textValue = prevState
+                                if (undoStack.isNotEmpty) {
+                                    val prevState = undoStack.pop()
+                                    if (prevState != null) {
+                                        redoStack.push(textValue)
+                                        textValue = prevState
+                                    }
                                 }
                             },
                             label = { Text("Undo", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            enabled = undoStack.isNotEmpty(),
+                            enabled = undoStack.isNotEmpty,
                             leadingIcon = { 
                                 Icon(
                                     imageVector = Icons.Default.Undo, 
@@ -198,14 +225,16 @@ fun EditorScreen(
                         InputChip(
                             selected = false,
                             onClick = {
-                                if (redoStack.isNotEmpty()) {
-                                    val nextState = redoStack.removeLast()
-                                    undoStack.add(textValue)
-                                    textValue = nextState
+                                if (redoStack.isNotEmpty) {
+                                    val nextState = redoStack.pop()
+                                    if (nextState != null) {
+                                        undoStack.push(textValue)
+                                        textValue = nextState
+                                    }
                                 }
                             },
                             label = { Text("Redo", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            enabled = redoStack.isNotEmpty(),
+                            enabled = redoStack.isNotEmpty,
                             leadingIcon = { 
                                 Icon(
                                     imageVector = Icons.Default.Redo, 
@@ -227,7 +256,7 @@ fun EditorScreen(
                                 val newText = currentText.substring(0, selection.start) + insertString + currentText.substring(selection.end)
                                 val newSelection = TextRange(selection.start + insertString.length)
                                 
-                                undoStack.add(textValue)
+                                undoStack.push(textValue)
                                 redoStack.clear()
                                 textValue = TextFieldValue(text = newText, selection = newSelection)
                             },
@@ -240,7 +269,7 @@ fun EditorScreen(
                         InputChip(
                             selected = false,
                             onClick = {
-                                undoStack.add(textValue)
+                                undoStack.push(textValue)
                                 redoStack.clear()
                                 textValue = textValue.copy(text = smartFormatIndent(textValue.text))
                             },
@@ -260,7 +289,7 @@ fun EditorScreen(
                         InputChip(
                             selected = false,
                             onClick = {
-                                undoStack.add(textValue)
+                                undoStack.push(textValue)
                                 redoStack.clear()
                                 textValue = textValue.copy(text = textValue.text.replace("\t", "    "))
                             },
@@ -273,7 +302,7 @@ fun EditorScreen(
                         InputChip(
                             selected = false,
                             onClick = {
-                                undoStack.add(textValue)
+                                undoStack.push(textValue)
                                 redoStack.clear()
                                 val lines = textValue.text.split("\n")
                                 textValue = textValue.copy(text = lines.joinToString("\n") { it.trimEnd() })
@@ -298,7 +327,7 @@ fun EditorScreen(
                                 val selection = textValue.selection
                                 val lineStart = currentText.lastIndexOf('\n', selection.start - 1) + 1
                                 
-                                undoStack.add(textValue)
+                                undoStack.push(textValue)
                                 redoStack.clear()
                                 val newText = currentText.substring(0, lineStart) + "# " + currentText.substring(lineStart)
                                 textValue = textValue.copy(text = newText, selection = TextRange(selection.start + 2))
@@ -316,7 +345,7 @@ fun EditorScreen(
                                 val selection = textValue.selection
                                 val lineStart = currentText.lastIndexOf('\n', selection.start - 1) + 1
                                 
-                                undoStack.add(textValue)
+                                undoStack.push(textValue)
                                 redoStack.clear()
                                 val newText = currentText.substring(0, lineStart) + "* " + currentText.substring(lineStart)
                                 textValue = textValue.copy(text = newText, selection = TextRange(selection.start + 2))
@@ -347,7 +376,10 @@ fun EditorScreen(
                             .fillMaxHeight()
                             .background(MaterialTheme.colorScheme.background.copy(alpha = 0.7f))
                             .padding(horizontal = 8.dp)
-                            .verticalScroll(scrollState),
+                            .verticalScroll(
+                                state = scrollState,
+                                flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth())
+                            ),
                         contentAlignment = Alignment.TopCenter
                     ) {
                         Text(
@@ -383,13 +415,9 @@ fun EditorScreen(
                         value = textValue,
                         onValueChange = { newValue ->
                             // If textual characters changed, push state frame into the Undo history cache
-                            if (newValue.text != textValue.text) {
-                                if (undoStack.isEmpty() || undoStack.last().text != textValue.text) {
-                                    undoStack.add(textValue)
-                                    if (undoStack.size > 50) {
-                                        undoStack.removeAt(0)
-                                    }
-                                }
+                            val textChanged = newValue.text !== textValue.text && newValue.text != textValue.text
+                            if (textChanged) {
+                                undoStack.push(textValue)
                                 redoStack.clear()
                             }
                             textValue = newValue
@@ -402,7 +430,10 @@ fun EditorScreen(
                         ),
                         modifier = Modifier
                             .fillMaxSize()
-                            .verticalScroll(workspaceScroll)
+                            .verticalScroll(
+                                state = workspaceScroll,
+                                flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth())
+                            )
                             .then(
                                 if (!settings.wordWrap) {
                                     Modifier.horizontalScroll(horizontalScroll)

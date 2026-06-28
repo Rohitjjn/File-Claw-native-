@@ -2,8 +2,15 @@ package com.example.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.Index
 
-@Entity(tableName = "recent_files")
+@Entity(
+    tableName = "recent_files",
+    indices = [
+        Index(value = ["lastOpened"], orders = [Index.Order.DESC]),
+        Index(value = ["path"])
+    ]
+)
 data class RecentFileEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val path: String,

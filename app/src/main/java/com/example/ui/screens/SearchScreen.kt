@@ -30,9 +30,14 @@ import com.example.data.RecentFileEntity
 import com.example.ui.component.ClaudeAppBar
 import com.example.ui.component.ClaudeCard
 import com.example.ui.component.FileIcon
+import com.example.ui.component.premiumLoadingPulse
 import com.example.ui.theme.ClaudeMutedText
 import com.example.viewmodel.MainViewModel
 import java.io.File
+
+import io.iamjosephmj.flinger.flings.flingBehavior
+import io.iamjosephmj.flinger.FlingPresets
+import androidx.compose.foundation.lazy.rememberLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +51,7 @@ fun SearchScreen(
     val historyResults by viewModel.recentFilesState.collectAsState()
     val deviceResults by viewModel.deviceSearchResults.collectAsState()
     val isSearchingDevice by viewModel.isSearchingDevice.collectAsState()
+    val isIndexing by viewModel.isIndexing.collectAsState()
 
     var showAllHistory by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -156,13 +162,20 @@ fun SearchScreen(
                     }
                 }
             } else {
+                val limitCount = if (showAllHistory) historyResults.size else 3
+                val displayedHistory by remember(historyResults, limitCount) {
+                    derivedStateOf { historyResults.take(limitCount) }
+                }
+
                 LazyColumn(
+                    state = rememberLazyListState(),
+                    flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // 1. RECENT HISTORY MATCHES (ORANGE COLOR SCHEME)
-                    item {
+                    item(contentType = "HistoryHeader") {
                         Text(
                             text = "RECENT HISTORY MATCHES",
                             fontSize = 11.sp,
@@ -173,7 +186,7 @@ fun SearchScreen(
                     }
 
                     if (historyResults.isEmpty()) {
-                        item {
+                        item(contentType = "HistoryEmptyState") {
                             Card(
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -193,16 +206,14 @@ fun SearchScreen(
                             }
                         }
                     } else {
-                        val limitCount = if (showAllHistory) historyResults.size else 3
-                        val displayedHistory = historyResults.take(limitCount)
-
-                        items(displayedHistory) { file ->
+                        items(displayedHistory, key = { "hist_" + it.id }, contentType = { "HistoryItem" }) { file ->
                             Card(
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                 border = BorderStroke(1.2.dp, Color(0xFFE23C3C).copy(alpha = 0.6f)), // Strict Red outline
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .animateItemPlacement()
                                     .clickable { viewModel.openFile(file) }
                             ) {
                                 Row(
@@ -223,8 +234,9 @@ fun SearchScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
+                                        val formattedSize = remember(file.size) { formatLocalFileSize(file.size) }
                                         Text(
-                                            text = "Recent History  •  ${file.extension.uppercase()}  •  ${formatLocalFileSize(file.size)}",
+                                            text = "Recent History  •  ${file.extension.uppercase()}  •  $formattedSize",
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                         )
@@ -261,7 +273,7 @@ fun SearchScreen(
                     }
 
                     // 2. DEVICE DIRECT FILES MATCHES (BLUE COLOR SCHEME)
-                    item {
+                    item(contentType = "DeviceHeader") {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -275,18 +287,21 @@ fun SearchScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF3B67A4), // Dynamic blue accent
                             )
-                            if (isSearchingDevice) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(12.dp),
-                                    color = Color(0xFF3B67A4),
-                                    strokeWidth = 1.5.dp
-                                )
+                            if (isSearchingDevice || isIndexing) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (isIndexing) "Building index... " else "Searching... ",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF3B67A4),
+                                        modifier = Modifier.premiumLoadingPulse(true)
+                                    )
+                                }
                             }
                         }
                     }
 
                     if (deviceResults.isEmpty()) {
-                        item {
+                        item(contentType = "DeviceEmptyState") {
                             Card(
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -298,7 +313,7 @@ fun SearchScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = if (isSearchingDevice) "Scanning local directories..." else "No local device files found matching \"$searchQuery\"",
+                                        text = if (isIndexing) "Building index... Please wait." else if (isSearchingDevice) "Scanning local directories..." else "No local device files found matching \"$searchQuery\"",
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                     )
@@ -306,7 +321,7 @@ fun SearchScreen(
                             }
                         }
                     } else {
-                        items(deviceResults) { localFile ->
+                        items(deviceResults, key = { "dev_" + it.absolutePath }, contentType = { "DeviceItem" }) { localFile ->
                             val isAlreadyInHistory = historyResults.any { it.path == localFile.absolutePath }
                             val isDark = MaterialTheme.colorScheme.background == com.example.ui.theme.ClaudeOnyx
                             
@@ -331,6 +346,7 @@ fun SearchScreen(
                                 border = BorderStroke(1.2.dp, cardBorderColor), // Accenting based on state
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .animateItemPlacement()
                                     .clickable {
                                         viewModel.importAndOpenFile(localFile)
                                     }

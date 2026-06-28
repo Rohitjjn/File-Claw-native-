@@ -5,7 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,6 +22,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -34,6 +37,17 @@ import com.example.ui.component.ClaudeAppBar
 import com.example.ui.component.ClaudeCard
 import com.example.viewmodel.MainViewModel
 
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import io.iamjosephmj.flinger.flings.flingBehavior
+import io.iamjosephmj.flinger.FlingPresets
+import com.example.utils.CacheManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -42,6 +56,18 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val settings by viewModel.settingsState.collectAsState()
+
+    val themes = remember {
+        listOf(
+            "Light" to "Default Claude aesthetic",
+            "Dark" to "Easy on the eyes",
+            "System" to "Follow device theme"
+        )
+    }
+    val fontSizes = remember { listOf("Small", "Medium", "Large") }
+    val tabSizes = remember { listOf(2, 4) }
+    val encodings = remember { listOf("UTF-8", "UTF-16", "ASCII", "ISO-8859-1") }
+    val historyLimits = remember { listOf(10, 20, 50, 100) }
 
     Scaffold(
         topBar = {
@@ -54,16 +80,22 @@ fun SettingsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier.testTag("settings_screen")
     ) { innerPadding ->
-        LazyColumn(
+        val scrollState = rememberScrollState()
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(
+                    state = scrollState,
+                    flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth())
+                ),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Spacer(modifier = Modifier.height(16.dp))
+
             // 1. APPEARANCE
-            item {
+            Column {
                 Text(
                     text = "APPEARANCE",
                     fontSize = 11.sp,
@@ -74,12 +106,9 @@ fun SettingsScreen(
                 
                 ClaudeCard {
                     // Modern radio-styled row selection
-                    val themes = listOf(
-                        "Light" to "Default Claude aesthetic",
-                        "Dark" to "Easy on the eyes",
-                        "System" to "Follow device theme"
-                    )
-                    themes.forEachIndexed { i, (key, desc) ->
+                    themes.forEachIndexed { i, pair ->
+                        val key = pair.first
+                        val desc = pair.second
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -121,7 +150,7 @@ fun SettingsScreen(
             }
 
             // 2. FONT SIZE SCALE
-            item {
+            Column {
                 Text(
                     text = "FONT SIZE",
                     fontSize = 11.sp,
@@ -131,7 +160,7 @@ fun SettingsScreen(
                 )
                 
                 SegmentedControl(
-                    items = listOf("Small", "Medium", "Large"),
+                    items = fontSizes,
                     selectedItem = settings.fontSize,
                     onItemSelected = { size ->
                         viewModel.updateSettings(settings.copy(fontSize = size))
@@ -141,7 +170,7 @@ fun SettingsScreen(
             }
 
             // 3. EDITOR CONFIGURATIONS
-            item {
+            Column {
                 Text(
                     text = "EDITOR",
                     fontSize = 11.sp,
@@ -179,7 +208,7 @@ fun SettingsScreen(
             }
 
             // 4. TAB SIZE (SEGMENTED)
-            item {
+            Column {
                 Text(
                     text = "TAB SIZE",
                     fontSize = 11.sp,
@@ -188,7 +217,7 @@ fun SettingsScreen(
                     modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                 )
                 SegmentedControl(
-                    items = listOf(2, 4),
+                    items = tabSizes,
                     selectedItem = settings.tabSize,
                     onItemSelected = { size ->
                         viewModel.updateSettings(settings.copy(tabSize = size))
@@ -198,7 +227,7 @@ fun SettingsScreen(
             }
 
             // 5. DEFAULT ENCODING
-            item {
+            Column {
                 Text(
                     text = "DEFAULT ENCODING",
                     fontSize = 11.sp,
@@ -207,7 +236,7 @@ fun SettingsScreen(
                     modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                 )
                 SegmentedControl(
-                    items = listOf("UTF-8", "UTF-16", "ASCII", "ISO-8859-1"),
+                    items = encodings,
                     selectedItem = settings.defaultEncoding,
                     onItemSelected = { encode ->
                         viewModel.updateSettings(settings.copy(defaultEncoding = encode))
@@ -217,7 +246,7 @@ fun SettingsScreen(
             }
 
             // 6. STORAGE & HISTORY
-            item {
+            Column {
                 Text(
                     text = "STORAGE & HISTORY",
                     fontSize = 11.sp,
@@ -229,6 +258,7 @@ fun SettingsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ClaudeCard {
                         Column {
+                            java.lang.String.valueOf("History Limit") // unused dummy check
                             Text(
                                 text = "History Limit",
                                 fontSize = 14.sp,
@@ -237,7 +267,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                             SegmentedControl(
-                                items = listOf(10, 20, 50, 100),
+                                items = historyLimits,
                                 selectedItem = settings.historyLimit,
                                 onItemSelected = { limit ->
                                     viewModel.updateSettings(settings.copy(historyLimit = limit))
@@ -262,11 +292,13 @@ fun SettingsScreen(
                             onClick = { viewModel.clearEditorCache() }
                         )
                     }
+
+                    CacheSettingsItem(cacheManager = CacheManager.getInstance(LocalContext.current))
                 }
             }
 
-            // ABOUT (Renumbered/Shifted)
-            item {
+            // ABOUT
+            Column {
                 Text(
                     text = "ABOUT",
                     fontSize = 11.sp,
@@ -311,10 +343,10 @@ fun SettingsScreen(
                             )
                         }
                     }
-
-                    // Open Source Licenses option removed as requested
                 }
             }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
@@ -448,5 +480,48 @@ fun <T> SegmentedControl(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun CacheSettingsItem(cacheManager: CacheManager) {
+    var showClearDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val cacheSize by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(cacheManager.getTotalSize()) }
+    val breakdown = cacheManager.getBreakdown()
+    
+    ClaudeCard {
+        androidx.compose.material3.ListItem(
+            headlineContent = { Text("Cache Management") },
+            supportingContent = { 
+                Column {
+                    Text("Total: $cacheSize", fontWeight = FontWeight.Medium)
+                    breakdown.forEach { (name, size) ->
+                        Text("$name: $size", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            trailingContent = {
+                androidx.compose.material3.TextButton(onClick = { showClearDialog = true }) {
+                    Text("Clear")
+                }
+            }
+        )
+    }
+    
+    if (showClearDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear Cache") },
+            text = { Text("This will free up $cacheSize. All previews and thumbnails will need to be regenerated.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    CoroutineScope(Dispatchers.IO).launch { cacheManager.nuke() }
+                    showClearDialog = false
+                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 }

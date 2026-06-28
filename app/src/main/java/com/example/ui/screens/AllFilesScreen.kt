@@ -30,7 +30,12 @@ import com.example.ui.component.ClaudeAppBar
 import com.example.ui.component.ClaudeButton
 import com.example.ui.component.ClaudeCard
 import com.example.ui.component.FileIcon
+import com.example.ui.component.premiumLoadingPulse
 import com.example.viewmodel.MainViewModel
+
+import io.iamjosephmj.flinger.flings.flingBehavior
+import io.iamjosephmj.flinger.FlingPresets
+import androidx.compose.foundation.lazy.rememberLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -132,12 +137,14 @@ fun AllFilesScreen(
                 .padding(innerPadding)
         ) {
             LazyColumn(
+                state = rememberLazyListState(),
+                flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp)
             ) {
                 if (files.isEmpty()) {
-                    item {
+                    item(contentType = "EmptyState") {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -161,9 +168,10 @@ fun AllFilesScreen(
                         }
                     }
                 } else {
-                    items(files, key = { it.id }) { file ->
+                    items(files, key = { it.id }, contentType = { "FileItem" }) { file ->
                         ClaudeCard(
-                            onClick = { viewModel.openFile(file) }
+                            onClick = { viewModel.openFile(file) },
+                            modifier = Modifier.animateItemPlacement()
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -174,20 +182,13 @@ fun AllFilesScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    if (loadingFilePath == file.path) {
-                                        Box(
-                                            modifier = Modifier.size(42.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(24.dp),
-                                                color = MaterialTheme.colorScheme.primary,
-                                                strokeWidth = 2.dp
-                                            )
-                                        }
-                                    } else {
-                                        FileIcon(extension = file.extension, size = 42, isSample = file.isSample)
-                                    }
+                                    val isLoading = loadingFilePath == file.path
+                                    FileIcon(
+                                        extension = file.extension, 
+                                        size = 42, 
+                                        isSample = file.isSample,
+                                        modifier = Modifier.premiumLoadingPulse(isLoading)
+                                    )
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Column {
                                         Text(

@@ -39,9 +39,14 @@ import com.example.ui.component.ClaudeAppBar
 import com.example.ui.component.ClaudeButton
 import com.example.ui.component.ClaudeCard
 import com.example.ui.component.FileIcon
+import com.example.ui.component.premiumLoadingPulse
 import com.example.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 import java.util.Calendar
+
+import io.iamjosephmj.flinger.flings.flingBehavior
+import io.iamjosephmj.flinger.FlingPresets
+import androidx.compose.foundation.lazy.rememberLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -171,16 +176,21 @@ fun HomeScreen(
                         modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
                     )
 
-                    // Drawer Files List with clear triggers (optimized to take the top 10 for buttery-smooth drawer opening animation frames)
-                    val drawerFiles = remember(files) { files.take(10) }
+                    val settings by viewModel.settingsState.collectAsState()
+                    val drawerFiles by remember(files, settings.historyLimit) { 
+                        derivedStateOf { files.take(settings.historyLimit) }
+                    }
                     LazyColumn(
+                        state = rememberLazyListState(),
+                        flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(drawerFiles, key = { it.id }) { file ->
+                        items(drawerFiles, key = { it.id }, contentType = { "DrawerFile" }) { file ->
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .animateItemPlacement()
                                     .clickable {
                                         coroutineScope.launch {
                                             drawerState.close()
@@ -199,20 +209,13 @@ fun HomeScreen(
                                         modifier = Modifier.weight(1f),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        if (loadingFilePath == file.path) {
-                                            Box(
-                                                modifier = Modifier.size(32.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(20.dp),
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    strokeWidth = 2.dp
-                                                )
-                                            }
-                                        } else {
-                                            FileIcon(extension = file.extension, size = 32, isSample = file.isSample)
-                                        }
+                                        val isLoading = loadingFilePath == file.path
+                                        FileIcon(
+                                            extension = file.extension, 
+                                            size = 32, 
+                                            isSample = file.isSample,
+                                            modifier = Modifier.premiumLoadingPulse(isLoading)
+                                        )
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column {
                                             Text(
@@ -223,8 +226,9 @@ fun HomeScreen(
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
+                                            val elapsedText = remember(file.lastOpened) { formatElapsedTime(file.lastOpened) }
                                             Text(
-                                                text = formatElapsedTime(file.lastOpened),
+                                                text = elapsedText,
                                                 fontSize = 11.sp,
                                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                             )
@@ -362,7 +366,7 @@ fun HomeScreen(
                     AnimatedContent(
                         targetState = files.isEmpty(),
                         transitionSpec = {
-                            fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(200))
+                            fadeIn(animationSpec = tween(100)) togetherWith fadeOut(animationSpec = tween(75))
                         },
                         label = "HomeScreenContent"
                     ) { isEmpty ->
@@ -436,14 +440,19 @@ fun HomeScreen(
                                 }
                             }
                         } else {
+                            val displayedFiles by remember(files) {
+                                derivedStateOf { files.take(5) }
+                            }
                             // Striking filled list state with custom header and view all button
                             LazyColumn(
+                                state = rememberLazyListState(),
+                                flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 100.dp)
                             ) {
                                 // Header greeting exactly matching screen
-                                item {
+                                item(contentType = "Header") {
                                     Column {
                                         Spacer(modifier = Modifier.height(16.dp)) // Safe top margin buffer to prevent overlapping under header bar
                                         Text(
@@ -460,7 +469,7 @@ fun HomeScreen(
                                     }
                                 }
 
-                                item {
+                                item(contentType = "RecentFilesHeader") {
                                     Spacer(modifier = Modifier.height(12.dp))
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -498,9 +507,10 @@ fun HomeScreen(
                                     }
                                 }
 
-                                items(files.take(5), key = { it.id }) { file ->
+                                items(displayedFiles, key = { it.id }, contentType = { "RecentFile" }) { file ->
                                     ClaudeCard(
-                                        onClick = { viewModel.openFile(file) }
+                                        onClick = { viewModel.openFile(file) },
+                                        modifier = Modifier.animateItemPlacement()
                                     ) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -511,20 +521,13 @@ fun HomeScreen(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 modifier = Modifier.weight(1f)
                                             ) {
-                                                if (loadingFilePath == file.path) {
-                                                    Box(
-                                                        modifier = Modifier.size(42.dp),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        CircularProgressIndicator(
-                                                            modifier = Modifier.size(24.dp),
-                                                            color = MaterialTheme.colorScheme.primary,
-                                                            strokeWidth = 2.dp
-                                                        )
-                                                    }
-                                                } else {
-                                                    FileIcon(extension = file.extension, size = 42, isSample = file.isSample)
-                                                }
+                                                val isLoading = loadingFilePath == file.path
+                                                FileIcon(
+                                                    extension = file.extension, 
+                                                    size = 42, 
+                                                    isSample = file.isSample,
+                                                    modifier = Modifier.premiumLoadingPulse(isLoading)
+                                                )
                                                 Spacer(modifier = Modifier.width(16.dp))
                                                 Column {
                                                     Text(
@@ -536,8 +539,10 @@ fun HomeScreen(
                                                         overflow = TextOverflow.Ellipsis
                                                     )
                                                     Spacer(modifier = Modifier.height(2.dp))
+                                                    val formattedSize = remember(file.size) { formatFileSize(file.size) }
+                                                    val formattedTime = remember(file.lastOpened) { formatElapsedTime(file.lastOpened) }
                                                     Text(
-                                                        text = "${file.extension.uppercase()}  •  ${formatFileSize(file.size)}  •  ${formatElapsedTime(file.lastOpened)}",
+                                                        text = "${file.extension.uppercase()}  •  $formattedSize  •  $formattedTime",
                                                         fontSize = 12.sp,
                                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                                     )

@@ -18,9 +18,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import java.io.File
 import java.io.FileOutputStream
-
 import java.io.FileInputStream
 import java.io.InputStream
 
@@ -31,6 +33,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Indexing for super-fast search
     private val allIndexedFiles = java.util.Collections.synchronizedList(mutableListOf<String>())
+    
+    private val _isIndexing = MutableStateFlow(false)
+    val isIndexing: StateFlow<Boolean> = _isIndexing.asStateFlow()
 
     init {
         val database = AppDatabase.getDatabase(application)
@@ -57,71 +62,78 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-
-            // 2. Launch background search scanning script on storage to build dynamic fresh cache
-            launch(Dispatchers.IO) {
-                buildStorageIndex()
-            }
         }
     }
 
-    private fun buildStorageIndex() {
-        val rootDir = File("/storage/emulated/0")
-        val appFilesDir = getApplication<Application>().filesDir
-        val externalFilesDir = getApplication<Application>().getExternalFilesDir(null)
-        val freshList = mutableListOf<String>()
-
-        fun walk(dir: File) {
+    fun buildStorageIndex() {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (_isIndexing.value) return@launch
+            _isIndexing.value = true
             try {
-                val files = dir.listFiles() ?: return
-                for (f in files) {
-                    val name = f.name
-                    if (name.startsWith(".")) continue
-                    if (f.isDirectory) {
-                        if (name.equals("Android", ignoreCase = true)) continue
-                        walk(f)
-                    } else {
-                        freshList.add(f.absolutePath)
+                val rootDir = File("/storage/emulated/0")
+                val appFilesDir = getApplication<Application>().filesDir
+                val externalFilesDir = getApplication<Application>().getExternalFilesDir(null)
+                val freshList = mutableListOf<String>()
+
+                val dirsToScan = mutableListOf<File>()
+                if (rootDir.exists()) {
+                    dirsToScan.add(rootDir)
+                    val defaultDirs = listOf("Download", "Documents", "DCIM", "Pictures", "Music")
+                    for (dirName in defaultDirs) {
+                        val sub = File(rootDir, dirName)
+                        if (sub.exists() && sub.isDirectory) {
+                            dirsToScan.add(sub)
+                        }
                     }
+                }
+                if (appFilesDir.exists()) {
+                    dirsToScan.add(appFilesDir)
+                }
+                if (externalFilesDir != null && externalFilesDir.exists()) {
+                    dirsToScan.add(externalFilesDir)
+                }
+
+                for (dir in dirsToScan.distinctBy { it.absolutePath }) {
+                    if (dir.exists()) {
+                        dir.walkTopDown()
+                            .maxDepth(3)
+                            .onEnter { d ->
+                                val name = d.name
+                                !name.startsWith(".") && 
+                                !name.equals("Android", ignoreCase = true) &&
+                                !name.contains("cache", ignoreCase = true) &&
+                                !name.contains("tmp", ignoreCase = true) &&
+                                !name.contains("com.", ignoreCase = true)
+                            }
+                            .filter { it.isFile }
+                            .take(2000)
+                            .forEach {
+                                if (freshList.size < 5000) {
+                                    freshList.add(it.absolutePath)
+                                }
+                            }
+                    }
+                }
+
+                val uniqueList = freshList.distinct()
+
+                synchronized(allIndexedFiles) {
+                    allIndexedFiles.clear()
+                    allIndexedFiles.addAll(uniqueList)
+                }
+
+                // Persist the updated flat files cache
+                try {
+                    val cacheFile = File(getApplication<Application>().cacheDir, "device_files_cache.txt")
+                    cacheFile.writeText(uniqueList.joinToString("\n"))
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+            } finally {
+                _isIndexing.value = false
             }
-        }
-
-        if (rootDir.exists() && rootDir.isDirectory) {
-            walk(rootDir)
-        }
-        
-        // Explicitly scan public directories in case root index returns empty due to scope restrictions
-        val defaultDirs = listOf("Download", "Documents", "DCIM", "Pictures", "Music")
-        for (dirName in defaultDirs) {
-            val sub = File(rootDir, dirName)
-            if (sub.exists() && sub.isDirectory) {
-                walk(sub)
-            }
-        }
-
-        if (appFilesDir.exists() && appFilesDir.isDirectory) {
-            walk(appFilesDir)
-        }
-        if (externalFilesDir != null && externalFilesDir.exists() && externalFilesDir.isDirectory) {
-            walk(externalFilesDir)
-        }
-
-        val uniqueList = freshList.distinct()
-
-        synchronized(allIndexedFiles) {
-            allIndexedFiles.clear()
-            allIndexedFiles.addAll(uniqueList)
-        }
-
-        // Persist the updated flat files cache
-        try {
-            val cacheFile = File(getApplication<Application>().cacheDir, "device_files_cache.txt")
-            cacheFile.writeText(uniqueList.joinToString("\n"))
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
@@ -184,8 +196,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         data class CsvSuccess(val rows: List<List<String>>, val file: RecentFileEntity) : FileContentState()
         data class ZipSuccess(val root: FileManager.ZipNode, val file: RecentFileEntity) : FileContentState()
         data class ImageSuccess(val file: RecentFileEntity) : FileContentState()
-        data class PdfSuccess(val file: RecentFileEntity) : FileContentState()
-        data class DocxSuccess(val elements: List<com.example.services.FileManager.DocxElement>, val file: RecentFileEntity) : FileContentState()
+        data class PdfSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
+        data class DocxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
         data class MediaSuccess(val file: RecentFileEntity, val isAudio: Boolean) : FileContentState()
         data class BinarySuccess(val hexRows: List<String>, val asciiRows: List<String>, val file: RecentFileEntity) : FileContentState()
         data class Error(val message: String) : FileContentState()
@@ -194,16 +206,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentFileState = MutableStateFlow<FileContentState>(FileContentState.Idle)
     val currentFileState: StateFlow<FileContentState> = _currentFileState.asStateFlow()
 
+    private val _expandedZipPaths = MutableStateFlow<Set<String>>(emptySet())
+    val expandedZipPaths: StateFlow<Set<String>> = _expandedZipPaths.asStateFlow()
+
+    fun toggleZipPathExpanded(path: String) {
+        val current = _expandedZipPaths.value.toMutableSet()
+        if (current.contains(path)) {
+            current.remove(path)
+        } else {
+            current.add(path)
+        }
+        _expandedZipPaths.value = current
+    }
+
+    fun expandZipPath(path: String) {
+        val current = _expandedZipPaths.value.toMutableSet()
+        current.add(path)
+        _expandedZipPaths.value = current
+    }
+
     private val _loadingFilePath = MutableStateFlow<String?>(null)
     val loadingFilePath: StateFlow<String?> = _loadingFilePath.asStateFlow()
 
     // Navigation trigger event (prevents race conditions)
-    private val _navigateToPreview = MutableStateFlow(false)
-    val navigateToPreview = _navigateToPreview.asStateFlow()
-
-    fun resetNavigateToPreview() {
-        _navigateToPreview.value = false
+    sealed class NavigationEvent {
+        data class NavigateToPreview(val fileState: FileContentState) : NavigationEvent()
+        data class ShowError(val message: String) : NavigationEvent()
     }
+
+    private val _navigationEvent = Channel<NavigationEvent>(Channel.BUFFERED)
+    val navigationEvent = _navigationEvent.receiveAsFlow()
 
     // File operation events (e.g. notifications)
     private val _fileEvent = MutableStateFlow<String?>(null)
@@ -312,7 +344,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun openFile(fileEntity: RecentFileEntity) {
         _currentFileState.value = FileContentState.Loading
         _loadingFilePath.value = fileEntity.path
-        _navigateToPreview.value = true // Transition immediately to FilePreviewScreen for seamless modern UX
+        
+        viewModelScope.launch {
+            _navigationEvent.send(NavigationEvent.NavigateToPreview(FileContentState.Loading))
+        }
         
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -331,10 +366,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 
                 // Add this path to search index dynamically if missing
                 indexFile(fileEntity.path)
+
+                // Save this file path to shared preferences as 'last_previewed_file_path'
+                val prefs = getApplication<android.app.Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+                prefs.edit().putString("last_previewed_file_path", fileEntity.path).apply()
  
                 val file = File(fileEntity.path)
                 if (!file.exists()) {
                     _currentFileState.value = FileContentState.Error("File not found on disk. It might have been deleted.")
+                    _navigationEvent.send(NavigationEvent.NavigateToPreview(_currentFileState.value))
                     return@launch
                 }
  
@@ -351,15 +391,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 
                 when {
                     ext == "docx" -> {
-                        val elements = fileManager.parseDocx(activePath, getApplication())
-                        _currentFileState.value = FileContentState.DocxSuccess(elements, finalEntity)
+                        val fileBytes = File(activePath).readBytes()
+                        val base64 = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
+                        _currentFileState.value = FileContentState.DocxSuccess(base64, finalEntity)
                     }
                     ext == "pptx" || ext == "ppt" -> {
                         val text = fileManager.readPptxText(activePath)
                         _currentFileState.value = FileContentState.TextSuccess(text, finalEntity)
                     }
                     ext == "pdf" -> {
-                        _currentFileState.value = FileContentState.PdfSuccess(tempEntity)
+                        val fileBytes = File(activePath).readBytes()
+                        val base64 = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
+                        _currentFileState.value = FileContentState.PdfSuccess(base64, finalEntity)
                     }
                     ext == "csv" || ext == "tsv" -> {
                         val csvData = fileManager.parseCsv(activePath)
@@ -388,15 +431,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _currentFileState.value = FileContentState.TextSuccess(text, finalEntity)
                     }
                 }
-                
-                // Comment out opening popup/toast based on user requirement
-                // if (settingsState.value.notificationFileOpen) {
-                //     _fileEvent.value = "Opened: ${fileEntity.name}"
-                // }
             } catch (e: Exception) {
                 _currentFileState.value = FileContentState.Error("Failed to open file: ${e.message}")
             } finally {
                 _loadingFilePath.value = null
+                _navigationEvent.send(NavigationEvent.NavigateToPreview(_currentFileState.value))
             }
         }
     }
@@ -434,11 +473,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     openFile(savedEntity)
                 } else {
                     _currentFileState.value = FileContentState.Error("Could not extract entry: ${node.name}")
-                    _navigateToPreview.value = true
+                    _navigationEvent.send(NavigationEvent.NavigateToPreview(_currentFileState.value))
                 }
             } catch (e: Exception) {
                 _currentFileState.value = FileContentState.Error("Failed to open ZIP entry: ${e.message}")
-                _navigateToPreview.value = true
+                _navigationEvent.send(NavigationEvent.NavigateToPreview(_currentFileState.value))
             }
         }
     }
@@ -450,7 +489,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val parentEntity = repository.getRecentFileByPath(parentPath)
                 if (parentEntity != null) {
                     openFile(parentEntity)
-                    _navigateToPreview.value = false
                 } else {
                     val file = File(parentPath)
                     if (file.exists()) {
@@ -464,15 +502,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
                         val id = repository.insertRecentFile(recentFile)
                         openFile(recentFile.copy(id = id.toInt()))
-                        _navigateToPreview.value = false
                     } else {
                         _currentFileState.value = FileContentState.Error("Parent ZIP file not found on disk.")
-                        _navigateToPreview.value = true
+                        _navigationEvent.send(NavigationEvent.NavigateToPreview(_currentFileState.value))
                     }
                 }
             } catch (e: Exception) {
                 _currentFileState.value = FileContentState.Error("Failed to reopen parent ZIP: ${e.message}")
-                _navigateToPreview.value = true
+                _navigationEvent.send(NavigationEvent.NavigateToPreview(_currentFileState.value))
             }
         }
     }
@@ -653,13 +690,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var searchJob: kotlinx.coroutines.Job? = null
+
     fun searchLocalFiles(query: String) {
+        searchJob?.cancel()
         if (query.trim().isEmpty()) {
             _deviceSearchResults.value = emptyList()
+            _isSearchingDevice.value = false
             return
         }
-        _isSearchingDevice.value = true
-        viewModelScope.launch(Dispatchers.Default) {
+        
+        searchJob = viewModelScope.launch(Dispatchers.Default) {
+            kotlinx.coroutines.delay(150L) // 150ms debounce
+            _isSearchingDevice.value = true
             try {
                 val pattern = query.trim()
                 val resultsList = mutableListOf<File>()

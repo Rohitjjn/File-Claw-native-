@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [RecentFileEntity::class, SettingEntity::class], version = 2, exportSchema = false)
+@Database(entities = [RecentFileEntity::class, SettingEntity::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun recentFileDao(): RecentFileDao
     abstract fun settingDao(): SettingDao
@@ -22,6 +22,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "files_claw_database"
                 )
                 .fallbackToDestructiveMigration()
+                .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                 .build()
                 INSTANCE = instance
                 instance
