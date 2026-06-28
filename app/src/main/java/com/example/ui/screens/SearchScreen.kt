@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,6 +40,10 @@ import io.iamjosephmj.flinger.flings.flingBehavior
 import io.iamjosephmj.flinger.FlingPresets
 import androidx.compose.foundation.lazy.rememberLazyListState
 
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
@@ -52,6 +57,7 @@ fun SearchScreen(
     val deviceResults by viewModel.deviceSearchResults.collectAsState()
     val isSearchingDevice by viewModel.isSearchingDevice.collectAsState()
     val isIndexing by viewModel.isIndexing.collectAsState()
+    val searchTermsHistory by viewModel.searchTermsHistory.collectAsState()
 
     var showAllHistory by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -106,6 +112,10 @@ fun SearchScreen(
                                 }
                             }
                         },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { 
+                            if (searchQuery.isNotBlank()) viewModel.addSearchTermToHistory(searchQuery)
+                        }),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = MaterialTheme.colorScheme.background,
                             unfocusedContainerColor = MaterialTheme.colorScheme.background,
@@ -131,34 +141,73 @@ fun SearchScreen(
                 .padding(innerPadding)
         ) {
             if (searchQuery.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(32.dp)
+                if (searchTermsHistory.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.TravelExplore,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            modifier = Modifier.size(96.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Dual Space Search Engine",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Search file history (Orange matches) & device files (Blue matches) concurrently.",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.TravelExplore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                modifier = Modifier.size(96.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Search files & storage",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(top = 8.dp)
+                    ) {
+                        items(searchTermsHistory, key = { it }) { term ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.updateSearchQuery(term)
+                                        viewModel.searchLocalFiles(term)
+                                        viewModel.addSearchTermToHistory(term)
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = "History",
+                                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(
+                                    text = term,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(
+                                    onClick = { viewModel.removeSearchTermFromHistory(term) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Clear,
+                                        contentDescription = "Remove",
+                                        tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             } else {
@@ -187,66 +236,52 @@ fun SearchScreen(
 
                     if (historyResults.isEmpty()) {
                         item(contentType = "HistoryEmptyState") {
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                border = BorderStroke(1.dp, Color(0xFFD97757).copy(alpha = 0.2f)),
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(
-                                    modifier = Modifier.padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "No history files found matching \"$searchQuery\"",
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                    )
-                                }
+                                Text(
+                                    text = "No history files found matching \"$searchQuery\"",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
                             }
                         }
                     } else {
                         items(displayedHistory, key = { "hist_" + it.id }, contentType = { "HistoryItem" }) { file ->
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                border = BorderStroke(1.2.dp, Color(0xFFE23C3C).copy(alpha = 0.6f)), // Strict Red outline
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.Transparent,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .animateItemPlacement()
                                     .clickable { viewModel.openFile(file) }
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(16.dp),
+                                        .padding(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    FileIcon(extension = file.extension, size = 42, isSample = file.isSample)
-                                    Spacer(modifier = Modifier.width(16.dp))
+                                    FileIcon(extension = file.extension, size = 32, isSample = file.isSample)
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = file.name,
                                             fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold,
+                                            fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                                        Spacer(modifier = Modifier.height(2.dp))
                                         val formattedSize = remember(file.size) { formatLocalFileSize(file.size) }
                                         Text(
-                                            text = "Recent History  •  ${file.extension.uppercase()}  •  $formattedSize",
+                                            text = "History  •  ${file.extension.uppercase()}  •  $formattedSize",
                                             fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                         )
                                     }
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronRight,
-                                        contentDescription = null,
-                                        tint = Color(0xFFD97757),
-                                        modifier = Modifier.size(20.dp)
-                                    )
                                 }
                             }
                         }
@@ -302,51 +337,28 @@ fun SearchScreen(
 
                     if (deviceResults.isEmpty()) {
                         item(contentType = "DeviceEmptyState") {
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                border = BorderStroke(1.dp, Color(0xFF3B67A4).copy(alpha = 0.15f)),
-                                modifier = Modifier.fillMaxWidth()
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(
-                                    modifier = Modifier.padding(20.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = if (isIndexing) "Building index... Please wait." else if (isSearchingDevice) "Scanning local directories..." else "No local device files found matching \"$searchQuery\"",
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                    )
-                                }
+                                Text(
+                                    text = if (isIndexing) "Building index... Please wait." else if (isSearchingDevice) "Scanning local directories..." else "No local device files found matching \"$searchQuery\"",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
                             }
                         }
                     } else {
                         items(deviceResults, key = { "dev_" + it.absolutePath }, contentType = { "DeviceItem" }) { localFile ->
                             val isAlreadyInHistory = historyResults.any { it.path == localFile.absolutePath }
-                            val isDark = MaterialTheme.colorScheme.background == com.example.ui.theme.ClaudeOnyx
                             
-                            val cardBorderColor = if (isAlreadyInHistory) {
-                                Color(0xFFE23C3C) // Red / Recent history file border
-                            } else {
-                                Color(0xFF1E56B1) // Blue / Device file border
-                            }
-                            
-                            val cardBg = if (isAlreadyInHistory) {
-                                MaterialTheme.colorScheme.surface
-                            } else {
-                                if (isDark) Color.Black else Color(0xFFF0F4FA) // Black background in dark mode, light blue-gray in light mode
-                            }
-
-                            val statusTag = if (isAlreadyInHistory) "Recent History" else "Device Storage"
-                            val accentColor = if (isAlreadyInHistory) Color(0xFFE23C3C) else Color(0xFF1E56B1)
-
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = cardBg),
-                                border = BorderStroke(1.2.dp, cardBorderColor), // Accenting based on state
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.Transparent,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .animateItemPlacement()
                                     .clickable {
                                         viewModel.importAndOpenFile(localFile)
                                     }
@@ -354,41 +366,34 @@ fun SearchScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(16.dp),
+                                        .padding(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     val ext = localFile.name.substringAfterLast('.', "")
                                     FileIcon(
                                         extension = ext,
-                                        size = 42,
+                                        size = 32,
                                         isSample = false,
                                         isRecent = isAlreadyInHistory
                                     )
-                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = localFile.name,
                                             fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold,
+                                            fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                                        Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "$statusTag  •  ${localFile.absolutePath}",
+                                            text = "Storage  •  ${localFile.absolutePath}",
                                             fontSize = 10.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronRight,
-                                        contentDescription = null,
-                                        tint = accentColor,
-                                        modifier = Modifier.size(20.dp)
-                                    )
                                 }
                             }
                         }

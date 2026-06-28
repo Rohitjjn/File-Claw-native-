@@ -13,7 +13,7 @@ data class SettingEntity(
     val autoSaveDrafts: Boolean = true,
     val defaultToEditOnOpen: Boolean = false,
     val tabSize: Int = 4, // 2 or 4
-    val defaultEncoding: String = "UTF-8", // "UTF-8", "UTF-16", "ASCII", "ISO-8859-1"
+    val defaultEncoding: String = "Auto", // "Auto", "UTF-8", "UTF-16", "ASCII", "ISO-8859-1"
     val historyLimit: Int = 20,
     val notificationFileOpen: Boolean = true,
     val notificationSaveComplete: Boolean = true,

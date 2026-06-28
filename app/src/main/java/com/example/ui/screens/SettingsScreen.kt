@@ -66,7 +66,7 @@ fun SettingsScreen(
     }
     val fontSizes = remember { listOf("Small", "Medium", "Large") }
     val tabSizes = remember { listOf(2, 4) }
-    val encodings = remember { listOf("UTF-8", "UTF-16", "ASCII", "ISO-8859-1") }
+    val encodings = remember { listOf("Auto", "UTF-8", "UTF-16", "ASCII", "ISO-8859-1", "Windows-1252", "MacRoman") }
     val historyLimits = remember { listOf(10, 20, 50, 100) }
 
     Scaffold(
@@ -235,14 +235,36 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                     modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
                 )
-                SegmentedControl(
-                    items = encodings,
-                    selectedItem = settings.defaultEncoding,
-                    onItemSelected = { encode ->
-                        viewModel.updateSettings(settings.copy(defaultEncoding = encode))
-                    },
-                    itemLabel = { it }
-                )
+                androidx.compose.foundation.lazy.LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) {
+                    items(encodings.size) { index ->
+                        val encode = encodings[index]
+                        val isSelected = (encode == settings.defaultEncoding)
+                        val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+                        val border = if (isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        val textColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+
+                        Surface(
+                            onClick = { viewModel.updateSettings(settings.copy(defaultEncoding = encode)) },
+                            shape = RoundedCornerShape(16.dp),
+                            color = bg,
+                            border = border,
+                            modifier = Modifier.height(38.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 16.dp)) {
+                                Text(
+                                    text = encode,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = textColor
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             // 6. STORAGE & HISTORY

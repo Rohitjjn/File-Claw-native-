@@ -13,6 +13,11 @@ ksp = "1.9.22-1.0.17"
 coil = "2.5.0"
 navigation = "2.7.7"
 kotlinxSerialization = "1.6.3"
+commonsCompress = "1.26.1"
+xz = "1.9"
+junrar = "7.5.5"
+kotlinCsv = "1.9.3"
+fastExcel = "0.15.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -36,6 +41,11 @@ androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = 
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
+xz = { group = "org.tukaani", name = "xz", version.ref = "xz" }
+junrar = { group = "com.github.junrar", name = "junrar", version.ref = "junrar" }
+kotlin-csv = { group = "com.github.doyaaaaaken", name = "kotlin-csv-jvm", version.ref = "kotlinCsv" }
+fastexcel-reader = { group = "org.dhatim", name = "fastexcel-reader", version.ref = "fastExcel" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

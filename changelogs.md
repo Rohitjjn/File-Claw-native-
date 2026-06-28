@@ -15,19 +15,40 @@ Next Review Date: December 15, 2026
 - Example: `v1.2.4` (Major 1, Minor 2, Patch 4).
 
 ## 3. Current Version Section
-**Current Version:** v1.0.3
-**Release Date:** June 18, 2026
-**Total Changes:** Implemented unified instant document viewer system for PDF and DOCX, and fully optimized Markdown loading animation overlay.
+**Current Version:** v1.0.4
+**Release Date:** June 28, 2026
+**Total Changes:** Added file tree sidebar, auto-encoding support, smooth scrolling enhancements, fixed cache system, and resolved large PDF crash issues.
 
 **Highlights:**
-- Converted PDF and DOCX documents to Base64 byte arrays on IO Threads inside `MainViewModel`.
-- Implemented `PdfPreviewWebView` and `DocxPreviewWebView` with zero external native library footprint, bundling `PDF.js` and `Mammoth.js` directly in the assets directory.
-- Created theme-matched continuous loading overlay indicators in `MarkdownPreview`, `PdfPreviewWebView` and `DocxPreviewWebView` to cover WebView loading phases and eliminate any black screen flashes.
+- Added a collapsible file tree navigation sidebar in HomeScreen drawer.
+- Configured "Auto" encoding detection by default in Settings and FileManager.
+- Integrated `Modifier.animateItemPlacement()` with `io.iamjosephmj.flinger` for 120 FPS ultra-smooth scrolling.
+- Fixed `MainViewModel` cache logic to retain up to 5 files, skipping caching for files over 30MB to save disk space and loading time.
+- Fixed large PDF crashing issue by removing Base64 conversion and loading files natively via `AndroidPdfViewer`.
 
 **Issues In Progress:**
 - See `known-issues.md` regarding PDF scale resetting on orientation change.
 
 ## 4. Version History
+
+### [v1.0.4] - Sidebar, Auto-Encoding & Large PDF Fixes (2026-06-28)
+**[ADDED]**
+- **Affected:** `HomeScreen.kt`, `FileTreeComponent.kt`
+- **Description:** Added a collapsible file tree navigation sidebar in the modal drawer.
+- **Affected:** `FileManager.kt`, `SettingsScreen.kt`, `SettingEntity.kt`
+- **Description:** Added an "Auto" encoding option, set as the default, which detects file encoding via BOM headers. Added extra encodings to the settings dropdown.
+
+**[CHANGED]**
+- **Affected:** `MainViewModel.kt`
+- **Description:** Redesigned the temporary cache system to properly cache up to 5 files and skip caching for files larger than 30MB to prevent IO delays.
+- **Affected:** `MainViewModel.kt`, `FilePreviewScreen.kt`
+- **Description:** Refactored `PdfSuccess` to avoid reading the entire PDF into a Base64 string, preventing `OutOfMemoryError` on 100MB+ PDF files.
+
+**[FIXED]**
+- **Affected:** `AnimateItemMock.kt`
+- **Description:** Removed mock to properly leverage Jetpack Compose's `animateItemPlacement` alongside Flinger library for 120fps smooth scrolling.
+- **Affected:** `FileManager.kt`
+- **Description:** Truncated text files to 5MB max length when rendering in the text previewer to prevent OOM errors on large text files.
 
 ### [v1.0.3] - Unified Document Viewers & Jam-less WebView Transitions (2026-06-18)
 **[ADDED]**

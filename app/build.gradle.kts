@@ -114,6 +114,13 @@ dependencies {
     implementation("com.github.mhiew:android-pdf-viewer:3.2.0-beta.3")
     implementation("org.jetbrains:markdown:0.7.3")
 
+    // Archiving, Excel, CSV
+    implementation(libs.commons.compress)
+    implementation(libs.xz)
+    implementation(libs.junrar)
+    implementation(libs.kotlin.csv)
+    implementation(libs.fastexcel.reader)
+
     // Apache POI for DOCX manipulation is disabled for lightweight native alternative to speed up builds and avoid memory limit issues
     // implementation("org.apache.poi:poi-ooxml:5.2.5")
     // implementation("org.apache.poi:poi:5.2.5")

@@ -37,9 +37,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isIndexing = MutableStateFlow(false)
     val isIndexing: StateFlow<Boolean> = _isIndexing.asStateFlow()
 
+    private val _searchTermsHistory = MutableStateFlow<List<String>>(emptyList())
+    val searchTermsHistory: StateFlow<List<String>> = _searchTermsHistory.asStateFlow()
+
+    private fun loadSearchTermsHistory() {
+        val prefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        val historyStr = prefs.getString("search_terms_history", "") ?: ""
+        if (historyStr.isNotEmpty()) {
+            _searchTermsHistory.value = historyStr.split("|*|")
+        }
+    }
+
+    fun addSearchTermToHistory(term: String) {
+        if (term.trim().isEmpty()) return
+        val current = _searchTermsHistory.value.toMutableList()
+        current.remove(term.trim()) // Remove if exists to bring to front
+        current.add(0, term.trim()) // Add to front
+        if (current.size > 15) {
+            current.removeAt(current.size - 1)
+        }
+        _searchTermsHistory.value = current
+        val prefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putString("search_terms_history", current.joinToString("|*|")).apply()
+    }
+
+    fun removeSearchTermFromHistory(term: String) {
+        val current = _searchTermsHistory.value.toMutableList()
+        current.remove(term)
+        _searchTermsHistory.value = current
+        val prefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putString("search_terms_history", current.joinToString("|*|")).apply()
+    }
+
     init {
         val database = AppDatabase.getDatabase(application)
         repository = AppRepository(database.recentFileDao(), database.settingDao())
+        
+        loadSearchTermsHistory()
+
         
         // Initialize settings, clean up sample files, and build search index from stored cache and background scanner
         viewModelScope.launch(Dispatchers.IO) {
@@ -196,7 +231,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         data class CsvSuccess(val rows: List<List<String>>, val file: RecentFileEntity) : FileContentState()
         data class ZipSuccess(val root: FileManager.ZipNode, val file: RecentFileEntity) : FileContentState()
         data class ImageSuccess(val file: RecentFileEntity) : FileContentState()
-        data class PdfSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
+        data class PdfSuccess(val file: RecentFileEntity) : FileContentState()
         data class DocxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
         data class MediaSuccess(val file: RecentFileEntity, val isAudio: Boolean) : FileContentState()
         data class BinarySuccess(val hexRows: List<String>, val asciiRows: List<String>, val file: RecentFileEntity) : FileContentState()
@@ -321,19 +356,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun copyToTempCache(file: File): File {
         return try {
+            // For large files (>30MB), skip caching entirely to save time and space
+            if (file.length() > 30 * 1024 * 1024) {
+                return file
+            }
+
             val cacheDir = getApplication<Application>().cacheDir
-            val tempDir = File(cacheDir, "temp_preview")
+            val tempDir = File(cacheDir, "file_cache")
             if (!tempDir.exists()) {
                 tempDir.mkdirs()
             }
-            tempDir.listFiles()?.forEach { it.delete() }
             
             val tempFile = File(tempDir, file.name)
+            // Check if already cached properly
+            if (tempFile.exists() && tempFile.length() == file.length() && tempFile.lastModified() == file.lastModified()) {
+                return tempFile
+            }
+            
+            // Manage cache size: keep only last 5 files
+            val existingFiles = tempDir.listFiles()?.sortedBy { it.lastModified() }
+            if (existingFiles != null && existingFiles.size >= 5) {
+                existingFiles.take(existingFiles.size - 4).forEach { it.delete() }
+            }
+
             file.inputStream().use { input ->
                 tempFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
+            tempFile.setLastModified(file.lastModified())
             tempFile
         } catch (e: Exception) {
             e.printStackTrace()
@@ -400,15 +451,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _currentFileState.value = FileContentState.TextSuccess(text, finalEntity)
                     }
                     ext == "pdf" -> {
-                        val fileBytes = File(activePath).readBytes()
-                        val base64 = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
-                        _currentFileState.value = FileContentState.PdfSuccess(base64, finalEntity)
+                        _currentFileState.value = FileContentState.PdfSuccess(finalEntity)
                     }
                     ext == "csv" || ext == "tsv" -> {
                         val csvData = fileManager.parseCsv(activePath)
                         _currentFileState.value = FileContentState.CsvSuccess(csvData, finalEntity)
                     }
-                    ext == "zip" -> {
+                    ext == "xlsx" || ext == "xls" -> {
+                        val excelData = fileManager.parseExcel(activePath)
+                        _currentFileState.value = FileContentState.CsvSuccess(excelData, finalEntity)
+                    }
+                    ext == "zip" || ext == "7z" || ext == "rar" || ext == "tar" || ext == "gz" || ext == "tgz" -> {
                         val zipStructure = fileManager.parseZipStructure(activePath)
                         _currentFileState.value = FileContentState.ZipSuccess(zipStructure, finalEntity)
                     }

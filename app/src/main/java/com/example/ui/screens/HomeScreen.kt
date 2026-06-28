@@ -167,105 +167,137 @@ fun HomeScreen(
                         modifier = Modifier.padding(vertical = 16.dp)
                     )
 
-                    Text(
-                        text = "RECENT FILES",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        letterSpacing = 1.sp,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
-                    )
-
-                    val settings by viewModel.settingsState.collectAsState()
-                    val drawerFiles by remember(files, settings.historyLimit) { 
-                        derivedStateOf { files.take(settings.historyLimit) }
-                    }
-                    LazyColumn(
-                        state = rememberLazyListState(),
-                        flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    var selectedDrawerTab by remember { mutableStateOf(0) }
+                    TabRow(
+                        selectedTabIndex = selectedDrawerTab,
+                        containerColor = Color.Transparent,
+                        divider = {}
                     ) {
-                        items(drawerFiles, key = { it.id }, contentType = { "DrawerFile" }) { file ->
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .animateItemPlacement()
-                                    .clickable {
-                                        coroutineScope.launch {
-                                            drawerState.close()
-                                            viewModel.openFile(file)
-                                        }
-                                    },
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color.Transparent
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        modifier = Modifier.weight(1f),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        val isLoading = loadingFilePath == file.path
-                                        FileIcon(
-                                            extension = file.extension, 
-                                            size = 32, 
-                                            isSample = file.isSample,
-                                            modifier = Modifier.premiumLoadingPulse(isLoading)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column {
-                                            Text(
-                                                text = file.name,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            val elapsedText = remember(file.lastOpened) { formatElapsedTime(file.lastOpened) }
-                                            Text(
-                                                text = elapsedText,
-                                                fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                            )
-                                        }
-                                    }
+                        Tab(
+                            selected = selectedDrawerTab == 0,
+                            onClick = { selectedDrawerTab = 0 },
+                            text = { Text("RECENT", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
+                        )
+                        Tab(
+                            selected = selectedDrawerTab == 1,
+                            onClick = { selectedDrawerTab = 1 },
+                            text = { Text("FILE SYSTEM", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) }
+                        )
+                    }
 
-                                    IconButton(
-                                        onClick = { viewModel.deleteRecentFile(file) },
-                                        modifier = Modifier.size(28.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Close,
-                                            contentDescription = "Remove from history",
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (selectedDrawerTab == 0) {
+                        val settings by viewModel.settingsState.collectAsState()
+                        val drawerFiles by remember(files, settings.historyLimit) { 
+                            derivedStateOf { files.take(settings.historyLimit) }
                         }
-
-                        if (files.isEmpty()) {
-                            item {
-                                Box(
+                        LazyColumn(
+                            state = rememberLazyListState(),
+                            flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(drawerFiles, key = { it.id }, contentType = { "DrawerFile" }) { file ->
+                                Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(24.dp),
-                                    contentAlignment = Alignment.Center
+                                        .clickable {
+                                            coroutineScope.launch {
+                                                drawerState.close()
+                                                viewModel.openFile(file)
+                                            }
+                                        },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color.Transparent
                                 ) {
-                                    Text(
-                                        text = "No files tracked yet",
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.weight(1f),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            val isLoading = loadingFilePath == file.path
+                                            FileIcon(
+                                                extension = file.extension, 
+                                                size = 32, 
+                                                isSample = file.isSample,
+                                                modifier = Modifier.premiumLoadingPulse(isLoading)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = file.name,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                val elapsedText = remember(file.lastOpened) { formatElapsedTime(file.lastOpened) }
+                                                Text(
+                                                    text = elapsedText,
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                                )
+                                            }
+                                        }
+
+                                        IconButton(
+                                            onClick = { viewModel.deleteRecentFile(file) },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Close,
+                                                contentDescription = "Remove from history",
+                                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (files.isEmpty()) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(24.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "No files tracked yet",
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                        )
+                                    }
                                 }
                             }
                         }
+                    } else {
+                        val rootDir = android.os.Environment.getExternalStorageDirectory()
+                        FileTreeComponent(
+                            rootDir = rootDir,
+                            onFileClick = { f ->
+                                coroutineScope.launch {
+                                    drawerState.close()
+                                    viewModel.openFile(
+                                        com.example.data.RecentFileEntity(
+                                            name = f.name,
+                                            path = f.absolutePath,
+                                            extension = f.extension,
+                                            size = f.length(),
+                                            lastOpened = System.currentTimeMillis()
+                                        )
+                                    )
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
 
                     HorizontalDivider(
@@ -509,8 +541,7 @@ fun HomeScreen(
 
                                 items(displayedFiles, key = { it.id }, contentType = { "RecentFile" }) { file ->
                                     ClaudeCard(
-                                        onClick = { viewModel.openFile(file) },
-                                        modifier = Modifier.animateItemPlacement()
+                                        onClick = { viewModel.openFile(file) }
                                     ) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),

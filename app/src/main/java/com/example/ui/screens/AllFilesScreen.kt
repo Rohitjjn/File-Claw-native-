@@ -170,8 +170,7 @@ fun AllFilesScreen(
                 } else {
                     items(files, key = { it.id }, contentType = { "FileItem" }) { file ->
                         ClaudeCard(
-                            onClick = { viewModel.openFile(file) },
-                            modifier = Modifier.animateItemPlacement()
+                            onClick = { viewModel.openFile(file) }
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),

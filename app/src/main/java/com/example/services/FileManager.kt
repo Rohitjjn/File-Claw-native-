@@ -8,6 +8,11 @@ import java.lang.StringBuilder
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import org.apache.commons.compress.archivers.sevenz.SevenZFile
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
+import com.github.junrar.Archive
+import java.util.zip.GZIPInputStream
 
 class FileManager {
 
@@ -188,11 +193,39 @@ Thank you for choosing Files Claw.
         return result
     }
 
+    private fun determineCharset(file: File, requestedEncoding: String): java.nio.charset.Charset {
+        if (requestedEncoding != "Auto") {
+            return try {
+                charset(requestedEncoding)
+            } catch (e: Exception) {
+                Charsets.UTF_8
+            }
+        }
+        val bytes = file.readBytes().take(4).toByteArray()
+        if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) {
+            return Charsets.UTF_8
+        }
+        if (bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) {
+            return Charsets.UTF_16BE
+        }
+        if (bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte()) {
+            return Charsets.UTF_16LE
+        }
+        return Charsets.UTF_8
+    }
+
     fun readFileContent(filePath: String, encoding: String = "UTF-8"): String {
         return try {
             val file = File(filePath)
             if (file.exists() && file.isFile) {
-                file.readText(charset(encoding))
+                val maxSizeBytes = 5 * 1024 * 1024 // 5MB limit
+                if (file.length() > maxSizeBytes) {
+                    val bytes = ByteArray(maxSizeBytes)
+                    java.io.FileInputStream(file).use { it.read(bytes) }
+                    String(bytes, determineCharset(file, encoding)) + "\n\n... [File truncated to 5MB for preview] ..."
+                } else {
+                    file.readText(determineCharset(file, encoding))
+                }
             } else {
                 "Error: File does not exist or is a directory: $filePath"
             }
@@ -203,30 +236,40 @@ Thank you for choosing Files Claw.
 
     fun writeFileContent(filePath: String, content: String, encoding: String = "UTF-8") {
         val file = File(filePath)
-        file.writeText(content, charset(encoding))
+        val charset = if (encoding == "Auto") Charsets.UTF_8 else try { charset(encoding) } catch (e: Exception) { Charsets.UTF_8 }
+        file.writeText(content, charset)
     }
 
     fun parseCsv(filePath: String): List<List<String>> {
         val file = File(filePath)
         if (!file.exists()) return emptyList()
-        val lines = file.readLines()
-        return lines.map { line ->
-            val result = mutableListOf<String>()
-            val currentToken = StringBuilder()
-            var inQuotes = false
-            for (char in line) {
-                if (char == '"') {
-                    inQuotes = !inQuotes
-                } else if (char == ',' && !inQuotes) {
-                    result.add(currentToken.toString().trim())
-                    currentToken.setLength(0)
-                } else {
-                    currentToken.append(char)
+        return try {
+            com.github.doyaaaaaken.kotlincsv.dsl.csvReader().readAll(file)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    fun parseExcel(filePath: String): List<List<String>> {
+        val file = File(filePath)
+        if (!file.exists()) return emptyList()
+        val result = mutableListOf<List<String>>()
+        try {
+            org.dhatim.fastexcel.reader.ReadableWorkbook(file).use { wb ->
+                val sheet = wb.firstSheet
+                sheet.openStream().forEach { row ->
+                    val rowData = mutableListOf<String>()
+                    for (cell in row) {
+                        rowData.add(cell?.text ?: "")
+                    }
+                    result.add(rowData)
                 }
             }
-            result.add(currentToken.toString().trim())
-            result
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
+        return result
     }
 
     fun parseZipStructure(filePath: String): ZipNode {
@@ -235,32 +278,80 @@ Thank you for choosing Files Claw.
         if (!file.exists()) return root
 
         try {
-            ZipFile(file).use { zipFile ->
-                val entries = zipFile.entries()
-                while (entries.hasMoreElements()) {
-                    val entry = entries.nextElement()
-                    val parts = entry.name.split("/").filter { it.isNotEmpty() }
-                    var current = root
+            val ext = file.name.substringAfterLast('.', "").lowercase()
+            val entriesList = mutableListOf<Pair<String, Boolean>>() // Pair of path/name, and isDirectory
+            val sizesMap = mutableMapOf<String, Long>()
 
-                    var currentPath = ""
-                    for (i in parts.indices) {
-                        val partName = parts[i]
-                        currentPath = if (currentPath.isEmpty()) partName else "$currentPath/$partName"
-                        val isLast = (i == parts.lastIndex)
-                        val isDir = entry.isDirectory || (!isLast)
-
-                        var child = current.children.find { it.name == partName && it.isDirectory == isDir }
-                        if (child == null) {
-                            child = ZipNode(
-                                name = partName,
-                                isDirectory = isDir,
-                                path = currentPath,
-                                size = if (isLast && !entry.isDirectory) entry.size else 0
-                            )
-                            current.children.add(child)
+            when {
+                ext == "7z" -> {
+                    SevenZFile(file).use { sevenZFile ->
+                        var entry = sevenZFile.nextEntry
+                        while (entry != null) {
+                            entriesList.add(Pair(entry.name, entry.isDirectory))
+                            if (!entry.isDirectory) sizesMap[entry.name] = entry.size
+                            entry = sevenZFile.nextEntry
                         }
-                        current = child
                     }
+                }
+                ext == "rar" -> {
+                    Archive(file).use { archive ->
+                        archive.fileHeaders.forEach { header ->
+                            val name = if (header.isUnicode) header.fileNameW else header.fileNameString
+                            val cleanName = name.replace("\\", "/")
+                            entriesList.add(Pair(cleanName, header.isDirectory))
+                            if (!header.isDirectory) sizesMap[cleanName] = header.fullUnpackSize
+                        }
+                    }
+                }
+                ext == "tar" || ext == "gz" || ext == "tgz" -> {
+                    val fis = FileInputStream(file)
+                    val input = if (ext == "gz" || ext == "tgz" || file.name.endsWith(".tar.gz")) {
+                        GzipCompressorInputStream(fis)
+                    } else {
+                        fis
+                    }
+                    TarArchiveInputStream(input).use { tarIn ->
+                        var entry = tarIn.nextTarEntry
+                        while (entry != null) {
+                            entriesList.add(Pair(entry.name, entry.isDirectory))
+                            if (!entry.isDirectory) sizesMap[entry.name] = entry.size
+                            entry = tarIn.nextTarEntry
+                        }
+                    }
+                }
+                else -> {
+                    ZipFile(file).use { zipFile ->
+                        val entries = zipFile.entries()
+                        while (entries.hasMoreElements()) {
+                            val entry = entries.nextElement()
+                            entriesList.add(Pair(entry.name, entry.isDirectory))
+                            if (!entry.isDirectory) sizesMap[entry.name] = entry.size
+                        }
+                    }
+                }
+            }
+
+            for ((entryName, isDirectory) in entriesList) {
+                val parts = entryName.split("/").filter { it.isNotEmpty() }
+                var current = root
+                var currentPath = ""
+                for (i in parts.indices) {
+                    val partName = parts[i]
+                    currentPath = if (currentPath.isEmpty()) partName else "$currentPath/$partName"
+                    val isLast = (i == parts.lastIndex)
+                    val isDir = isDirectory || (!isLast)
+
+                    var child = current.children.find { it.name == partName && it.isDirectory == isDir }
+                    if (child == null) {
+                        child = ZipNode(
+                            name = partName,
+                            isDirectory = isDir,
+                            path = currentPath,
+                            size = if (isLast && !isDir) (sizesMap[entryName] ?: 0L) else 0L
+                        )
+                        current.children.add(child)
+                    }
+                    current = child
                 }
             }
         } catch (e: Exception) {
@@ -279,15 +370,71 @@ Thank you for choosing Files Claw.
 
     fun extractZipEntry(zipFilePath: String, entryPath: String, destFile: File): Boolean {
         return try {
-            ZipFile(File(zipFilePath)).use { zipFile ->
-                val entry = zipFile.getEntry(entryPath) ?: return false
-                zipFile.getInputStream(entry).use { input ->
-                    destFile.outputStream().use { output ->
-                        input.copyTo(output)
+            val file = File(zipFilePath)
+            val ext = file.name.substringAfterLast('.', "").lowercase()
+
+            when {
+                ext == "7z" -> {
+                    SevenZFile(file).use { sevenZFile ->
+                        var entry = sevenZFile.nextEntry
+                        while (entry != null) {
+                            if (entry.name == entryPath) {
+                                val content = ByteArray(entry.size.toInt())
+                                sevenZFile.read(content)
+                                destFile.writeBytes(content)
+                                return true
+                            }
+                            entry = sevenZFile.nextEntry
+                        }
                     }
                 }
+                ext == "rar" -> {
+                    Archive(file).use { archive ->
+                        val header = archive.fileHeaders.find { h ->
+                            val name = if (h.isUnicode) h.fileNameW else h.fileNameString
+                            name.replace("\\", "/") == entryPath
+                        }
+                        if (header != null) {
+                            FileOutputStream(destFile).use { fos ->
+                                archive.extractFile(header, fos)
+                            }
+                            return true
+                        }
+                    }
+                }
+                ext == "tar" || ext == "gz" || ext == "tgz" -> {
+                    val fis = FileInputStream(file)
+                    val input = if (ext == "gz" || ext == "tgz" || file.name.endsWith(".tar.gz")) {
+                        GzipCompressorInputStream(fis)
+                    } else {
+                        fis
+                    }
+                    TarArchiveInputStream(input).use { tarIn ->
+                        var entry = tarIn.nextTarEntry
+                        while (entry != null) {
+                            if (entry.name == entryPath) {
+                                FileOutputStream(destFile).use { fos ->
+                                    tarIn.copyTo(fos)
+                                }
+                                return true
+                            }
+                            entry = tarIn.nextTarEntry
+                        }
+                    }
+                }
+                else -> {
+                    ZipFile(file).use { zipFile ->
+                        val entry = zipFile.getEntry(entryPath) ?: return false
+                        zipFile.getInputStream(entry).use { input ->
+                            destFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                    }
+                    return true
+                }
             }
-            true
+            false
         } catch (e: Exception) {
             e.printStackTrace()
             false
