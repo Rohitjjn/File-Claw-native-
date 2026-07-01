@@ -2683,7 +2683,7 @@ fun WebViewPreview(
                                 <html>
                                 <head>
                                     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-                                    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
+                                    <script src="file:///android_asset/pdfjs/build/pdf.js"></script>
                                     <style>
                                         body {
                                             margin: 0;
@@ -2776,7 +2776,7 @@ fun WebViewPreview(
                                         });
     
                                         var pdfData = base64ToUint8Array("$base64Pdf");
-                                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.worker.min.js';
+                                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'file:///android_asset/pdfjs/build/pdf.worker.js';
     
                                         var loadingTask = pdfjsLib.getDocument({data: pdfData});
                                         loadingTask.promise.then(function(pdf) {
@@ -2848,7 +2848,7 @@ fun WebViewPreview(
                                 </body>
                                 </html>
                             """.trimIndent()
-                            webView.loadDataWithBaseURL("https://cdn.jsdelivr.net/", htmlContent, "text/html", "UTF-8", null)
+                            webView.loadDataWithBaseURL("file:///android_asset/", htmlContent, "text/html", "UTF-8", null)
                         } catch (e: Exception) {
                             webView.loadDataWithBaseURL(null, "<html><body><h3>Error: ${e.message}</h3></body></html>", "text/html", "UTF-8", null)
                         }

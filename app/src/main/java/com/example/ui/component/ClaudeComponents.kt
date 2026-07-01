@@ -200,11 +200,9 @@ fun ClaudeCard(
         MaterialTheme.colorScheme.surface
     }
 
-    Card(
+    androidx.compose.material3.Surface(
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = containerColor
-        ),
+        color = containerColor,
         border = BorderStroke(1.dp, borderColor),
         modifier = modifier
             .let {

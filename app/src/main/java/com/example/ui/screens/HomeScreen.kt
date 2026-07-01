@@ -398,19 +398,13 @@ fun HomeScreen(
                 if (!isInitialized) {
                     Box(modifier = Modifier.fillMaxSize())
                 } else {
-                    AnimatedContent(
-                        targetState = files.isEmpty(),
-                        transitionSpec = {
-                            fadeIn(animationSpec = tween(100)) togetherWith fadeOut(animationSpec = tween(75))
-                        },
-                        label = "HomeScreenContent"
-                    ) { isEmpty ->
-                        if (isEmpty) {
-                            // Minimal, striking empty state centered exactly like screenshots 3 and 4
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
+                    val isEmpty = files.isEmpty()
+                    if (isEmpty) {
+                        // Minimal, striking empty state centered exactly like screenshots 3 and 4
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center,
@@ -593,7 +587,6 @@ fun HomeScreen(
                                 }
                             }
                         }
-                    }
 
                     // FIXED bottom layout Open New File button
                     if (files.isNotEmpty()) {

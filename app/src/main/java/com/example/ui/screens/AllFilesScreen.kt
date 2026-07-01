@@ -196,8 +196,10 @@ fun AllFilesScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
+                                        val formattedSize = remember(file.size) { formatLocalFileSize(file.size) }
+                                        val formattedTime = remember(file.lastOpened) { formatLocalElapsedTime(file.lastOpened) }
                                         Text(
-                                            text = "${file.extension.uppercase()}  •  ${formatLocalFileSize(file.size)}  •  ${formatLocalElapsedTime(file.lastOpened)}",
+                                            text = "${file.extension.uppercase()}  •  $formattedSize  •  $formattedTime",
                                             fontSize = 12.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                         )
@@ -209,8 +211,8 @@ fun AllFilesScreen(
                                         onClick = { viewModel.deleteRecentFile(file) }
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Outlined.Delete,
-                                            contentDescription = "Delete File",
+                                            imageVector = Icons.Outlined.Close,
+                                            contentDescription = "Remove from history",
                                             tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
                                             modifier = Modifier.size(20.dp)
                                         )

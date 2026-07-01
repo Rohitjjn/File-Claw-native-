@@ -11,7 +11,6 @@ import java.util.zip.ZipOutputStream
 import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
-import com.github.junrar.Archive
 import java.util.zip.GZIPInputStream
 
 class FileManager {
@@ -218,14 +217,28 @@ Thank you for choosing Files Claw.
         return try {
             val file = File(filePath)
             if (file.exists() && file.isFile) {
-                val maxSizeBytes = 5 * 1024 * 1024 // 5MB limit
-                if (file.length() > maxSizeBytes) {
-                    val bytes = ByteArray(maxSizeBytes)
-                    java.io.FileInputStream(file).use { it.read(bytes) }
-                    String(bytes, determineCharset(file, encoding)) + "\n\n... [File truncated to 5MB for preview] ..."
-                } else {
-                    file.readText(determineCharset(file, encoding))
+                val charset = determineCharset(file, encoding)
+                val stringBuilder = java.lang.StringBuilder()
+                val buffer = CharArray(8192)
+                val maxChars = 250_000 // Limit to ~250k chars to prevent UI ANRs
+                
+                java.io.InputStreamReader(java.io.FileInputStream(file), charset).use { reader ->
+                    var charsRead = reader.read(buffer)
+                    while (charsRead != -1) {
+                        if (stringBuilder.length + charsRead > maxChars) {
+                            val allowed = maxChars - stringBuilder.length
+                            if (allowed > 0) {
+                                stringBuilder.append(buffer, 0, allowed)
+                            }
+                            stringBuilder.append("\n\n... [File truncated for preview performance] ...")
+                            break
+                        } else {
+                            stringBuilder.append(buffer, 0, charsRead)
+                        }
+                        charsRead = reader.read(buffer)
+                    }
                 }
+                stringBuilder.toString()
             } else {
                 "Error: File does not exist or is a directory: $filePath"
             }
@@ -290,9 +303,8 @@ Thank you for choosing Files Claw.
                     net.lingala.zip4j.ZipFile(file).isEncrypted
                 }
                 "rar" -> {
-                    Archive(file).use { archive ->
-                        archive.isEncrypted
-                    }
+                    // RAR support removed as per request to drop junrar dependency
+                    false
                 }
                 else -> false
             }
@@ -323,14 +335,7 @@ Thank you for choosing Files Claw.
                     }
                 }
                 ext == "rar" -> {
-                    Archive(file).use { archive ->
-                        archive.fileHeaders.forEach { header ->
-                            val name = if (header.isUnicode) header.fileNameW else header.fileNameString
-                            val cleanName = name.replace("\\", "/")
-                            entriesList.add(Pair(cleanName, header.isDirectory))
-                            if (!header.isDirectory) sizesMap[cleanName] = header.fullUnpackSize
-                        }
-                    }
+                    // RAR support removed
                 }
                 ext == "tar" || ext == "gz" || ext == "tgz" -> {
                     val fis = FileInputStream(file)
@@ -422,18 +427,7 @@ Thank you for choosing Files Claw.
                     }
                 }
                 ext == "rar" -> {
-                    Archive(file).use { archive ->
-                        val header = archive.fileHeaders.find { h ->
-                            val name = if (h.isUnicode) h.fileNameW else h.fileNameString
-                            name.replace("\\", "/") == entryPath
-                        }
-                        if (header != null) {
-                            FileOutputStream(destFile).use { fos ->
-                                archive.extractFile(header, fos)
-                            }
-                            return true
-                        }
-                    }
+                    // RAR support removed
                 }
                 ext == "tar" || ext == "gz" || ext == "tgz" -> {
                     val fis = FileInputStream(file)

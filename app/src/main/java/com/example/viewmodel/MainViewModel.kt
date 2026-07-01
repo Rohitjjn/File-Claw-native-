@@ -784,43 +784,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                // If results are still very small, do a live check of the common public subdirectories to catch any newly created files
-                if (resultsList.size < 50) {
-                    val rootDir = File("/storage/emulated/0")
-                    val defaultDirs = listOf("Download", "Documents", "DCIM", "Pictures", "Music")
-                    val dirsToScan = mutableListOf<File>()
-                    if (rootDir.exists()) {
-                        dirsToScan.add(rootDir)
-                        for (dirName in defaultDirs) {
-                            val sub = File(rootDir, dirName)
-                            if (sub.exists() && sub.isDirectory) {
-                                dirsToScan.add(sub)
-                            }
-                        }
-                    }
-                    val appFilesDir = getApplication<Application>().filesDir
-                    dirsToScan.add(appFilesDir)
-                    val externalFilesDir = getApplication<Application>().getExternalFilesDir(null)
-                    if (externalFilesDir != null) {
-                        dirsToScan.add(externalFilesDir)
-                    }
-
-                    for (dir in dirsToScan) {
-                        val files = dir.listFiles()
-                        if (files != null) {
-                            for (f in files) {
-                                if (f.isFile && f.name.contains(pattern, ignoreCase = true)) {
-                                    val absPath = f.absolutePath
-                                    if (resultsList.none { it.absolutePath == absPath }) {
-                                        resultsList.add(f)
-                                        // Also dynamically index it for future searches
-                                        indexFile(absPath)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                // Removed live-scan to use only existing indexes (Room & memory cache)
 
                 _deviceSearchResults.value = resultsList.distinctBy { it.absolutePath }
             } catch (e: Exception) {
