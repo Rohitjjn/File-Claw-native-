@@ -229,7 +229,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         object Loading : FileContentState()
         data class TextSuccess(val content: String, val file: RecentFileEntity) : FileContentState()
         data class CsvSuccess(val rows: List<List<String>>, val file: RecentFileEntity) : FileContentState()
-        data class ZipSuccess(val root: FileManager.ZipNode, val file: RecentFileEntity) : FileContentState()
+        data class ZipSuccess(val root: FileManager.ZipNode, val file: RecentFileEntity, val password: String = "") : FileContentState()
+        data class ArchivePasswordRequired(val file: RecentFileEntity) : FileContentState()
         data class ImageSuccess(val file: RecentFileEntity) : FileContentState()
         data class PdfSuccess(val file: RecentFileEntity) : FileContentState()
         data class DocxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
@@ -392,7 +393,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun openFile(fileEntity: RecentFileEntity) {
+    fun openFile(fileEntity: RecentFileEntity, archivePassword: String = "") {
         _currentFileState.value = FileContentState.Loading
         _loadingFilePath.value = fileEntity.path
         
@@ -462,8 +463,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _currentFileState.value = FileContentState.CsvSuccess(excelData, finalEntity)
                     }
                     ext == "zip" || ext == "7z" || ext == "rar" || ext == "tar" || ext == "gz" || ext == "tgz" -> {
-                        val zipStructure = fileManager.parseZipStructure(activePath)
-                        _currentFileState.value = FileContentState.ZipSuccess(zipStructure, finalEntity)
+                        if (archivePassword.isEmpty() && fileManager.isArchiveEncrypted(activePath)) {
+                            _currentFileState.value = FileContentState.ArchivePasswordRequired(finalEntity)
+                        } else {
+                            val zipStructure = fileManager.parseZipStructure(activePath, if (archivePassword.isNotEmpty()) archivePassword else null)
+                            _currentFileState.value = FileContentState.ZipSuccess(zipStructure, finalEntity, archivePassword)
+                        }
                     }
                     imageExtensions.contains(ext) -> {
                         _currentFileState.value = FileContentState.ImageSuccess(tempEntity)
@@ -493,7 +498,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun openZipEntry(parentZipEntity: RecentFileEntity, node: FileManager.ZipNode) {
+    fun openZipEntry(parentZipEntity: RecentFileEntity, node: FileManager.ZipNode, password: String = "") {
         _currentFileState.value = FileContentState.Loading
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -507,7 +512,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val ext = node.name.substringAfterLast('.', "").lowercase()
                 val localFile = File(tempZipExtractsDir, uniqueSubName)
                 
-                val extracted = fileManager.extractZipEntry(parentZipEntity.path, node.path, localFile)
+                val pwdParam = if (password.isNotEmpty()) password else null
+                val extracted = fileManager.extractZipEntry(parentZipEntity.path, node.path, localFile, pwdParam)
                 if (extracted && localFile.exists()) {
                     val zipEntryEntity = RecentFileEntity(
                         path = localFile.absolutePath,

@@ -109,6 +109,7 @@ dependencies {
 
     // Image loading (Coil)
     implementation(libs.coil.compose)
+    implementation(libs.telephoto.zoomable.coil)
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     implementation("com.github.mhiew:android-pdf-viewer:3.2.0-beta.3")
@@ -120,6 +121,8 @@ dependencies {
     implementation(libs.junrar)
     implementation(libs.kotlin.csv)
     implementation(libs.fastexcel.reader)
+    implementation(libs.fastexcel.writer)
+    implementation(libs.zip4j)
 
     // Apache POI for DOCX manipulation is disabled for lightweight native alternative to speed up builds and avoid memory limit issues
     // implementation("org.apache.poi:poi-ooxml:5.2.5")

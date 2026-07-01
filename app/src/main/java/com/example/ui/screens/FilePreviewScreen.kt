@@ -1,4 +1,5 @@
 package com.example.ui.screens
+import androidx.compose.ui.text.drawText
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -86,6 +87,7 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroidSize
@@ -117,8 +119,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import com.tom_roush.pdfbox.pdmodel.PDDocument
-import io.iamjosephmj.flinger.flings.flingBehavior
-import io.iamjosephmj.flinger.FlingPresets
 import androidx.compose.foundation.lazy.rememberLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -362,50 +362,30 @@ fun FilePreviewScreen(
             }
         },
         bottomBar = {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = isBarsVisible,
-                enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut()
-            ) {
-                // Only show edit controls for editable text/markdown files
-                val isEditable = when (val state = fileState) {
-                    is MainViewModel.FileContentState.TextSuccess -> {
-                        state.file.extension.lowercase() != "zip" && state.file.extension.lowercase() != "csv"
-                    }
-                    else -> false
+            val isEditable = when (val state = fileState) {
+                is MainViewModel.FileContentState.TextSuccess -> {
+                    state.file.extension.lowercase() != "zip" && state.file.extension.lowercase() != "csv"
                 }
-
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.fillMaxWidth()
+                else -> false
+            }
+            if (isEditable) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = isBarsVisible,
+                    enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut()
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .navigationBarsPadding()
-                            .padding(16.dp)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        // Properties trigger
-                        OutlinedButton(
-                            onClick = { showPropertiesDialog = true },
-                            shape = RoundedCornerShape(12.dp),
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onSurface
-                            ),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                .navigationBarsPadding()
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Icon(Icons.Outlined.Info, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Properties", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-
-                        // Edit trigger if valid text asset
-                        if (isEditable) {
                             Button(
                                 onClick = onNavigateToEditor,
                                 shape = RoundedCornerShape(12.dp),
@@ -419,7 +399,7 @@ fun FilePreviewScreen(
                             ) {
                                 Icon(Icons.Default.Edit, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Edit", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Edit Code / Text", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             }
                         }
                     }
@@ -475,6 +455,38 @@ fun FilePreviewScreen(
                         }
                     }
                 }
+                is MainViewModel.FileContentState.ArchivePasswordRequired -> {
+                    var inputPassword by remember { mutableStateOf("") }
+                    AlertDialog(
+                        onDismissRequest = { onBackClick() },
+                        title = { Text("Password Required") },
+                        text = {
+                            Column {
+                                Text("This archive is password protected.", fontSize = 14.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = inputPassword,
+                                    onValueChange = { inputPassword = it },
+                                    singleLine = true,
+                                    label = { Text("Password") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(onClick = {
+                                viewModel.openFile(state.file, inputPassword)
+                            }) {
+                                Text("Open")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { onBackClick() }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
                 is MainViewModel.FileContentState.TextSuccess -> {
                     if (isWebRenderActive) {
                         WebViewPreview(
@@ -517,8 +529,8 @@ fun FilePreviewScreen(
                         onToggleExpand = { path ->
                             viewModel.toggleZipPathExpanded(path)
                         },
-                        onZipEntryClick = { node ->
-                            viewModel.openZipEntry(state.file, node)
+                        onZipEntryClick = { node, pwd ->
+                            viewModel.openZipEntry(state.file, node, pwd)
                         },
                         modifier = Modifier.fillMaxSize()
                     )
@@ -541,7 +553,8 @@ fun FilePreviewScreen(
                         onPageChanged = { page, total ->
                             currentPdfPage = page
                             totalPdfPages = total
-                        }
+                        },
+                        onBackClick = onBackClick
                     )
                 }
                 is MainViewModel.FileContentState.DocxSuccess -> {
@@ -1367,6 +1380,7 @@ fun CodePreview(
     val context = androidx.compose.ui.platform.LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     var isAllCopied by remember { mutableStateOf(false) }
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
 
     LaunchedEffect(isAllCopied) {
         if (isAllCopied) {
@@ -1374,15 +1388,6 @@ fun CodePreview(
             isAllCopied = false
         }
     }
-
-    val bodySize = when (fontSizeSetting) {
-        "Small" -> 11.sp
-        "Large" -> 16.sp
-        else -> 13.sp
-    }
-
-    val lines = remember(codeText) { codeText.split("\n") }
-    val horScrollState = if (!wrapSetting) rememberScrollState() else null
 
     Column(modifier = modifier) {
         // Tag Header
@@ -1438,122 +1443,106 @@ fun CodePreview(
             Spacer(modifier = Modifier.width(8.dp))
 
             Text(
-                text = "Editable",
+                text = "WebView Render",
                 fontSize = 11.sp,
-                color = Color(0xFF427A5B),
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
             )
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
-        // Monospace panel with high-performance LazyColumn for individual line rendering
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
         ) {
-            val keywordColor = MaterialTheme.colorScheme.primary
-            val typeColor = Color(0xFF3B67A4)
-            val annotationColor = Color(0xFF7F52FF)
-            val commentColor = Color(0xFF7B7875)
- 
-            val keywordStyle = SpanStyle(
-                color = keywordColor,
-                fontWeight = FontWeight.Bold
-            )
-            val typeStyle = SpanStyle(
-                color = typeColor,
-                fontWeight = FontWeight.SemiBold
-            )
-            val annotationStyle = SpanStyle(
-                color = annotationColor,
-                fontWeight = FontWeight.SemiBold
-            )
-            val commentStyle = SpanStyle(
-                color = commentColor,
-                fontStyle = FontStyle.Italic
-            )
- 
-            val wordRegex = remember { Regex("[a-zA-Z0-9_]+|[^a-zA-Z0-9_]") }
+            val htmlContent = remember(codeText, isDark, fontSizeSetting, wrapSetting, showLineNumbers) {
+                val escapedCode = codeText.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                val bgColor = if (isDark) "#1e1e1e" else "#ffffff"
+                val textColor = if (isDark) "#d4d4d4" else "#000000"
+                val fSize = when (fontSizeSetting) {
+                    "Small" -> "12px"
+                    "Large" -> "18px"
+                    else -> "14px"
+                }
+                val wWrap = if (wrapSetting) "pre-wrap" else "pre"
+                val wWord = if (wrapSetting) "break-word" else "normal"
+                val theme = if (isDark) "vs2015.min.css" else "vs.min.css"
+                
+                val lineNumbersCss = if (showLineNumbers) """
+                    .hljs {
+                        counter-reset: linenumber;
+                    }
+                    .hljs-line {
+                        display: block;
+                        counter-increment: linenumber;
+                    }
+                    .hljs-line::before {
+                        content: counter(linenumber);
+                        display: inline-block;
+                        width: 3em;
+                        margin-right: 1em;
+                        text-align: right;
+                        color: #888;
+                        user-select: none;
+                    }
+                """.trimIndent() else ""
+                
+                val jsLineNumbers = if (showLineNumbers) """
+                    const codeBlock = document.querySelector('code');
+                    const lines = codeBlock.innerHTML.split('\n');
+                    codeBlock.innerHTML = lines.map(line => '<span class="hljs-line">' + line + '</span>').join('\n');
+                """.trimIndent() else ""
 
-            val annotatedLines = remember(codeText, keywordColor, typeColor, annotationColor, commentColor) {
-                lines.map { line ->
-                    buildAnnotatedString {
-                        if (line.trim().startsWith("//") || line.trim().startsWith("/*") || line.trim().startsWith("*")) {
-                            withStyle(commentStyle) {
-                                append(line)
-                            }
-                        } else {
-                            val matches = wordRegex.findAll(line)
-                            matches.forEach { match ->
-                                val word = match.value
-                                when (word) {
-                                    "val", "var", "fun", "class", "package", "import", "private", "override", "suspend", "interface", "null", "if", "else", "when", "return", "true", "false", "for", "while" -> {
-                                        withStyle(keywordStyle) { append(word) }
-                                    }
-                                    "String", "Int", "Boolean", "Long", "Double", "Color", "MaterialTheme", "Composable", "Modifier", "RecentFileEntity", "RecentFileDao", "Flow", "List" -> {
-                                        withStyle(typeStyle) { append(word) }
-                                    }
-                                    "Annotation", "Database", "Entity", "PrimaryKey", "Dao", "Query", "Insert" -> {
-                                        withStyle(annotationStyle) { append(word) }
-                                    }
-                                    else -> append(word)
-                                }
-                            }
-                        }
-                    }
-                }
+                """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+                <style>
+                  body { 
+                    background-color: $bgColor; 
+                    color: $textColor;
+                    margin: 0; padding: 16px;
+                    font-size: $fSize;
+                  }
+                  pre {
+                    margin: 0;
+                    white-space: $wWrap;
+                    word-wrap: $wWord;
+                    font-family: monospace;
+                  }
+                  $lineNumbersCss
+                </style>
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/$theme">
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+                </head>
+                <body>
+                <pre><code class="language-${fileEntity.extension.lowercase()}">$escapedCode</code></pre>
+                <script>
+                  hljs.highlightAll();
+                  $jsLineNumbers
+                </script>
+                </body>
+                </html>
+                """.trimIndent()
             }
- 
-            androidx.compose.foundation.text.selection.SelectionContainer {
-                LazyColumn(
-                    state = rememberLazyListState(),
-                    flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp)
-                ) {
-                    itemsIndexed(annotatedLines, key = { index, _ -> index }, contentType = { _, _ -> "Line" }) { index, annotatedLine ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .animateItemPlacement(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (showLineNumbers) {
-                                Text(
-                                    text = "${index + 1}",
-                                    fontSize = bodySize * 0.85f,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                                    textAlign = TextAlign.End,
-                                    modifier = Modifier
-                                        .padding(end = 12.dp)
-                                        .width(32.dp)
-                                )
-                            }
-                            
-                            val rowScroll = if (horScrollState != null) rememberScrollState() else null
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .let { 
-                                        if (rowScroll != null) it.horizontalScroll(rowScroll) else it 
-                                    }
-                            ) {
-                                Text(
-                                    text = annotatedLine,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = bodySize,
-                                    lineHeight = bodySize * 1.5f,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = if (rowScroll != null) 1 else Int.MAX_VALUE
-                                )
-                            }
-                        }
+
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    android.webkit.WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.builtInZoomControls = true
+                        settings.displayZoomControls = false
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     }
+                },
+                update = { webView ->
+                    webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
                 }
-            }
+            )
         }
     }
 }
@@ -1565,10 +1554,213 @@ fun CsvPreview(
     fileEntity: RecentFileEntity,
     modifier: Modifier = Modifier
 ) {
-    val horScroll = rememberScrollState()
+    var editingCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var editValue by remember { mutableStateOf("") }
+    var currentRows by remember(csvRows) { mutableStateOf(csvRows) }
+
+    if (editingCell != null) {
+        AlertDialog(
+            onDismissRequest = { editingCell = null },
+            title = { Text("Edit Cell") },
+            text = {
+                OutlinedTextField(
+                    value = editValue,
+                    onValueChange = { editValue = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val (r, c) = editingCell!!
+                    val newRows = currentRows.toMutableList()
+                    val newRow = newRows[r].toMutableList()
+                    newRow[c] = editValue
+                    newRows[r] = newRow
+                    currentRows = newRows
+                    editingCell = null
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingCell = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Column(modifier = modifier) {
         // Tag Header
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                modifier = Modifier.padding(end = 12.dp)
+            ) {
+                Text(
+                    text = fileEntity.extension.uppercase(),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+            Text(
+                text = "${formatFileSize(fileEntity.size)} • Modified ${formatElapsedTime(fileEntity.lastOpened)}",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "Edit Mode",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+
+        // Optimized Compose Excel View with Fast Scroller
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+        ) {
+            val listState = rememberLazyListState()
+            val horScroll = rememberScrollState()
+            
+            // Render the table
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState
+            ) {
+                itemsIndexed(currentRows, contentType = { _, _ -> "CsvRow" }) { rIdx, row ->
+                    val isHeader = (rIdx == 0)
+                    val rowColor = if (isHeader) MaterialTheme.colorScheme.surfaceVariant 
+                                   else if (rIdx % 2 == 1) MaterialTheme.colorScheme.background.copy(alpha = 0.5f) 
+                                   else MaterialTheme.colorScheme.surface
+
+                    Row(
+                        modifier = Modifier
+                            .background(rowColor)
+                            .horizontalScroll(horScroll) // Sync horizontal scroll across all rows
+                    ) {
+                        // Header cell
+                        Box(
+                            modifier = Modifier
+                                .width(40.dp)
+                                .height(40.dp)
+                                .border(0.5.dp, MaterialTheme.colorScheme.outline)
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (isHeader) "" else "$rIdx",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                            )
+                        }
+
+                        // Data cells
+                        row.forEachIndexed { cIdx, cell ->
+                            Box(
+                                modifier = Modifier
+                                    .width(140.dp)
+                                    .height(40.dp)
+                                    .border(0.5.dp, MaterialTheme.colorScheme.outline)
+                                    .clickable {
+                                        editValue = cell
+                                        editingCell = Pair(rIdx, cIdx)
+                                    }
+                                    .padding(horizontal = 8.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Text(
+                                    text = cell,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isHeader) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Fast Vertical Scrollbar
+            val scope = rememberCoroutineScope()
+            val viewportHeight = listState.layoutInfo.viewportSize.height.toFloat()
+            val totalItems = listState.layoutInfo.totalItemsCount
+            if (totalItems > 0 && viewportHeight > 0) {
+                val scrollbarHeight = (viewportHeight * (viewportHeight / (totalItems * 40f.dp.value))).coerceIn(40f, viewportHeight)
+                val scrollPercent = listState.firstVisibleItemIndex.toFloat() / maxOf(1, totalItems - (viewportHeight / 40f.dp.value).toInt())
+                val scrollbarY = scrollPercent * (viewportHeight - scrollbarHeight)
+                
+                var dragOffset by remember { mutableStateOf(0f) }
+                
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset { androidx.compose.ui.unit.IntOffset(0, (scrollbarY + dragOffset).toInt()) }
+                        .width(20.dp)
+                        .height(with(androidx.compose.ui.platform.LocalDensity.current) { scrollbarHeight.toDp() })
+                        .padding(end = 4.dp, top = 4.dp, bottom = 4.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = { dragOffset = 0f },
+                                onDragEnd = { dragOffset = 0f },
+                                onDragCancel = { dragOffset = 0f }
+                            ) { change, dragAmount ->
+                                change.consume()
+                                val maxScrollY = viewportHeight - scrollbarHeight
+                                val currentY = scrollbarY + dragAmount.y
+                                val newPercent = (currentY / maxScrollY).coerceIn(0f, 1f)
+                                val targetItem = (newPercent * maxOf(0, totalItems - 1)).toInt()
+                                scope.launch {
+                                    listState.scrollToItem(targetItem)
+                                }
+                            }
+                        }
+                )
+            }
+        }
+    }
+}
+
+// 4. TREE-LISTING ARCHIVE PREVIEW COMPONENT
+@Composable
+fun ZipPreview(
+    zipRoot: FileManager.ZipNode,
+    fileEntity: RecentFileEntity,
+    expandedPaths: Set<String>,
+    onToggleExpand: (String) -> Unit,
+    onZipEntryClick: (FileManager.ZipNode, String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Keep list state
+    val listState = rememberSaveable(saver = LazyListState.Saver) {
+        LazyListState()
+    }
+
+    // Automatically expand the root ZIP node if not expanded
+    LaunchedEffect(zipRoot) {
+        if (!expandedPaths.contains("")) {
+            onToggleExpand("")
+        }
+    }
+
+    Column(modifier = modifier) {
+        // ZIP info row banner
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
@@ -1599,139 +1791,11 @@ fun CsvPreview(
                 fontWeight = FontWeight.Bold
             )
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-
-        // Excel Scroll View
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
-        ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .horizontalScroll(horScroll),
-                state = rememberLazyListState(),
-                flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth())
-            ) {
-                itemsIndexed(csvRows, contentType = { _, _ -> "CsvRow" }) { rIdx, row ->
-                    val isHeader = (rIdx == 0)
-                    val rowColor = if (isHeader) {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    } else if (rIdx % 2 == 1) {
-                        MaterialTheme.colorScheme.background.copy(alpha = 0.5f)
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .background(rowColor)
-                            .height(IntrinsicSize.Min)
-                    ) {
-                        // Empty spacer tag corner
-                        Box(
-                            modifier = Modifier
-                                .width(40.dp)
-                                .fillMaxHeight()
-                                .border(0.5.dp, MaterialTheme.colorScheme.outline)
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (isHeader) "" else "$rIdx",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                            )
-                        }
-
-                        row.forEachIndexed { cIdx, cell ->
-                            Box(
-                                modifier = Modifier
-                                    .widthIn(min = 110.dp, max = 220.dp)
-                                    .fillMaxHeight()
-                                    .border(0.5.dp, MaterialTheme.colorScheme.outline)
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Text(
-                                    text = cell,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isHeader) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// 4. TREE-LISTING ARCHIVE PREVIEW COMPONENT
-@Composable
-fun ZipPreview(
-    zipRoot: FileManager.ZipNode,
-    fileEntity: RecentFileEntity,
-    expandedPaths: Set<String>,
-    onToggleExpand: (String) -> Unit,
-    onZipEntryClick: (FileManager.ZipNode) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    // Keep list state
-    val listState = rememberSaveable(saver = LazyListState.Saver) {
-        LazyListState()
-    }
-
-    // Automatically expand the root ZIP node if not expanded
-    LaunchedEffect(zipRoot) {
-        if (!expandedPaths.contains("")) {
-            onToggleExpand("")
-        }
-    }
-
-    Column(modifier = modifier) {
-        // ZIP info row banner
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(4.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                modifier = Modifier.padding(end = 12.dp)
-            ) {
-                Text(
-                    text = "ZIP",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                )
-            }
-            Text(
-                text = "${formatFileSize(fileEntity.size)} • Modified ${formatElapsedTime(fileEntity.lastOpened)}",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = "Read-only",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-                fontWeight = FontWeight.Bold
-            )
-        }
+        
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
         LazyColumn(
             state = listState,
-            flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -1790,7 +1854,7 @@ fun ZipPreview(
                             if (node.isDirectory) {
                                 onToggleExpand(node.path)
                             } else {
-                                onZipEntryClick(node)
+                                onZipEntryClick(node, "")
                             }
                         }
                         .padding(start = (depth * 20).dp, top = 6.dp, bottom = 6.dp),
@@ -1999,59 +2063,131 @@ fun ZoomableContainer(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ImagePreview(
     fileEntity: RecentFileEntity,
     modifier: Modifier = Modifier
 ) {
+    val parentDir = remember(fileEntity) { java.io.File(fileEntity.path).parentFile }
+    val imageFiles = remember(parentDir) {
+        parentDir?.listFiles()?.filter { 
+            val ext = it.extension.lowercase()
+            ext in listOf("png", "jpg", "jpeg", "gif", "bmp", "webp")
+        }?.sortedBy { it.name } ?: listOf(java.io.File(fileEntity.path))
+    }
+    
+    val initialIndex = remember(imageFiles, fileEntity) {
+        val idx = imageFiles.indexOfFirst { it.absolutePath == fileEntity.path }
+        if (idx == -1) 0 else idx
+    }
+    
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+        initialPage = initialIndex,
+        pageCount = { imageFiles.size }
+    )
+    
+    val currentFile = imageFiles.getOrNull(pagerState.currentPage) ?: java.io.File(fileEntity.path)
+    
+    // The history save requirement "history me sirf folder save kro or path me last previewed pictures jis per click krne per us folder ki last dekhi hue image lload ho"
+    // Since MainViewModel automatically saves the file when openFile is called, we don't need to save every swipe to the history,
+    // but the user says "path me last previewed pictures jis per click krne per us folder ki last dekhi hue image lload ho"
+    // So maybe we can trigger a history update when the page settles, updating the same DB record? 
+    // For now, let's just show the images. We can use a LaunchedEffect to update history silently if needed.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage != initialIndex) {
+            val dao = com.example.data.AppDatabase.getDatabase(context).recentFileDao()
+            val newFile = imageFiles[pagerState.currentPage]
+            val existing = dao.getRecentFileByPath(fileEntity.path)
+            if (existing != null) {
+                dao.deleteRecentFileByPath(existing.path)
+                dao.insertRecentFile(existing.copy(
+                    path = newFile.absolutePath, 
+                    name = newFile.name, 
+                    extension = newFile.extension.lowercase(), 
+                    size = newFile.length(),
+                    lastOpened = System.currentTimeMillis(),
+                    id = 0 // Auto-generate new id
+                ))
+            } else {
+                dao.insertRecentFile(RecentFileEntity(
+                    path = newFile.absolutePath,
+                    name = newFile.name,
+                    extension = newFile.extension.lowercase(),
+                    size = newFile.length(),
+                    lastOpened = System.currentTimeMillis()
+                ))
+            }
+        }
+    }
+
+    var showOverlay by remember { mutableStateOf(true) }
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-            .padding(16.dp),
+            .background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+        androidx.compose.foundation.pager.HorizontalPager(
+            state = pagerState,
             modifier = Modifier.fillMaxSize()
+        ) { page ->
+            val file = imageFiles[page]
+            me.saket.telephoto.zoomable.coil.ZoomableAsyncImage(
+                model = file,
+                contentDescription = "Image preview",
+                modifier = Modifier.fillMaxSize(),
+                onClick = { showOverlay = !showOverlay }
+            )
+        }
+        
+        // Top Bar overlay for 3-dots and name
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showOverlay,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter)
         ) {
-            ElevatedCard(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent)
+                    ))
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                ZoomableContainer(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp)
-                ) { _, _ ->
-                    AsyncImage(
-                        model = java.io.File(fileEntity.path),
-                        contentDescription = "Image preview",
-                        modifier = Modifier.fillMaxSize()
-                    )
+                Text(
+                    text = "${currentFile.name} (${pagerState.currentPage + 1}/${imageFiles.size})",
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                var showMenu by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Properties", tint = Color.White)
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Properties") },
+                            onClick = { showMenu = false },
+                            leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Size: ${formatFileSize(currentFile.length())}") },
+                            onClick = { showMenu = false }
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = fileEntity.name,
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "${fileEntity.extension.uppercase()}  •  ${formatFileSize(fileEntity.size)}",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-            )
         }
     }
 }
@@ -2067,10 +2203,54 @@ fun PdfPreview(
     onLinkClicked: (String) -> Unit,
     modifier: Modifier = Modifier,
     onSingleTap: () -> Unit = {},
-    onPageChanged: (Int, Int) -> Unit = { _, _ -> }
+    onPageChanged: (Int, Int) -> Unit = { _, _ -> },
+    onBackClick: () -> Unit = {}
 ) {
     val originalFile = remember(fileEntity) { java.io.File(fileEntity.path) }
     var isReady by remember { mutableStateOf(false) }
+    var requirePassword by remember { mutableStateOf(false) }
+    var pdfPassword by remember { mutableStateOf("") }
+    var submittedPassword by remember { mutableStateOf<String?>(null) }
+    var loadTrigger by remember { mutableStateOf(0) }
+    var passwordError by remember { mutableStateOf(false) }
+
+    if (requirePassword) {
+        AlertDialog(
+            onDismissRequest = { onBackClick() },
+            title = { Text("Password Required") },
+            text = {
+                Column {
+                    Text("This PDF is password protected.", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pdfPassword,
+                        onValueChange = { pdfPassword = it; passwordError = false },
+                        singleLine = true,
+                        isError = passwordError,
+                        label = { Text("Password") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (passwordError) {
+                        Text("Incorrect password", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    submittedPassword = pdfPassword
+                    requirePassword = false
+                    loadTrigger++ // retry loading
+                }) {
+                    Text("Open")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onBackClick() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
     
     Box(
         modifier = modifier
@@ -2088,8 +2268,8 @@ fun PdfPreview(
             },
             modifier = Modifier.fillMaxSize(),
             update = { pdfView ->
-                if (!isReady && originalFile.exists()) {
-                    pdfView.fromFile(originalFile)
+                if ((!isReady && originalFile.exists()) || loadTrigger > 0) {
+                    val configurator = pdfView.fromFile(originalFile)
                         .enableSwipe(true)
                         .swipeHorizontal(false)
                         .enableDoubletap(true)
@@ -2098,7 +2278,7 @@ fun PdfPreview(
                             onPageChanged(page + 1, pageCount)
                         }
                         .enableAnnotationRendering(true)
-                        .password(null)
+                        .password(submittedPassword)
                         .scrollHandle(com.github.barteksc.pdfviewer.scroll.DefaultScrollHandle(pdfView.context))
                         .enableAntialiasing(true)
                         .spacing(0)
@@ -2107,15 +2287,30 @@ fun PdfPreview(
                         .nightMode(isNightMode)
                         .onLoad {
                             isReady = true
+                            requirePassword = false
+                            passwordError = false
+                            loadTrigger = 0
                             if (scrollToPage != null) {
                                 onScrollToPageHandled()
+                            }
+                        }
+                        .onError { t ->
+                            if (t is com.shockwave.pdfium.PdfPasswordException || t.message?.contains("Password required") == true) {
+                                requirePassword = true
+                                if (!submittedPassword.isNullOrEmpty()) {
+                                    passwordError = true
+                                }
+                            } else {
+                                t.printStackTrace()
                             }
                         }
                         .onTap {
                             onSingleTap()
                             true
                         }
-                        .load()
+                        
+                    configurator.load()
+                    if (loadTrigger > 0) loadTrigger = 0
                 } else if (isReady && scrollToPage != null) {
                     pdfView.jumpTo(scrollToPage, true)
                     onScrollToPageHandled()
@@ -2331,7 +2526,6 @@ fun HexViewer(
 
         LazyColumn(
             state = rememberLazyListState(),
-            flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -2462,10 +2656,6 @@ fun WebViewPreview(
                         
                         settings.allowFileAccess = true
                         settings.allowContentAccess = true
-                        try {
-                            settings.allowFileAccessFromFileURLs = true
-                            settings.allowUniversalAccessFromFileURLs = true
-                        } catch (ignored: Exception) {}
                         
                         addJavascriptInterface(object {
                             @android.webkit.JavascriptInterface
@@ -2956,7 +3146,6 @@ fun DocxPreview(
     ) { scale, scrollEnabled ->
         LazyColumn(
             state = rememberLazyListState(),
-            flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
             modifier = Modifier.fillMaxSize(),
             userScrollEnabled = scrollEnabled,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
@@ -3504,7 +3693,8 @@ fun DocxPreviewWebView(
         <html>
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-            <script src="file:///android_asset/mammoth/mammoth.browser.js"></script>
+            <script src="file:///android_asset/docx/jszip.min.js"></script>
+            <script src="file:///android_asset/docx/docx-preview.min.js"></script>
             <style>
                 :root {
                     --bg-color: $bgColor;
@@ -3591,25 +3781,34 @@ fun DocxPreviewWebView(
 
                 try {
                     var arrayBuffer = base64ToArrayBuffer("$base64Docx");
-                    mammoth.convertToHtml({arrayBuffer: arrayBuffer})
-                        .then(function(result) {
-                            var content = result.value || "<p style='text-align:center;'>This document is empty.</p>";
-                            document.getElementById("output").innerHTML = content;
-                            
-                            // Estimate total pages: roughly 2500 characters of HTML content per page
-                            var textLen = content.length;
-                            totalPages = Math.max(1, Math.round(textLen / 2500));
-                            
-                            if (window.Android && window.Android.onDocumentLoaded) {
-                                window.Android.onDocumentLoaded(totalPages);
-                            }
-                        })
-                        .catch(function(err) {
-                            document.getElementById("output").innerHTML = "Error parsing DOCX: " + err.message;
-                            if (window.Android && window.Android.onDocumentError) {
-                                window.Android.onDocumentError(err.message);
-                            }
-                        });
+                    var options = {
+                        className: "docx",
+                        inWrapper: false,
+                        ignoreWidth: false,
+                        ignoreHeight: false,
+                        ignoreFonts: "$isNightMode" === "true", 
+                        breakPages: true,
+                        ignoreLastRenderedPageBreak: false,
+                        experimental: true,
+                        trimXmlDeclaration: true,
+                        debug: false
+                    };
+                    var container = document.getElementById("output");
+                    if ("$isNightMode" === "true") {
+                        container.style.color = "#f5f5f3";
+                    }
+                    docx.renderAsync(arrayBuffer, container, null, options).then(function() {
+                        var approxHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
+                        totalPages = Math.max(1, Math.ceil(approxHeight / window.innerHeight));
+                        if (window.Android && window.Android.onDocumentLoaded) {
+                            window.Android.onDocumentLoaded(totalPages);
+                        }
+                    }).catch(function(err) {
+                        document.getElementById("output").innerHTML = "Error rendering DOCX: " + err.message;
+                        if (window.Android && window.Android.onDocumentError) {
+                            window.Android.onDocumentError(err.message);
+                        }
+                    });
                 } catch (e) {
                     document.getElementById("output").innerHTML = "Error loading arraybuffer: " + e.message;
                     if (window.Android && window.Android.onDocumentError) {

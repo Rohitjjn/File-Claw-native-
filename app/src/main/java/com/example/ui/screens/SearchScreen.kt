@@ -36,8 +36,6 @@ import com.example.ui.theme.ClaudeMutedText
 import com.example.viewmodel.MainViewModel
 import java.io.File
 
-import io.iamjosephmj.flinger.flings.flingBehavior
-import io.iamjosephmj.flinger.FlingPresets
 import androidx.compose.foundation.lazy.rememberLazyListState
 
 import androidx.compose.foundation.text.KeyboardActions
@@ -65,6 +63,12 @@ fun SearchScreen(
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
         viewModel.triggerStorageIndexRefresh()
+    }
+    
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.updateSearchQuery("")
+        }
     }
 
     Scaffold(
@@ -218,7 +222,6 @@ fun SearchScreen(
 
                 LazyColumn(
                     state = rememberLazyListState(),
-                    flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -252,8 +255,8 @@ fun SearchScreen(
                     } else {
                         items(displayedHistory, key = { "hist_" + it.id }, contentType = { "HistoryItem" }) { file ->
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color.Transparent,
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { viewModel.openFile(file) }
@@ -261,27 +264,33 @@ fun SearchScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(8.dp),
+                                        .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    FileIcon(extension = file.extension, size = 32, isSample = file.isSample)
+                                    FileIcon(extension = file.extension, size = 28, isSample = file.isSample)
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = file.name,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         val formattedSize = remember(file.size) { formatLocalFileSize(file.size) }
                                         Text(
-                                            text = "History  •  ${file.extension.uppercase()}  •  $formattedSize",
+                                            text = "History • ${file.extension.uppercase()} • $formattedSize",
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                         )
                                     }
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         }
@@ -355,8 +364,8 @@ fun SearchScreen(
                             val isAlreadyInHistory = historyResults.any { it.path == localFile.absolutePath }
                             
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color.Transparent,
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
@@ -366,13 +375,13 @@ fun SearchScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(8.dp),
+                                        .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     val ext = localFile.name.substringAfterLast('.', "")
                                     FileIcon(
                                         extension = ext,
-                                        size = 32,
+                                        size = 28,
                                         isSample = false,
                                         isRecent = isAlreadyInHistory
                                     )
@@ -380,20 +389,26 @@ fun SearchScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = localFile.name,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            text = "Storage  •  ${localFile.absolutePath}",
+                                            text = "Storage • ${localFile.absolutePath}",
                                             fontSize = 10.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         }

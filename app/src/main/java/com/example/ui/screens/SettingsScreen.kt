@@ -39,8 +39,6 @@ import com.example.viewmodel.MainViewModel
 
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import io.iamjosephmj.flinger.flings.flingBehavior
-import io.iamjosephmj.flinger.FlingPresets
 import com.example.utils.CacheManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +86,6 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(
                     state = scrollState,
-                    flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth())
                 ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -363,6 +360,14 @@ fun SettingsScreen(
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Developed by Rohit Badetia",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
@@ -508,8 +513,10 @@ fun <T> SegmentedControl(
 @Composable
 fun CacheSettingsItem(cacheManager: CacheManager) {
     var showClearDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    val cacheSize by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(cacheManager.getTotalSize()) }
-    val breakdown = cacheManager.getBreakdown()
+    var refreshTrigger by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0) }
+    
+    val cacheSize = androidx.compose.runtime.remember(refreshTrigger) { cacheManager.getTotalSize() }
+    val breakdown = androidx.compose.runtime.remember(refreshTrigger) { cacheManager.getBreakdown() }
     
     ClaudeCard {
         androidx.compose.material3.ListItem(
@@ -537,7 +544,12 @@ fun CacheSettingsItem(cacheManager: CacheManager) {
             text = { Text("This will free up $cacheSize. All previews and thumbnails will need to be regenerated.") },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = {
-                    CoroutineScope(Dispatchers.IO).launch { cacheManager.nuke() }
+                    CoroutineScope(Dispatchers.IO).launch { 
+                        cacheManager.nuke() 
+                        kotlinx.coroutines.withContext(Dispatchers.Main) {
+                            refreshTrigger++
+                        }
+                    }
                     showClearDialog = false
                 }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
             },

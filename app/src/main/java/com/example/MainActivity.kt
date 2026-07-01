@@ -28,8 +28,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.iamjosephmj.flinger.FlingPresets
-import io.iamjosephmj.flinger.flings.flingBehavior
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -342,6 +340,7 @@ class MainActivity : ComponentActivity() {
                             SearchScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
+                                    mainViewModel.updateSearchQuery("")
                                     navController.popBackStack()
                                 },
                                 onNavigateToPreview = navigateToPreviewWithEditOnOpen
@@ -424,7 +423,6 @@ fun PermissionGateScreen(
                 .fillMaxWidth()
                 .verticalScroll(
                     state = rememberScrollState(),
-                    flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth())
                 )
         ) {
             Icon(

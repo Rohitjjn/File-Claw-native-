@@ -32,8 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.component.ClaudeAppBar
 import com.example.viewmodel.MainViewModel
-import io.iamjosephmj.flinger.flings.flingBehavior
-import io.iamjosephmj.flinger.FlingPresets
 import androidx.compose.foundation.lazy.rememberLazyListState
 
 class TextUndoStack(private val capacity: Int = 50) {
@@ -188,7 +186,6 @@ fun EditorScreen(
             ) {
                 LazyRow(
                     state = rememberLazyListState(),
-                    flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -378,7 +375,6 @@ fun EditorScreen(
                             .padding(horizontal = 8.dp)
                             .verticalScroll(
                                 state = scrollState,
-                                flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth())
                             ),
                         contentAlignment = Alignment.TopCenter
                     ) {
@@ -432,7 +428,6 @@ fun EditorScreen(
                             .fillMaxSize()
                             .verticalScroll(
                                 state = workspaceScroll,
-                                flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth())
                             )
                             .then(
                                 if (!settings.wordWrap) {

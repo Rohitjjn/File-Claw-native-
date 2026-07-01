@@ -33,8 +33,6 @@ import com.example.ui.component.FileIcon
 import com.example.ui.component.premiumLoadingPulse
 import com.example.viewmodel.MainViewModel
 
-import io.iamjosephmj.flinger.flings.flingBehavior
-import io.iamjosephmj.flinger.FlingPresets
 import androidx.compose.foundation.lazy.rememberLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -138,7 +136,6 @@ fun AllFilesScreen(
         ) {
             LazyColumn(
                 state = rememberLazyListState(),
-                flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp)

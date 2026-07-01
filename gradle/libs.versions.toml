@@ -11,6 +11,7 @@ composeBom = "2024.02.01"
 room = "2.6.1"
 ksp = "1.9.22-1.0.17"
 coil = "2.5.0"
+telephoto = "0.7.1"
 navigation = "2.7.7"
 kotlinxSerialization = "1.6.3"
 commonsCompress = "1.26.1"
@@ -46,6 +47,9 @@ xz = { group = "org.tukaani", name = "xz", version.ref = "xz" }
 junrar = { group = "com.github.junrar", name = "junrar", version.ref = "junrar" }
 kotlin-csv = { group = "com.github.doyaaaaaken", name = "kotlin-csv-jvm", version.ref = "kotlinCsv" }
 fastexcel-reader = { group = "org.dhatim", name = "fastexcel-reader", version.ref = "fastExcel" }
+fastexcel-writer = { group = "org.dhatim", name = "fastexcel", version.ref = "fastExcel" }
+zip4j = { group = "net.lingala.zip4j", name = "zip4j", version = "2.11.5" }
+telephoto-zoomable-coil = { group = "me.saket.telephoto", name = "zoomable-image-coil", version.ref = "telephoto" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

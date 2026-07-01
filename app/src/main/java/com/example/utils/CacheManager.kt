@@ -54,6 +54,7 @@ class CacheManager private constructor(private val context: Context) {
     private val previewDir = File(context.cacheDir, "previews").apply { mkdirs() }
     private val docDir = File(context.cacheDir, "docs").apply { mkdirs() }
     private val tempDir = File(context.cacheDir, "temp").apply { mkdirs() }
+    private val zipDir = File(context.cacheDir, "zip_extracts")
     private val indexFile = File(context.cacheDir, "search.idx")
     
     // === PUT / GET operations ===
@@ -96,8 +97,9 @@ class CacheManager private constructor(private val context: Context) {
         
         // Priority 1: Delete temp files (always safe)
         tempDir.listFiles()?.forEach { it.delete() }
+        zipDir.listFiles()?.forEach { it.delete() }
         
-        // Priority 2: Delete old previews (>3 days)
+        // Priority 2: Delete docx_media_* directories
         previewDir.listFiles()?.forEach { 
             if (now - it.lastModified() > threeDays) it.delete() 
         }
@@ -147,25 +149,44 @@ class CacheManager private constructor(private val context: Context) {
     }
     
     // === SIZE CALCULATIONS ===
-    fun getTotalSizeBytes(): Long = previewDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum() +
-                                     docDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum() +
-                                     tempDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum() +
-                                     (if (indexFile.exists()) indexFile.length() else 0)
+    fun getTotalSizeBytes(): Long {
+        var total = previewDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum() +
+                    docDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum() +
+                    tempDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum() +
+                    (if (zipDir.exists()) zipDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum() else 0L) +
+                    (if (indexFile.exists()) indexFile.length() else 0L)
+        
+        // Add docx_media caches
+        context.cacheDir.listFiles()?.filter { it.isDirectory && it.name.startsWith("docx_media_") }?.forEach { dir ->
+            total += dir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+        }
+        return total
+    }
     
     fun getTotalSize(): String = formatSize(getTotalSizeBytes())
     
-    fun getBreakdown(): Map<String, String> = mapOf(
-        "Images" to formatSize(context.cacheDir.resolve("img_cache").walkTopDown().filter { it.isFile }.map { it.length() }.sum()),
-        "Previews" to formatSize(previewDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()),
-        "Documents" to formatSize(docDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()),
-        "Temp" to formatSize(tempDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()),
-        "Index" to formatSize(if (indexFile.exists()) indexFile.length() else 0)
-    )
+    fun getBreakdown(): Map<String, String> {
+        var docxSize = 0L
+        context.cacheDir.listFiles()?.filter { it.isDirectory && it.name.startsWith("docx_media_") }?.forEach { dir ->
+            docxSize += dir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+        }
+        return mapOf(
+            "Images" to formatSize(context.cacheDir.resolve("img_cache").walkTopDown().filter { it.isFile }.map { it.length() }.sum()),
+            "Previews" to formatSize(previewDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()),
+            "Documents" to formatSize(docDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()),
+            "Archives" to formatSize(if (zipDir.exists()) zipDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum() else 0L),
+            "DOCX Media" to formatSize(docxSize),
+            "Temp" to formatSize(tempDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()),
+            "Index" to formatSize(if (indexFile.exists()) indexFile.length() else 0L)
+        )
+    }
     
     // === NUCLEAR OPTION ===
     suspend fun nuke() = withContext(Dispatchers.IO) {
         previewDir.deleteRecursively(); docDir.deleteRecursively(); tempDir.deleteRecursively()
         thumbCache.evictAll(); indexFile.delete()
+        if (zipDir.exists()) zipDir.deleteRecursively()
+        context.cacheDir.listFiles()?.filter { it.isDirectory && it.name.startsWith("docx_media_") }?.forEach { it.deleteRecursively() }
         context.cacheDir.resolve("img_cache").deleteRecursively()
         previewDir.mkdirs(); docDir.mkdirs(); tempDir.mkdirs()
     }

@@ -272,7 +272,36 @@ Thank you for choosing Files Claw.
         return result
     }
 
-    fun parseZipStructure(filePath: String): ZipNode {
+    fun isArchiveEncrypted(filePath: String): Boolean {
+        val file = File(filePath)
+        if (!file.exists()) return false
+        val ext = file.name.substringAfterLast('.', "").lowercase()
+        return try {
+            when (ext) {
+                "7z" -> {
+                    try {
+                        SevenZFile(file).use {}
+                        false
+                    } catch (e: Exception) {
+                        e.message?.lowercase()?.contains("password") == true || e.javaClass.simpleName.contains("Password")
+                    }
+                }
+                "zip" -> {
+                    net.lingala.zip4j.ZipFile(file).isEncrypted
+                }
+                "rar" -> {
+                    Archive(file).use { archive ->
+                        archive.isEncrypted
+                    }
+                }
+                else -> false
+            }
+        } catch (e: Exception) {
+            e.message?.lowercase()?.contains("password") == true || e.javaClass.simpleName.contains("Password")
+        }
+    }
+
+    fun parseZipStructure(filePath: String, password: String? = null): ZipNode {
         val file = File(filePath)
         val root = ZipNode(name = file.name, isDirectory = true, path = "", size = file.length())
         if (!file.exists()) return root
@@ -320,12 +349,11 @@ Thank you for choosing Files Claw.
                     }
                 }
                 else -> {
-                    ZipFile(file).use { zipFile ->
-                        val entries = zipFile.entries()
-                        while (entries.hasMoreElements()) {
-                            val entry = entries.nextElement()
-                            entriesList.add(Pair(entry.name, entry.isDirectory))
-                            if (!entry.isDirectory) sizesMap[entry.name] = entry.size
+                    net.lingala.zip4j.ZipFile(file).use { zipFile ->
+                        zipFile.fileHeaders.forEach { header ->
+                            val cleanName = header.fileName.replace("\\", "/")
+                            entriesList.add(Pair(cleanName, header.isDirectory))
+                            if (!header.isDirectory) sizesMap[cleanName] = header.uncompressedSize
                         }
                     }
                 }
@@ -368,23 +396,28 @@ Thank you for choosing Files Claw.
         return root
     }
 
-    fun extractZipEntry(zipFilePath: String, entryPath: String, destFile: File): Boolean {
+    fun extractZipEntry(zipFilePath: String, entryPath: String, destFile: File, password: String? = null): Boolean {
         return try {
             val file = File(zipFilePath)
             val ext = file.name.substringAfterLast('.', "").lowercase()
 
             when {
                 ext == "7z" -> {
-                    SevenZFile(file).use { sevenZFile ->
-                        var entry = sevenZFile.nextEntry
+                    val sevenZFile = if (!password.isNullOrEmpty()) {
+                        SevenZFile(file, password.toCharArray())
+                    } else {
+                        SevenZFile(file)
+                    }
+                    sevenZFile.use { szFile ->
+                        var entry = szFile.nextEntry
                         while (entry != null) {
                             if (entry.name == entryPath) {
                                 val content = ByteArray(entry.size.toInt())
-                                sevenZFile.read(content)
+                                szFile.read(content)
                                 destFile.writeBytes(content)
                                 return true
                             }
-                            entry = sevenZFile.nextEntry
+                            entry = szFile.nextEntry
                         }
                     }
                 }
@@ -423,9 +456,12 @@ Thank you for choosing Files Claw.
                     }
                 }
                 else -> {
-                    ZipFile(file).use { zipFile ->
-                        val entry = zipFile.getEntry(entryPath) ?: return false
-                        zipFile.getInputStream(entry).use { input ->
+                    net.lingala.zip4j.ZipFile(file).use { zipFile ->
+                        if (!password.isNullOrEmpty() && zipFile.isEncrypted) {
+                            zipFile.setPassword(password.toCharArray())
+                        }
+                        val header = zipFile.getFileHeader(entryPath) ?: return false
+                        zipFile.getInputStream(header).use { input ->
                             destFile.outputStream().use { output ->
                                 input.copyTo(output)
                             }

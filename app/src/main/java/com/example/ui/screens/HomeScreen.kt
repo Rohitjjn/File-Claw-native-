@@ -44,8 +44,6 @@ import com.example.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
-import io.iamjosephmj.flinger.flings.flingBehavior
-import io.iamjosephmj.flinger.FlingPresets
 import androidx.compose.foundation.lazy.rememberLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,8 +66,14 @@ fun HomeScreen(
     val loadingFilePath by viewModel.loadingFilePath.collectAsState()
     
     val context = LocalContext.current
-    var isSearchActive by remember { mutableStateOf(false) }
+    var isSearchActive by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isSearchActive) {
+        if (!isSearchActive) {
+            viewModel.updateSearchQuery("")
+        }
+    }
 
     // Launcher for Android Document Picker
     val pickerLauncher = rememberLauncherForActivityResult(
@@ -194,7 +198,6 @@ fun HomeScreen(
                         }
                         LazyColumn(
                             state = rememberLazyListState(),
-                            flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -478,7 +481,6 @@ fun HomeScreen(
                             // Striking filled list state with custom header and view all button
                             LazyColumn(
                                 state = rememberLazyListState(),
-                                flingBehavior = flingBehavior(scrollConfiguration = FlingPresets.ultraSmooth()),
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 100.dp)
