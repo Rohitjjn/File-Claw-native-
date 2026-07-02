@@ -121,6 +121,7 @@ dependencies {
     implementation(libs.xz)
     implementation(libs.kotlin.csv)
     implementation(libs.fastexcel.reader)
+    implementation(libs.fastexcel.writer)
     implementation(libs.zip4j)
 
     // Apache POI for DOCX manipulation is disabled for lightweight native alternative to speed up builds and avoid memory limit issues

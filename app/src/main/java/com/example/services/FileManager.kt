@@ -264,6 +264,15 @@ Thank you for choosing Files Claw.
         }
     }
 
+    fun saveCsv(filePath: String, rows: List<List<String>>) {
+        val file = File(filePath)
+        try {
+            com.github.doyaaaaaken.kotlincsv.dsl.csvWriter().writeAll(rows, file)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun parseExcel(filePath: String): List<List<String>> {
         val file = File(filePath)
         if (!file.exists()) return emptyList()
@@ -283,6 +292,25 @@ Thank you for choosing Files Claw.
             e.printStackTrace()
         }
         return result
+    }
+
+    fun saveExcel(filePath: String, rows: List<List<String>>) {
+        val file = File(filePath)
+        try {
+            java.io.FileOutputStream(file).use { fos ->
+                val wb = org.dhatim.fastexcel.Workbook(fos, "Application", "1.0")
+                val ws = wb.newWorksheet("Sheet1")
+                for (rIdx in rows.indices) {
+                    val row = rows[rIdx]
+                    for (cIdx in row.indices) {
+                        ws.value(rIdx, cIdx, row[cIdx])
+                    }
+                }
+                wb.finish()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun isArchiveEncrypted(filePath: String): Boolean {

@@ -573,6 +573,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveSpreadsheetFile(fileEntity: RecentFileEntity, newRows: List<List<String>>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val ext = fileEntity.extension.lowercase()
+                if (ext == "csv" || ext == "tsv") {
+                    fileManager.saveCsv(fileEntity.path, newRows)
+                } else if (ext == "xlsx" || ext == "xls") {
+                    fileManager.saveExcel(fileEntity.path, newRows)
+                }
+                
+                // Update size in database
+                val diskFile = File(fileEntity.path)
+                val updatedEntity = fileEntity.copy(
+                    size = diskFile.length(),
+                    lastOpened = System.currentTimeMillis()
+                )
+                
+                // CRITICAL ZIP BACK-SYNC
+                if (fileEntity.parentZipPath != null && fileEntity.zipEntryPath != null) {
+                    val updatedZip = fileManager.updateZipEntry(
+                        zipFilePath = fileEntity.parentZipPath,
+                        entryPath = fileEntity.zipEntryPath,
+                        entrySrcFile = diskFile
+                    )
+                    
+                    if (updatedZip) {
+                        try {
+                            val parentZipFile = File(fileEntity.parentZipPath)
+                            val parentEntity = repository.getRecentFileByPath(fileEntity.parentZipPath)
+                            parentEntity?.let {
+                                repository.insertRecentFile(it.copy(
+                                    size = parentZipFile.length(),
+                                    lastOpened = System.currentTimeMillis()
+                                ))
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+                
+                // Update UI state
+                repository.insertRecentFile(updatedEntity)
+                withContext(Dispatchers.Main) {
+                    _currentFileState.value = FileContentState.CsvSuccess(newRows, updatedEntity)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun saveTextFile(fileEntity: RecentFileEntity, newContent: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {

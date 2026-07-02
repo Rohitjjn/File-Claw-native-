@@ -518,6 +518,7 @@ fun FilePreviewScreen(
                     CsvPreview(
                         csvRows = state.rows,
                         fileEntity = state.file,
+                        viewModel = viewModel,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -1552,44 +1553,10 @@ fun CodePreview(
 fun CsvPreview(
     csvRows: List<List<String>>,
     fileEntity: RecentFileEntity,
+    viewModel: MainViewModel,
     modifier: Modifier = Modifier
 ) {
-    var editingCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    var editValue by remember { mutableStateOf("") }
-    var currentRows by remember(csvRows) { mutableStateOf(csvRows) }
-
-    if (editingCell != null) {
-        AlertDialog(
-            onDismissRequest = { editingCell = null },
-            title = { Text("Edit Cell") },
-            text = {
-                OutlinedTextField(
-                    value = editValue,
-                    onValueChange = { editValue = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(onClick = {
-                    val (r, c) = editingCell!!
-                    val newRows = currentRows.toMutableList()
-                    val newRow = newRows[r].toMutableList()
-                    newRow[c] = editValue
-                    newRows[r] = newRow
-                    currentRows = newRows
-                    editingCell = null
-                }) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingCell = null }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
+    val isNightMode = androidx.compose.foundation.isSystemInDarkTheme()
 
     Column(modifier = modifier) {
         // Tag Header
@@ -1625,115 +1592,143 @@ fun CsvPreview(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
-        // Optimized Compose Excel View with Fast Scroller
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
-        ) {
-            val listState = rememberLazyListState()
-            val horScroll = rememberScrollState()
-            
-            // Render the table
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                state = listState
-            ) {
-                itemsIndexed(currentRows, contentType = { _, _ -> "CsvRow" }) { rIdx, row ->
-                    val isHeader = (rIdx == 0)
-                    val rowColor = if (isHeader) MaterialTheme.colorScheme.surfaceVariant 
-                                   else if (rIdx % 2 == 1) MaterialTheme.colorScheme.background.copy(alpha = 0.5f) 
-                                   else MaterialTheme.colorScheme.surface
+        // Optimized Compose Excel View with x-spreadsheet via WebView
+        val base64Data = remember(csvRows) {
+            val jsonArray = org.json.JSONArray()
+            for (row in csvRows) {
+                val rowArray = org.json.JSONArray()
+                for (cell in row) {
+                    rowArray.put(cell)
+                }
+                jsonArray.put(rowArray)
+            }
+            android.util.Base64.encodeToString(jsonArray.toString().toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+        }
 
-                    Row(
-                        modifier = Modifier
-                            .background(rowColor)
-                            .horizontalScroll(horScroll) // Sync horizontal scroll across all rows
-                    ) {
-                        // Header cell
-                        Box(
-                            modifier = Modifier
-                                .width(40.dp)
-                                .height(40.dp)
-                                .border(0.5.dp, MaterialTheme.colorScheme.outline)
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (isHeader) "" else "$rIdx",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                            )
-                        }
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    settings.apply {
+                        javaScriptEnabled = true
+                        allowFileAccess = true
+                        allowContentAccess = true
+                        domStorageEnabled = true
+                        builtInZoomControls = true
+                        displayZoomControls = false
+                        setSupportZoom(true)
+                    }
 
-                        // Data cells
-                        row.forEachIndexed { cIdx, cell ->
-                            Box(
-                                modifier = Modifier
-                                    .width(140.dp)
-                                    .height(40.dp)
-                                    .border(0.5.dp, MaterialTheme.colorScheme.outline)
-                                    .clickable {
-                                        editValue = cell
-                                        editingCell = Pair(rIdx, cIdx)
+                    addJavascriptInterface(object : Any() {
+                        @android.webkit.JavascriptInterface
+                        fun onDataChanged(jsonStr: String) {
+                            try {
+                                val parser = org.json.JSONArray(jsonStr)
+                                val newRows = mutableListOf<List<String>>()
+                                for (i in 0 until parser.length()) {
+                                    val rowArray = parser.getJSONArray(i)
+                                    val row = mutableListOf<String>()
+                                    for (j in 0 until rowArray.length()) {
+                                        row.add(rowArray.getString(j))
                                     }
-                                    .padding(horizontal = 8.dp),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Text(
-                                    text = cell,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isHeader) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                    newRows.add(row)
+                                }
+                                viewModel.saveSpreadsheetFile(fileEntity, newRows)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
                             }
+                        }
+                    }, "Android")
+
+                    webViewClient = object : android.webkit.WebViewClient() {
+                        override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                            view?.evaluateJavascript("loadData('$base64Data');", null)
                         }
                     }
+
+                    val bgColor = if (isNightMode) "#151514" else "#faf9f5"
+                    val htmlContent = """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+                            <link rel="stylesheet" href="file:///android_asset/xspreadsheet/xspreadsheet.css">
+                            <script src="file:///android_asset/xspreadsheet/xspreadsheet.js"></script>
+                            <style>
+                                body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: $bgColor; }
+                                #x-spreadsheet-demo { height: 100%; width: 100%; }
+                            </style>
+                        </head>
+                        <body>
+                            <div id="x-spreadsheet-demo"></div>
+                            <script>
+                                var s = x_spreadsheet('#x-spreadsheet-demo', {
+                                    showToolbar: true,
+                                    showGrid: true,
+                                    view: {
+                                        height: () => document.documentElement.clientHeight,
+                                        width: () => document.documentElement.clientWidth,
+                                    }
+                                });
+                                
+                                function loadData(base64Str) {
+                                    try {
+                                        var jsonStr = decodeURIComponent(escape(window.atob(base64Str)));
+                                        var rowsData = JSON.parse(jsonStr);
+                                        var xRows = {};
+                                        for(var i=0; i<rowsData.length; i++) {
+                                            var row = rowsData[i];
+                                            xRows[i] = { cells: {} };
+                                            for(var j=0; j<row.length; j++) {
+                                                xRows[i].cells[j] = { text: row[j] || "" };
+                                            }
+                                        }
+                                        s.loadData([{
+                                            name: 'Sheet1',
+                                            rows: xRows
+                                        }]);
+                                        
+                                        s.change(data => {
+                                            var maxRow = 0;
+                                            var maxCol = 0;
+                                            for (var r in data.rows) {
+                                                if (r === 'len') continue;
+                                                var ri = parseInt(r);
+                                                if (ri > maxRow) maxRow = ri;
+                                                var row = data.rows[r];
+                                                if (row && row.cells) {
+                                                    for (var c in row.cells) {
+                                                        var ci = parseInt(c);
+                                                        if (ci > maxCol) maxCol = ci;
+                                                    }
+                                                }
+                                            }
+                                            var resultRows = [];
+                                            for (var i = 0; i <= maxRow; i++) {
+                                                var rowArr = [];
+                                                for (var j = 0; j <= maxCol; j++) {
+                                                    if (data.rows[i] && data.rows[i].cells && data.rows[i].cells[j]) {
+                                                        rowArr.push(data.rows[i].cells[j].text || "");
+                                                    } else {
+                                                        rowArr.push("");
+                                                    }
+                                                }
+                                                resultRows.push(rowArr);
+                                            }
+                                            Android.onDataChanged(JSON.stringify(resultRows));
+                                        });
+                                    } catch(e) {
+                                        console.error(e);
+                                    }
+                                }
+                            </script>
+                        </body>
+                        </html>
+                    """.trimIndent()
+                    loadDataWithBaseURL("file:///android_asset/", htmlContent, "text/html", "UTF-8", null)
                 }
             }
-            
-            // Fast Vertical Scrollbar
-            val scope = rememberCoroutineScope()
-            val viewportHeight = listState.layoutInfo.viewportSize.height.toFloat()
-            val totalItems = listState.layoutInfo.totalItemsCount
-            if (totalItems > 0 && viewportHeight > 0) {
-                val scrollbarHeight = (viewportHeight * (viewportHeight / (totalItems * 40f.dp.value))).coerceIn(40f, viewportHeight)
-                val scrollPercent = listState.firstVisibleItemIndex.toFloat() / maxOf(1, totalItems - (viewportHeight / 40f.dp.value).toInt())
-                val scrollbarY = scrollPercent * (viewportHeight - scrollbarHeight)
-                
-                var dragOffset by remember { mutableStateOf(0f) }
-                
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset { androidx.compose.ui.unit.IntOffset(0, (scrollbarY + dragOffset).toInt()) }
-                        .width(20.dp)
-                        .height(with(androidx.compose.ui.platform.LocalDensity.current) { scrollbarHeight.toDp() })
-                        .padding(end = 4.dp, top = 4.dp, bottom = 4.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                        .pointerInput(Unit) {
-                            detectDragGestures(
-                                onDragStart = { dragOffset = 0f },
-                                onDragEnd = { dragOffset = 0f },
-                                onDragCancel = { dragOffset = 0f }
-                            ) { change, dragAmount ->
-                                change.consume()
-                                val maxScrollY = viewportHeight - scrollbarHeight
-                                val currentY = scrollbarY + dragAmount.y
-                                val newPercent = (currentY / maxScrollY).coerceIn(0f, 1f)
-                                val targetItem = (newPercent * maxOf(0, totalItems - 1)).toInt()
-                                scope.launch {
-                                    listState.scrollToItem(targetItem)
-                                }
-                            }
-                        }
-                )
-            }
-        }
+        )
     }
 }
 
