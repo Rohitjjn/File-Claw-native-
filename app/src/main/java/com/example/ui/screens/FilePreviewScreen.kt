@@ -563,6 +563,7 @@ fun FilePreviewScreen(
                         base64Docx = state.base64Data,
                         fileEntity = state.file,
                         isNightMode = isPdfNightMode,
+                        viewModel = viewModel,
                         modifier = Modifier.fillMaxSize(),
                         onPageChanged = { page, total ->
                             currentPdfPage = page
@@ -570,6 +571,15 @@ fun FilePreviewScreen(
                         },
                         scrollToPage = scrollToPage,
                         onScrollProgressHandled = { scrollToPage = null }
+                    )
+                }
+                is MainViewModel.FileContentState.PptxSuccess -> {
+                    PptxPreviewWebView(
+                        base64Pptx = state.base64Data,
+                        fileEntity = state.file,
+                        isNightMode = isPdfNightMode,
+                        viewModel = viewModel,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
                 is MainViewModel.FileContentState.MediaSuccess -> {
@@ -3667,6 +3677,7 @@ fun DocxPreviewWebView(
     base64Docx: String,
     fileEntity: RecentFileEntity,
     isNightMode: Boolean,
+    viewModel: MainViewModel,
     modifier: Modifier = Modifier,
     onPageChanged: (Int, Int) -> Unit = { _, _ -> },
     scrollToPage: Int? = null,
@@ -3675,145 +3686,32 @@ fun DocxPreviewWebView(
     var isWebViewLoading by remember(base64Docx) { mutableStateOf(true) }
     var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
     
-    val htmlContent = remember(base64Docx, isNightMode) {
-        val bgColor = if (isNightMode) "#151514" else "#faf9f5"
-        val textPrimary = if (isNightMode) "#f5f5f3" else "#141413"
-        val textSecondary = if (isNightMode) "#a39f93" else "#6c6a64"
-        val accent = if (isNightMode) "#e08567" else "#cc785c"
-        val border = if (isNightMode) "#2d2b28" else "#e6dfd8"
-        val quoteBg = if (isNightMode) "#1c1a18" else "#f5f0e8"
-        
-        """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-            <script src="file:///android_asset/docx/jszip.min.js"></script>
-            <script src="file:///android_asset/docx/docx-preview.min.js"></script>
-            <style>
-                :root {
-                    --bg-color: $bgColor;
-                    --text-primary: $textPrimary;
-                    --text-secondary: $textSecondary;
-                    --accent: $accent;
-                    --border: $border;
-                    --quote-bg: $quoteBg;
-                }
-                body {
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                    background-color: var(--bg-color);
-                    color: var(--text-primary);
-                    font-size: 16px;
-                    line-height: 1.6;
-                    padding: 16px;
-                    margin: 0;
-                    word-wrap: break-word;
-                }
-                h1, h2, h3, h4, h5, h6 {
-                    color: var(--text-primary);
-                    margin-top: 24px;
-                    margin-bottom: 16px;
-                    font-weight: 700;
-                }
-                p {
-                    margin-top: 0;
-                    margin-bottom: 16px;
-                }
-                a {
-                    color: var(--accent);
-                    text-decoration: none;
-                }
-                img {
-                    max-width: 100%;
-                    border-radius: 8px;
-                }
-                table {
-                    border-collapse: collapse;
-                    width: 100%;
-                    margin-bottom: 16px;
-                    border: 1px solid var(--border);
-                }
-                th, td {
-                    border: 1px solid var(--border);
-                    padding: 10px;
-                }
-                th {
-                    background-color: var(--quote-bg);
-                }
-            </style>
-        </head>
-        <body>
-            <div id="output"></div>
-            <script>
-                function base64ToArrayBuffer(base64) {
-                    var binary_string = window.atob(base64);
-                    var len = binary_string.length;
-                    var bytes = new Uint8Array(len);
-                    for (var i = 0; i < len; i++) {
-                        bytes[i] = binary_string.charCodeAt(i);
-                    }
-                    return bytes.buffer;
-                }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
-                var totalPages = 1;
-
-                window.scrollToPage = function(pageNum) {
-                    var height = document.documentElement.scrollHeight || document.body.scrollHeight;
-                    var targetScroll = (height - window.innerHeight) * ((pageNum - 1) / totalPages);
-                    window.scrollTo({top: targetScroll, behavior: 'smooth'});
-                };
-
-                window.addEventListener('scroll', function() {
-                    var scrollTop = window.scrollY;
-                    var docHeight = (document.documentElement.scrollHeight || document.body.scrollHeight) - window.innerHeight;
-                    if (docHeight <= 0) return;
-                    var pct = scrollTop / docHeight;
-                    var currentPage = Math.min(totalPages, Math.max(1, Math.round(pct * (totalPages - 1)) + 1));
-                    if (window.Android && window.Android.onPageChanged) {
-                        window.Android.onPageChanged(currentPage, totalPages);
-                    }
-                });
-
-                try {
-                    var arrayBuffer = base64ToArrayBuffer("$base64Docx");
-                    var options = {
-                        className: "docx",
-                        inWrapper: false,
-                        ignoreWidth: false,
-                        ignoreHeight: false,
-                        ignoreFonts: "$isNightMode" === "true", 
-                        breakPages: true,
-                        ignoreLastRenderedPageBreak: false,
-                        experimental: true,
-                        trimXmlDeclaration: true,
-                        debug: false
-                    };
-                    var container = document.getElementById("output");
-                    if ("$isNightMode" === "true") {
-                        container.style.color = "#f5f5f3";
-                    }
-                    docx.renderAsync(arrayBuffer, container, null, options).then(function() {
-                        var approxHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
-                        totalPages = Math.max(1, Math.ceil(approxHeight / window.innerHeight));
-                        if (window.Android && window.Android.onDocumentLoaded) {
-                            window.Android.onDocumentLoaded(totalPages);
-                        }
-                    }).catch(function(err) {
-                        document.getElementById("output").innerHTML = "Error rendering DOCX: " + err.message;
-                        if (window.Android && window.Android.onDocumentError) {
-                            window.Android.onDocumentError(err.message);
-                        }
-                    });
-                } catch (e) {
-                    document.getElementById("output").innerHTML = "Error loading arraybuffer: " + e.message;
-                    if (window.Android && window.Android.onDocumentError) {
-                        window.Android.onDocumentError(e.message);
+    // For image replacement
+    val imagePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        uri?.let {
+            try {
+                val inputStream = context.contentResolver.openInputStream(it)
+                val bytes = inputStream?.readBytes()
+                inputStream?.close()
+                if (bytes != null) {
+                    val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                    var mime = context.contentResolver.getType(uri) ?: "image/png"
+                    val dataUrl = "data:$mime;base64,$base64"
+                    
+                    val pendingId = viewModel.pendingImageRelId.value
+                    if (pendingId != null) {
+                        webViewRef?.evaluateJavascript("replaceImage('$pendingId', '$dataUrl');", null)
+                        viewModel.pendingImageRelId.value = null
                     }
                 }
-            </script>
-        </body>
-        </html>
-        """.trimIndent()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     LaunchedEffect(scrollToPage) {
@@ -3825,8 +3723,6 @@ fun DocxPreviewWebView(
     }
 
     Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
-        val context = androidx.compose.ui.platform.LocalContext.current
-        
         AndroidView(
             factory = { ctx ->
                 android.webkit.WebView(ctx).apply {
@@ -3865,14 +3761,35 @@ fun DocxPreviewWebView(
                                 android.widget.Toast.makeText(context, "Error: $error", android.widget.Toast.LENGTH_LONG).show()
                             }
                         }
+                        @android.webkit.JavascriptInterface
+                        fun pickImageForReplacement(relId: String) {
+                            post {
+                                viewModel.pendingImageRelId.value = relId
+                                imagePickerLauncher.launch("image/*")
+                            }
+                        }
+                        @android.webkit.JavascriptInterface
+                        fun onDocumentSaved(newBase64: String) {
+                            post {
+                                viewModel.saveDocxFromBase64(fileEntity, newBase64)
+                                android.widget.Toast.makeText(context, "Saved", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        @android.webkit.JavascriptInterface
+                        fun exitWithoutSaving() {
+                            post {
+                                viewModel.closeCurrentFile()
+                            }
+                        }
                     }, "Android")
                     
                     webViewClient = object : android.webkit.WebViewClient() {
                         override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
                             postDelayed({ isWebViewLoading = false }, 500)
+                            view?.evaluateJavascript("loadDocx('$base64Docx', $isNightMode);", null)
                         }
                     }
-                    loadDataWithBaseURL("file:///android_asset/", htmlContent, "text/html", "UTF-8", null)
+                    loadUrl("file:///android_asset/editor/docx_editor.html")
                 }
             },
             update = { webView ->
@@ -3888,7 +3805,114 @@ fun DocxPreviewWebView(
                     .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
                 contentAlignment = Alignment.Center
             ) {
-                com.example.ui.component.PremiumLoadingIndicator(text = "Preparing Word Document...")
+                com.example.ui.component.PremiumLoadingIndicator(text = "Loading Editor...")
+            }
+        }
+    }
+}
+
+@Composable
+fun PptxPreviewWebView(
+    base64Pptx: String,
+    fileEntity: RecentFileEntity,
+    isNightMode: Boolean,
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier
+) {
+    var isWebViewLoading by remember(base64Pptx) { mutableStateOf(true) }
+    var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val imagePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        uri?.let {
+            try {
+                val inputStream = context.contentResolver.openInputStream(it)
+                val bytes = inputStream?.readBytes()
+                inputStream?.close()
+                if (bytes != null) {
+                    val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                    var mime = context.contentResolver.getType(uri) ?: "image/png"
+                    val dataUrl = "data:$mime;base64,$base64"
+                    
+                    val pendingPath = viewModel.pendingImageRelId.value
+                    if (pendingPath != null) {
+                        webViewRef?.evaluateJavascript("replaceImage('$pendingPath', '$dataUrl');", null)
+                        viewModel.pendingImageRelId.value = null
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
+        AndroidView(
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    webViewRef = this
+                    settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        allowFileAccess = true
+                        allowContentAccess = true
+                        builtInZoomControls = true
+                        displayZoomControls = false
+                        setSupportZoom(true)
+                        useWideViewPort = true
+                        loadWithOverviewMode = true
+                    }
+                    setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+                    
+                    addJavascriptInterface(object : Any() {
+                        @android.webkit.JavascriptInterface
+                        fun pickImageForReplacement(path: String) {
+                            post {
+                                viewModel.pendingImageRelId.value = path
+                                imagePickerLauncher.launch("image/*")
+                            }
+                        }
+                        @android.webkit.JavascriptInterface
+                        fun onDocumentSaved(newBase64: String) {
+                            post {
+                                viewModel.savePptxFromBase64(fileEntity, newBase64)
+                                android.widget.Toast.makeText(context, "Saved", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        @android.webkit.JavascriptInterface
+                        fun exitWithoutSaving() {
+                            post {
+                                viewModel.closeCurrentFile()
+                            }
+                        }
+                    }, "Android")
+                    
+                    webViewClient = object : android.webkit.WebViewClient() {
+                        override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                            postDelayed({ isWebViewLoading = false }, 500)
+                            view?.evaluateJavascript("loadPptx('$base64Pptx', $isNightMode);", null)
+                        }
+                    }
+                    loadUrl("file:///android_asset/editor/pptx_editor.html")
+                }
+            },
+            update = { webView ->
+                // No-op
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        if (isWebViewLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
+                contentAlignment = Alignment.Center
+            ) {
+                com.example.ui.component.PremiumLoadingIndicator(text = "Loading Presentation...")
             }
         }
     }

@@ -234,6 +234,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         data class ImageSuccess(val file: RecentFileEntity) : FileContentState()
         data class PdfSuccess(val file: RecentFileEntity) : FileContentState()
         data class DocxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
+        data class PptxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
         data class MediaSuccess(val file: RecentFileEntity, val isAudio: Boolean) : FileContentState()
         data class BinarySuccess(val hexRows: List<String>, val asciiRows: List<String>, val file: RecentFileEntity) : FileContentState()
         data class Error(val message: String) : FileContentState()
@@ -241,6 +242,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _currentFileState = MutableStateFlow<FileContentState>(FileContentState.Idle)
     val currentFileState: StateFlow<FileContentState> = _currentFileState.asStateFlow()
+
+    val pendingImageRelId = androidx.compose.runtime.mutableStateOf<String?>(null)
 
     private val _expandedZipPaths = MutableStateFlow<Set<String>>(emptySet())
     val expandedZipPaths: StateFlow<Set<String>> = _expandedZipPaths.asStateFlow()
@@ -448,8 +451,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _currentFileState.value = FileContentState.DocxSuccess(base64, finalEntity)
                     }
                     ext == "pptx" || ext == "ppt" -> {
-                        val text = fileManager.readPptxText(activePath)
-                        _currentFileState.value = FileContentState.TextSuccess(text, finalEntity)
+                        val fileBytes = File(activePath).readBytes()
+                        val base64 = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
+                        _currentFileState.value = FileContentState.PptxSuccess(base64, finalEntity)
                     }
                     ext == "pdf" -> {
                         _currentFileState.value = FileContentState.PdfSuccess(finalEntity)
@@ -625,18 +629,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveDocxFromBase64(fileEntity: RecentFileEntity, base64Data: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+                File(fileEntity.path).writeBytes(bytes)
+                val updatedEntity = fileEntity.copy(
+                    size = File(fileEntity.path).length(),
+                    lastOpened = System.currentTimeMillis()
+                )
+                repository.insertRecentFile(updatedEntity)
+                withContext(Dispatchers.Main) {
+                    _currentFileState.value = FileContentState.DocxSuccess(base64Data, updatedEntity)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun savePptxFromBase64(fileEntity: RecentFileEntity, base64Data: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+                File(fileEntity.path).writeBytes(bytes)
+                val updatedEntity = fileEntity.copy(
+                    size = File(fileEntity.path).length(),
+                    lastOpened = System.currentTimeMillis()
+                )
+                repository.insertRecentFile(updatedEntity)
+                withContext(Dispatchers.Main) {
+                    _currentFileState.value = FileContentState.PptxSuccess(base64Data, updatedEntity)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun saveTextFile(fileEntity: RecentFileEntity, newContent: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val ext = fileEntity.extension.lowercase()
-                if (ext == "docx") {
-                    fileManager.writeDocxText(fileEntity.path, newContent)
-                } else if (ext == "pptx" || ext == "ppt") {
-                    fileManager.writePptxText(fileEntity.path, newContent)
-                } else {
-                    val encoding = settingsState.value.defaultEncoding
-                    fileManager.writeFileContent(fileEntity.path, newContent, encoding)
-                }
+                val encoding = settingsState.value.defaultEncoding
+                fileManager.writeFileContent(fileEntity.path, newContent, encoding)
                 
                 // Update size in database
                 val diskFile = File(fileEntity.path)
@@ -707,6 +743,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.clearHistory()
             _currentFileState.value = FileContentState.Idle
         }
+    }
+
+    fun closeCurrentFile() {
+        _currentFileState.value = FileContentState.Idle
     }
 
     fun clearEditorCache() {
