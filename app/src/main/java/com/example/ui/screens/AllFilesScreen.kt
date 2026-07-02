@@ -46,7 +46,7 @@ fun AllFilesScreen(
     val files by viewModel.recentFilesState.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val currentFileState by viewModel.currentFileState.collectAsState()
-    val loadingFilePath by viewModel.loadingFilePath.collectAsState()
+    val loadingFilePathState = viewModel.loadingFilePath.collectAsState()
 
     var isSearchActive by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
@@ -178,7 +178,7 @@ fun AllFilesScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    val isLoading = loadingFilePath == file.path
+                                    val isLoading by remember(file.path) { androidx.compose.runtime.derivedStateOf { loadingFilePathState.value == file.path } }
                                     FileIcon(
                                         extension = file.extension, 
                                         size = 42, 

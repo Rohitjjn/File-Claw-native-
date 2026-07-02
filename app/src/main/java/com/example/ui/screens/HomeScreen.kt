@@ -63,7 +63,7 @@ fun HomeScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val currentFileState by viewModel.currentFileState.collectAsState()
     val isInitialized by viewModel.isInitialized.collectAsState()
-    val loadingFilePath by viewModel.loadingFilePath.collectAsState()
+    val loadingFilePathState = viewModel.loadingFilePath.collectAsState()
     
     val context = LocalContext.current
     var isSearchActive by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
@@ -223,7 +223,7 @@ fun HomeScreen(
                                             modifier = Modifier.weight(1f),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            val isLoading = loadingFilePath == file.path
+                                            val isLoading by remember(file.path) { androidx.compose.runtime.derivedStateOf { loadingFilePathState.value == file.path } }
                                             FileIcon(
                                                 extension = file.extension, 
                                                 size = 32, 
@@ -548,7 +548,7 @@ fun HomeScreen(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 modifier = Modifier.weight(1f)
                                             ) {
-                                                val isLoading = loadingFilePath == file.path
+                                                val isLoading by remember(file.path) { androidx.compose.runtime.derivedStateOf { loadingFilePathState.value == file.path } }
                                                 FileIcon(
                                                     extension = file.extension, 
                                                     size = 42, 
