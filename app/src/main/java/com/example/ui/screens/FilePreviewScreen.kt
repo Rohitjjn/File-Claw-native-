@@ -3688,32 +3688,6 @@ fun DocxPreviewWebView(
     
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    // For image replacement
-    val imagePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
-    ) { uri: android.net.Uri? ->
-        uri?.let {
-            try {
-                val inputStream = context.contentResolver.openInputStream(it)
-                val bytes = inputStream?.readBytes()
-                inputStream?.close()
-                if (bytes != null) {
-                    val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                    var mime = context.contentResolver.getType(uri) ?: "image/png"
-                    val dataUrl = "data:$mime;base64,$base64"
-                    
-                    val pendingId = viewModel.pendingImageRelId.value
-                    if (pendingId != null) {
-                        webViewRef?.evaluateJavascript("replaceImage('$pendingId', '$dataUrl');", null)
-                        viewModel.pendingImageRelId.value = null
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
     LaunchedEffect(scrollToPage) {
         if (scrollToPage != null) {
             val pageNum = scrollToPage + 1
@@ -3759,20 +3733,6 @@ fun DocxPreviewWebView(
                             post { 
                                 isWebViewLoading = false
                                 android.widget.Toast.makeText(context, "Error: $error", android.widget.Toast.LENGTH_LONG).show()
-                            }
-                        }
-                        @android.webkit.JavascriptInterface
-                        fun pickImageForReplacement(relId: String) {
-                            post {
-                                viewModel.pendingImageRelId.value = relId
-                                imagePickerLauncher.launch("image/*")
-                            }
-                        }
-                        @android.webkit.JavascriptInterface
-                        fun onDocumentSaved(newBase64: String) {
-                            post {
-                                viewModel.saveDocxFromBase64(fileEntity, newBase64)
-                                android.widget.Toast.makeText(context, "Saved", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                         @android.webkit.JavascriptInterface
@@ -3824,31 +3784,6 @@ fun PptxPreviewWebView(
     
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    val imagePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
-    ) { uri: android.net.Uri? ->
-        uri?.let {
-            try {
-                val inputStream = context.contentResolver.openInputStream(it)
-                val bytes = inputStream?.readBytes()
-                inputStream?.close()
-                if (bytes != null) {
-                    val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                    var mime = context.contentResolver.getType(uri) ?: "image/png"
-                    val dataUrl = "data:$mime;base64,$base64"
-                    
-                    val pendingPath = viewModel.pendingImageRelId.value
-                    if (pendingPath != null) {
-                        webViewRef?.evaluateJavascript("replaceImage('$pendingPath', '$dataUrl');", null)
-                        viewModel.pendingImageRelId.value = null
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
     Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
         AndroidView(
             factory = { ctx ->
@@ -3868,20 +3803,6 @@ fun PptxPreviewWebView(
                     setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
                     
                     addJavascriptInterface(object : Any() {
-                        @android.webkit.JavascriptInterface
-                        fun pickImageForReplacement(path: String) {
-                            post {
-                                viewModel.pendingImageRelId.value = path
-                                imagePickerLauncher.launch("image/*")
-                            }
-                        }
-                        @android.webkit.JavascriptInterface
-                        fun onDocumentSaved(newBase64: String) {
-                            post {
-                                viewModel.savePptxFromBase64(fileEntity, newBase64)
-                                android.widget.Toast.makeText(context, "Saved", android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        }
                         @android.webkit.JavascriptInterface
                         fun exitWithoutSaving() {
                             post {

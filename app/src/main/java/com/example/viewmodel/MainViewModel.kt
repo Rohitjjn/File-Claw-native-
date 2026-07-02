@@ -243,8 +243,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentFileState = MutableStateFlow<FileContentState>(FileContentState.Idle)
     val currentFileState: StateFlow<FileContentState> = _currentFileState.asStateFlow()
 
-    val pendingImageRelId = androidx.compose.runtime.mutableStateOf<String?>(null)
-
     private val _expandedZipPaths = MutableStateFlow<Set<String>>(emptySet())
     val expandedZipPaths: StateFlow<Set<String>> = _expandedZipPaths.asStateFlow()
 
@@ -622,44 +620,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 repository.insertRecentFile(updatedEntity)
                 withContext(Dispatchers.Main) {
                     _currentFileState.value = FileContentState.CsvSuccess(newRows, updatedEntity)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    fun saveDocxFromBase64(fileEntity: RecentFileEntity, base64Data: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
-                File(fileEntity.path).writeBytes(bytes)
-                val updatedEntity = fileEntity.copy(
-                    size = File(fileEntity.path).length(),
-                    lastOpened = System.currentTimeMillis()
-                )
-                repository.insertRecentFile(updatedEntity)
-                withContext(Dispatchers.Main) {
-                    _currentFileState.value = FileContentState.DocxSuccess(base64Data, updatedEntity)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-    fun savePptxFromBase64(fileEntity: RecentFileEntity, base64Data: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
-                File(fileEntity.path).writeBytes(bytes)
-                val updatedEntity = fileEntity.copy(
-                    size = File(fileEntity.path).length(),
-                    lastOpened = System.currentTimeMillis()
-                )
-                repository.insertRecentFile(updatedEntity)
-                withContext(Dispatchers.Main) {
-                    _currentFileState.value = FileContentState.PptxSuccess(base64Data, updatedEntity)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()

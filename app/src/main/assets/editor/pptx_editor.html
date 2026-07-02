@@ -94,11 +94,8 @@
 </head>
 <body>
     <div id="toolbar">
-        <button onclick="document.execCommand('undo', false, null)">Undo</button>
-        <button onclick="document.execCommand('redo', false, null)">Redo</button>
         <div class="controls">
-            <button onclick="saveDocument()">Save</button>
-            <button onclick="if(window.Android) window.Android.exitWithoutSaving()">Exit</button>
+            <button onclick="if(window.Android) window.Android.exitWithoutSaving()">Close</button>
         </div>
     </div>
     <div id="editor-container">
@@ -213,11 +210,7 @@
                             textDiv.style.top = rect.y + "px";
                             textDiv.style.width = rect.w + "px";
                             textDiv.style.height = rect.h + "px";
-                            textDiv.contentEditable = "true";
                             textDiv.innerText = fullText.trim();
-                            // Store reference for saving
-                            textDiv.dataset.slide = i;
-                            textDiv.dataset.shapeIdx = j;
                             slideDiv.appendChild(textDiv);
                         }
                     }
@@ -240,7 +233,6 @@
                             img.style.top = rect.y + "px";
                             img.style.width = rect.w + "px";
                             img.style.height = rect.h + "px";
-                            img.onclick = () => onImageClick(i, embedId, path);
                             img.id = `img_${i}_${embedId}`;
                             slideDiv.appendChild(img);
                             
@@ -267,74 +259,6 @@
                 }
             } catch (e) {
                 console.error(e);
-            }
-        }
-
-        function onImageClick(slideNum, relId, path) {
-            if (window.Android) {
-                let resolvedPath = path.replace("slides/../media", "media");
-                window.Android.pickImageForReplacement(resolvedPath);
-            }
-        }
-
-        // Called by Android
-        function replaceImage(path, newBase64) {
-            const cleanBase64 = newBase64.split(',')[1];
-            currentZip.file(path, cleanBase64, {base64: true});
-            // Update any img tags pointing to this path
-            const imgs = document.getElementsByClassName('slide-img');
-            for(let i=0; i<imgs.length; i++) {
-                if (imgs[i].src.length > 10) {
-                    // It's hard to match exact path if we don't store it on element. 
-                    // Let's just re-render or set directly if we can find it by id.
-                }
-            }
-            renderAllSlides(); // Lazy way to refresh images
-        }
-
-        async function saveDocument() {
-            const serializer = new XMLSerializer();
-            
-            // Sync text edits back to XML docs
-            const textDivs = document.getElementsByClassName("slide-text");
-            for (let i = 0; i < textDivs.length; i++) {
-                const div = textDivs[i];
-                const slideNum = div.dataset.slide;
-                const shapeIdx = div.dataset.shapeIdx;
-                
-                const doc = xmlDocs[slideNum];
-                if (doc) {
-                    const sp = doc.getElementsByTagName("p:sp")[shapeIdx];
-                    if (sp) {
-                        const txBody = sp.getElementsByTagName("p:txBody")[0];
-                        if (txBody) {
-                            // Simple text replacement: clear existing paragraphs, add one with new text
-                            while (txBody.firstChild) txBody.removeChild(txBody.firstChild);
-                            
-                            const pNode = doc.createElementNS("http://schemas.openxmlformats.org/drawingml/2006/main", "a:p");
-                            const rNode = doc.createElementNS("http://schemas.openxmlformats.org/drawingml/2006/main", "a:r");
-                            const tNode = doc.createElementNS("http://schemas.openxmlformats.org/drawingml/2006/main", "a:t");
-                            tNode.textContent = div.innerText;
-                            
-                            rNode.appendChild(tNode);
-                            pNode.appendChild(rNode);
-                            txBody.appendChild(pNode);
-                        }
-                    }
-                }
-            }
-            
-            // Save XMLs back to ZIP
-            for (let i = 1; i <= slideCount; i++) {
-                if (xmlDocs[i]) {
-                    const xmlStr = serializer.serializeToString(xmlDocs[i]);
-                    currentZip.file(`ppt/slides/slide${i}.xml`, xmlStr);
-                }
-            }
-            
-            const base64 = await currentZip.generateAsync({type: "base64", compression: "DEFLATE"});
-            if (window.Android) {
-                window.Android.onDocumentSaved(base64);
             }
         }
     </script>
