@@ -3745,8 +3745,21 @@ fun DocxPreviewWebView(
                     
                     webViewClient = object : android.webkit.WebViewClient() {
                         override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
-                            postDelayed({ isWebViewLoading = false }, 500)
                             view?.evaluateJavascript("loadDocx('$base64Docx', $isNightMode);", null)
+                        }
+                        override fun onReceivedError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, error: android.webkit.WebResourceError?) {
+                            super.onReceivedError(view, request, error)
+                            android.util.Log.e("WebViewDocx", "Error: ${error?.description}")
+                        }
+                        override fun onReceivedHttpError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, errorResponse: android.webkit.WebResourceResponse?) {
+                            super.onReceivedHttpError(view, request, errorResponse)
+                            android.util.Log.e("WebViewDocx", "HTTP Error: ${errorResponse?.statusCode}")
+                        }
+                    }
+                    webChromeClient = object : android.webkit.WebChromeClient() {
+                        override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                            android.util.Log.d("WebViewDocx", "${consoleMessage?.message()} -- From line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
+                            return super.onConsoleMessage(consoleMessage)
                         }
                     }
                     loadUrl("file:///android_asset/editor/docx_editor.html")
@@ -3804,6 +3817,19 @@ fun PptxPreviewWebView(
                     
                     addJavascriptInterface(object : Any() {
                         @android.webkit.JavascriptInterface
+                        fun onDocumentLoaded(totalPages: Int) {
+                            post { 
+                                isWebViewLoading = false
+                            }
+                        }
+                        @android.webkit.JavascriptInterface
+                        fun onDocumentError(error: String) {
+                            post { 
+                                isWebViewLoading = false
+                                android.widget.Toast.makeText(context, "Error: $error", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                        @android.webkit.JavascriptInterface
                         fun exitWithoutSaving() {
                             post {
                                 viewModel.closeCurrentFile()
@@ -3813,8 +3839,21 @@ fun PptxPreviewWebView(
                     
                     webViewClient = object : android.webkit.WebViewClient() {
                         override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
-                            postDelayed({ isWebViewLoading = false }, 500)
                             view?.evaluateJavascript("loadPptx('$base64Pptx', $isNightMode);", null)
+                        }
+                        override fun onReceivedError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, error: android.webkit.WebResourceError?) {
+                            super.onReceivedError(view, request, error)
+                            android.util.Log.e("WebViewPptx", "Error: ${error?.description}")
+                        }
+                        override fun onReceivedHttpError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, errorResponse: android.webkit.WebResourceResponse?) {
+                            super.onReceivedHttpError(view, request, errorResponse)
+                            android.util.Log.e("WebViewPptx", "HTTP Error: ${errorResponse?.statusCode}")
+                        }
+                    }
+                    webChromeClient = object : android.webkit.WebChromeClient() {
+                        override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                            android.util.Log.d("WebViewPptx", "${consoleMessage?.message()} -- From line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
+                            return super.onConsoleMessage(consoleMessage)
                         }
                     }
                     loadUrl("file:///android_asset/editor/pptx_editor.html")

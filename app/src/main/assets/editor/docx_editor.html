@@ -65,40 +65,56 @@
                 document.body.classList.add('dark');
             }
             
-            const binary_string = window.atob(base64);
-            const len = binary_string.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binary_string.charCodeAt(i);
-            }
-            
-            const arrayBuffer = bytes.buffer;
-            
-            const options = {
-                className: "docx",
-                inWrapper: false,
-                ignoreWidth: false,
-                ignoreHeight: false,
-                ignoreFonts: isDark,
-                breakPages: true,
-                ignoreLastRenderedPageBreak: false,
-                experimental: true,
-                trimXmlDeclaration: true,
-                debug: false
-            };
-            
-            const container = document.getElementById("output");
-            if (isDark) {
-                container.style.color = "#f5f5f3";
-            }
-            
-            docx.renderAsync(arrayBuffer, container, null, options).then(function() {
-                if (window.Android && window.Android.onDocumentLoaded) {
-                    window.Android.onDocumentLoaded(1);
+            if (typeof docx === 'undefined' || typeof JSZip === 'undefined') {
+                if (window.Android && window.Android.onDocumentError) {
+                    window.Android.onDocumentError("Required libraries (docx-preview or jszip) failed to load");
                 }
-            }).catch(function(err) {
-                document.getElementById("output").innerHTML = "Error rendering DOCX: " + err.message;
-            });
+                return;
+            }
+            
+            try {
+                const binary_string = window.atob(base64);
+                const len = binary_string.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binary_string.charCodeAt(i);
+                }
+                
+                const arrayBuffer = bytes.buffer;
+                
+                const options = {
+                    className: "docx",
+                    inWrapper: false,
+                    ignoreWidth: false,
+                    ignoreHeight: false,
+                    ignoreFonts: isDark,
+                    breakPages: true,
+                    ignoreLastRenderedPageBreak: false,
+                    experimental: true,
+                    trimXmlDeclaration: true,
+                    debug: false
+                };
+                
+                const container = document.getElementById("output");
+                if (isDark) {
+                    container.style.color = "#f5f5f3";
+                }
+                
+                docx.renderAsync(arrayBuffer, container, null, options).then(function() {
+                    if (window.Android && window.Android.onDocumentLoaded) {
+                        window.Android.onDocumentLoaded(1);
+                    }
+                }).catch(function(err) {
+                    if (window.Android && window.Android.onDocumentError) {
+                        window.Android.onDocumentError(err.toString());
+                    }
+                    document.getElementById("output").innerHTML = "Error rendering DOCX: " + err.toString();
+                });
+            } catch (err) {
+                if (window.Android && window.Android.onDocumentError) {
+                    window.Android.onDocumentError(err.toString());
+                }
+            }
         }
     </script>
 </body>

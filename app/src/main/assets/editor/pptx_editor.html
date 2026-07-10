@@ -3,6 +3,7 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <script src="file:///android_asset/docx/jszip.min.js"></script>
+    <script src="file:///android_asset/editor/pptx-preview.min.js"></script>
     <style>
         :root {
             --bg-color: #faf9f5;
@@ -103,162 +104,46 @@
     </div>
 
     <script>
-        let currentZip = null;
-        let slideCount = 0;
-        let xmlDocs = {}; // slideNum -> Document
-        let relMaps = {}; // slideNum -> { relId -> path }
-
-        const EMU_PER_PIXEL = 9525;
-
         function loadPptx(base64, isDark) {
             if (isDark) document.body.classList.add('dark');
             
-            const binary_string = window.atob(base64);
-            const len = binary_string.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binary_string.charCodeAt(i);
+            if (typeof pptxPreview === 'undefined' || typeof JSZip === 'undefined') {
+                if (window.Android && window.Android.onDocumentError) {
+                    window.Android.onDocumentError("Required libraries (pptx-preview or jszip) failed to load");
+                }
+                return;
             }
             
-            JSZip.loadAsync(bytes.buffer).then(zip => {
-                currentZip = zip;
-                
-                // Find all slides
-                const slideFiles = Object.keys(zip.files).filter(f => f.startsWith("ppt/slides/slide") && f.endsWith(".xml"));
-                slideCount = slideFiles.length;
-                
-                let promises = [];
-                for (let i = 1; i <= slideCount; i++) {
-                    let slidePath = `ppt/slides/slide${i}.xml`;
-                    let relsPath = `ppt/slides/_rels/slide${i}.xml.rels`;
-                    
-                    if (zip.file(slidePath)) {
-                        promises.push(zip.file(slidePath).async("text").then(xml => ({ num: i, xml: xml })));
-                        if (zip.file(relsPath)) {
-                            promises.push(zip.file(relsPath).async("text").then(xml => ({ relNum: i, xml: xml })));
-                        }
-                    }
-                }
-                return Promise.all(promises);
-            }).then(results => {
-                for (let r of results) {
-                    if (r.relNum) {
-                        const relsParser = new DOMParser();
-                        const relsDoc = relsParser.parseFromString(r.xml, "application/xml");
-                        const rels = relsDoc.getElementsByTagName("Relationship");
-                        relMaps[r.relNum] = {};
-                        for (let i = 0; i < rels.length; i++) {
-                            relMaps[r.relNum][rels[i].getAttribute("Id")] = "ppt/slides/" + rels[i].getAttribute("Target").replace("../", "");
-                        }
-                    } else if (r.num) {
-                        const parser = new DOMParser();
-                        xmlDocs[r.num] = parser.parseFromString(r.xml, "application/xml");
-                    }
-                }
-                renderAllSlides();
-            }).catch(e => {
-                document.getElementById('editor-container').innerText = "Error loading document: " + e;
-            });
-        }
-
-        function getEmuRect(sp) {
-            let x=0, y=0, w=100, h=100;
-            const xfrm = sp.getElementsByTagName("a:xfrm")[0];
-            if (xfrm) {
-                const off = xfrm.getElementsByTagName("a:off")[0];
-                const ext = xfrm.getElementsByTagName("a:ext")[0];
-                if (off) { x = parseInt(off.getAttribute("x")||"0")/EMU_PER_PIXEL; y = parseInt(off.getAttribute("y")||"0")/EMU_PER_PIXEL; }
-                if (ext) { w = parseInt(ext.getAttribute("cx")||"0")/EMU_PER_PIXEL; h = parseInt(ext.getAttribute("cy")||"0")/EMU_PER_PIXEL; }
-            }
-            return {x, y, w, h};
-        }
-
-        function renderAllSlides() {
-            const container = document.getElementById("editor-container");
-            container.innerHTML = "";
-            
-            // For simple scaling based on screen width
-            const screenWidth = window.innerWidth - 32;
-            const scale = Math.min(1.0, screenWidth / 800);
-            
-            for (let i = 1; i <= slideCount; i++) {
-                if (!xmlDocs[i]) continue;
-                
-                const slideDiv = document.createElement("div");
-                slideDiv.className = "slide";
-                slideDiv.style.transform = `scale(${scale})`;
-                slideDiv.style.marginBottom = `-${450 * (1 - scale)}px`; // Compensate for scaling
-                
-                const doc = xmlDocs[i];
-                
-                // Render shapes (text boxes)
-                const shapes = doc.getElementsByTagName("p:sp");
-                for (let j = 0; j < shapes.length; j++) {
-                    const sp = shapes[j];
-                    const rect = getEmuRect(sp);
-                    
-                    const txBody = sp.getElementsByTagName("p:txBody")[0];
-                    if (txBody) {
-                        const texts = sp.getElementsByTagName("a:t");
-                        let fullText = "";
-                        for (let k=0; k<texts.length; k++) { fullText += texts[k].textContent + " "; }
-                        
-                        if (fullText.trim().length > 0 || true) {
-                            const textDiv = document.createElement("div");
-                            textDiv.className = "slide-text";
-                            textDiv.style.left = rect.x + "px";
-                            textDiv.style.top = rect.y + "px";
-                            textDiv.style.width = rect.w + "px";
-                            textDiv.style.height = rect.h + "px";
-                            textDiv.innerText = fullText.trim();
-                            slideDiv.appendChild(textDiv);
-                        }
-                    }
-                }
-                
-                // Render pictures
-                const pics = doc.getElementsByTagName("p:pic");
-                for (let j = 0; j < pics.length; j++) {
-                    const pic = pics[j];
-                    const rect = getEmuRect(pic);
-                    
-                    const blip = pic.getElementsByTagName("a:blip")[0];
-                    if (blip) {
-                        const embedId = blip.getAttribute("r:embed");
-                        if (embedId && relMaps[i] && relMaps[i][embedId]) {
-                            const path = relMaps[i][embedId];
-                            const img = document.createElement("img");
-                            img.className = "slide-img";
-                            img.style.left = rect.x + "px";
-                            img.style.top = rect.y + "px";
-                            img.style.width = rect.w + "px";
-                            img.style.height = rect.h + "px";
-                            img.id = `img_${i}_${embedId}`;
-                            slideDiv.appendChild(img);
-                            
-                            loadImage(path, img.id);
-                        }
-                    }
-                }
-                
-                container.appendChild(slideDiv);
-            }
-        }
-
-        async function loadImage(path, imgId) {
             try {
-                // ppt/slides/../media/image1.jpeg -> ppt/media/image1.jpeg
-                let resolvedPath = path.replace("slides/../media", "media");
-                const file = currentZip.file(resolvedPath) || currentZip.file(path);
-                if (file) {
-                    const base64 = await file.async("base64");
-                    let mime = "image/png";
-                    if (path.toLowerCase().endsWith(".jpeg") || path.toLowerCase().endsWith(".jpg")) mime = "image/jpeg";
-                    const dataUrl = `data:${mime};base64,${base64}`;
-                    document.getElementById(imgId).src = dataUrl;
+                const binary_string = window.atob(base64);
+                const len = binary_string.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binary_string.charCodeAt(i);
                 }
-            } catch (e) {
-                console.error(e);
+                const arrayBuffer = bytes.buffer;
+                
+                const container = document.getElementById("editor-container");
+                const viewer = pptxPreview.init(container, {
+                    width: window.innerWidth - 32,
+                    mode: 'slide'
+                });
+                
+                viewer.preview(arrayBuffer).then(function() {
+                    if (window.Android && window.Android.onDocumentLoaded) {
+                        window.Android.onDocumentLoaded(viewer.slideCount || 1);
+                    }
+                }).catch(function(err) {
+                    if (window.Android && window.Android.onDocumentError) {
+                        window.Android.onDocumentError(err.toString());
+                    } else {
+                        document.getElementById("editor-container").innerHTML = "Error rendering PPTX: " + err.toString();
+                    }
+                });
+            } catch (err) {
+                if (window.Android && window.Android.onDocumentError) {
+                    window.Android.onDocumentError(err.toString());
+                }
             }
         }
     </script>
