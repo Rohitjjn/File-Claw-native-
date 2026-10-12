@@ -305,3 +305,30 @@ fun formatElapsedTime(timestamp: Long): String {
     return if (days == 1L) "1 day ago" else "$days days ago"
 }
 
+@Composable
+fun FileExtensionBadge(extension: String, modifier: Modifier = Modifier) {
+    val ext = extension.uppercase()
+    val (badgeBg, badgeFg) = when (ext) {
+        "PDF" -> Color(0xFFE53935).copy(alpha = 0.15f) to Color(0xFFD32F2F)
+        "TXT", "LOG", "MD" -> Color(0xFFFF9800).copy(alpha = 0.15f) to Color(0xFFE65100)
+        "PNG", "JPG", "JPEG", "WEBP", "GIF", "SVG" -> Color(0xFF2196F3).copy(alpha = 0.15f) to Color(0xFF1976D2)
+        "JSON", "XML", "HTML", "JS", "KT", "PY" -> Color(0xFF9C27B0).copy(alpha = 0.15f) to Color(0xFF7B1FA2)
+        "ZIP", "RAR", "7Z", "TAR", "GZ" -> Color(0xFF795548).copy(alpha = 0.15f) to Color(0xFF5D4037)
+        "DOCX", "PPTX", "XLSX" -> Color(0xFF009688).copy(alpha = 0.15f) to Color(0xFF00796B)
+        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) to MaterialTheme.colorScheme.primary
+    }
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = badgeBg,
+        modifier = modifier
+    ) {
+        Text(
+            text = ext.take(4),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = badgeFg,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
+}
+

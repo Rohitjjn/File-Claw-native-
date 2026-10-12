@@ -31,6 +31,7 @@ import com.example.ui.component.ClaudeAppBar
 import com.example.ui.component.ClaudeButton
 import com.example.ui.component.ClaudeCard
 import com.example.ui.component.FileIcon
+import com.example.ui.component.FileExtensionBadge
 import com.example.ui.component.premiumLoadingPulse
 import com.example.viewmodel.MainViewModel
 import java.io.File
@@ -45,11 +46,14 @@ fun AllFilesScreen(
     modifier: Modifier = Modifier
 ) {
     val files by viewModel.recentFilesState.collectAsState()
+    val favoritePaths by viewModel.favoritePaths.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val currentFileState by viewModel.currentFileState.collectAsState()
     val loadingFilePathState = viewModel.loadingFilePath.collectAsState()
 
     var isSearchActive by remember { mutableStateOf(false) }
+    var isGridView by remember { mutableStateOf(false) }
+    var showFavoritesOnly by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
     var showBatchDeleteDialog by remember { mutableStateOf(false) }
     var deleteFromDiskChecked by remember { mutableStateOf(false) }
@@ -129,27 +133,63 @@ fun AllFilesScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp, vertical = 6.dp)
                     ) {
-                        IconButton(onClick = { isSearchActive = false; viewModel.updateSearchQuery("") }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close Search")
+                        IconButton(
+                            onClick = { isSearchActive = false; viewModel.updateSearchQuery("") },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close Search", modifier = Modifier.size(20.dp))
                         }
-                        TextField(
-                            value = searchQuery,
-                            onValueChange = { viewModel.updateSearchQuery(it) },
-                            placeholder = { Text("Search files...") },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent
-                            ),
-                            singleLine = true,
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier
                                 .weight(1f)
-                                .focusRequester(searchFocusRequester)
-                        )
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                .height(40.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text(
+                                            "Search files...",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                        )
+                                    }
+                                    androidx.compose.foundation.text.BasicTextField(
+                                        value = searchQuery,
+                                        onValueChange = { viewModel.updateSearchQuery(it) },
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .focusRequester(searchFocusRequester)
+                                    )
+                                }
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { viewModel.updateSearchQuery("") },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Clear,
+                                            contentDescription = "Clear search",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -167,6 +207,13 @@ fun AllFilesScreen(
                             Icon(
                                 imageVector = Icons.Outlined.Search,
                                 contentDescription = "Search",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        IconButton(onClick = { isGridView = !isGridView }) {
+                            Icon(
+                                imageVector = if (isGridView) Icons.Outlined.ViewList else Icons.Outlined.GridView,
+                                contentDescription = "Toggle Grid or List View",
                                 tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -199,6 +246,15 @@ fun AllFilesScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            val targetFiles by remember(files, showFavoritesOnly, favoritePaths) {
+                derivedStateOf {
+                    if (showFavoritesOnly) files.filter { favoritePaths.contains(it.path) } else files
+                }
+            }
+            val favCount by remember(files, favoritePaths) {
+                derivedStateOf { files.count { favoritePaths.contains(it.path) } }
+            }
+
             LazyColumn(
                 state = rememberLazyListState(),
                 modifier = Modifier.fillMaxSize(),
@@ -210,7 +266,39 @@ fun AllFilesScreen(
                     bottom = if (isBatchMode && selectedIds.isNotEmpty()) 120.dp else 40.dp
                 )
             ) {
-                if (files.isEmpty()) {
+                // Filter Tabs (All vs Favorites)
+                if (files.isNotEmpty()) {
+                    item(contentType = "FilterChips") {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+                        ) {
+                            FilterChip(
+                                selected = !showFavoritesOnly,
+                                onClick = { showFavoritesOnly = false },
+                                label = { Text("All Files (${files.size})", fontSize = 12.sp) },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    selectedLabelColor = MaterialTheme.colorScheme.primary
+                                )
+                            )
+                            FilterChip(
+                                selected = showFavoritesOnly,
+                                onClick = { showFavoritesOnly = true },
+                                label = { Text("★ Favorites ($favCount)", fontSize = 12.sp) },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFFE5A93C).copy(alpha = 0.18f),
+                                    selectedLabelColor = Color(0xFFD49228)
+                                )
+                            )
+                        }
+                    }
+                }
+
+                if (targetFiles.isEmpty()) {
                     item(contentType = "EmptyState") {
                         Box(
                             modifier = Modifier
@@ -220,23 +308,114 @@ fun AllFilesScreen(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    imageVector = Icons.Outlined.LibraryBooks,
+                                    imageVector = if (showFavoritesOnly) Icons.Outlined.StarOutline else Icons.Outlined.LibraryBooks,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
+                                    tint = if (showFavoritesOnly) Color(0xFFE5A93C).copy(alpha = 0.5f) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
                                     modifier = Modifier.size(68.dp)
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    text = "Your trace is clean. No files tracked.",
+                                    text = if (showFavoritesOnly) "No favorites starred yet." else "Your trace is clean. No files tracked.",
                                     fontSize = 14.sp,
                                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                                 )
                             }
                         }
                     }
+                } else if (isGridView) {
+                    // 2-Column Grid Layout
+                    val rows = targetFiles.chunked(2)
+                    items(rows, key = { row -> row.joinToString("-") { it.id.toString() } }, contentType = { "GridRow" }) { rowFiles ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            for (file in rowFiles) {
+                                val isSelected = selectedIds.contains(file.id)
+                                val isFav = favoritePaths.contains(file.path)
+                                Box(modifier = Modifier.weight(1f)) {
+                                    ClaudeCard(
+                                        isSelected = isSelected,
+                                        onClick = {
+                                            if (isBatchMode) {
+                                                selectedIds = if (isSelected) selectedIds - file.id else selectedIds + file.id
+                                            } else {
+                                                viewModel.openFile(file)
+                                            }
+                                        }
+                                    ) {
+                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                FileExtensionBadge(extension = file.extension)
+                                                if (isBatchMode) {
+                                                    Checkbox(
+                                                        checked = isSelected,
+                                                        onCheckedChange = { checked ->
+                                                            selectedIds = if (checked) selectedIds + file.id else selectedIds - file.id
+                                                        },
+                                                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary),
+                                                        modifier = Modifier.size(28.dp)
+                                                    )
+                                                } else {
+                                                    IconButton(
+                                                        onClick = { viewModel.toggleFavorite(file.path) },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (isFav) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                                                            contentDescription = "Toggle favorite",
+                                                            tint = if (isFav) Color(0xFFE5A93C) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                val isLoading by remember(file.path) { androidx.compose.runtime.derivedStateOf { loadingFilePathState.value == file.path } }
+                                                FileIcon(
+                                                    extension = file.extension,
+                                                    size = 46,
+                                                    isSample = file.isSample,
+                                                    modifier = Modifier.premiumLoadingPulse(isLoading)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(10.dp))
+                                            Text(
+                                                text = file.name,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            val formattedSize = remember(file.size) { formatLocalFileSize(file.size) }
+                                            Text(
+                                                text = formattedSize,
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            if (rowFiles.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
                 } else {
-                    items(files, key = { it.id }, contentType = { "FileItem" }) { file ->
+                    items(targetFiles, key = { it.id }, contentType = { "FileItem" }) { file ->
                         val isSelected = selectedIds.contains(file.id)
+                        val isFav = favoritePaths.contains(file.path)
 
                         ClaudeCard(
                             onClick = {
@@ -295,8 +474,19 @@ fun AllFilesScreen(
                                     }
                                 }
 
-                                if (!isBatchMode) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (!isBatchMode) {
+                                        IconButton(
+                                            onClick = { viewModel.toggleFavorite(file.path) },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isFav) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                                                contentDescription = "Toggle favorite",
+                                                tint = if (isFav) Color(0xFFE5A93C) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
                                         IconButton(
                                             onClick = { viewModel.deleteRecentFile(file) }
                                         ) {
@@ -307,13 +497,13 @@ fun AllFilesScreen(
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
-                                        Icon(
-                                            imageVector = Icons.Default.ChevronRight,
-                                            contentDescription = "Open Preview",
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                            modifier = Modifier.size(20.dp)
-                                        )
                                     }
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = "Open Preview",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                             }
                         }

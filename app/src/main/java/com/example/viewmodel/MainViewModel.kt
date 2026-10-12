@@ -55,6 +55,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _searchTermsHistory = MutableStateFlow<List<String>>(emptyList())
     val searchTermsHistory: StateFlow<List<String>> = _searchTermsHistory.asStateFlow()
 
+    private val _favoritePaths = MutableStateFlow<Set<String>>(emptySet())
+    val favoritePaths: StateFlow<Set<String>> = _favoritePaths.asStateFlow()
+
+    private fun loadFavorites() {
+        val prefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        val set = prefs.getStringSet("favorite_file_paths", emptySet()) ?: emptySet()
+        _favoritePaths.value = set
+    }
+
+    fun toggleFavorite(path: String) {
+        val current = _favoritePaths.value.toMutableSet()
+        if (current.contains(path)) {
+            current.remove(path)
+        } else {
+            current.add(path)
+        }
+        _favoritePaths.value = current
+        val prefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putStringSet("favorite_file_paths", current).apply()
+    }
+
+    fun isFavorite(path: String): Boolean {
+        return _favoritePaths.value.contains(path)
+    }
+
     private fun loadSearchTermsHistory() {
         val prefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
         val historyStr = prefs.getString("search_terms_history", "") ?: ""
@@ -89,6 +114,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository = AppRepository(database.recentFileDao(), database.settingDao())
         
         loadSearchTermsHistory()
+        loadFavorites()
 
         
         // Initialize settings, clean up sample files, and build search index from stored cache and background scanner

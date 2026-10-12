@@ -26,6 +26,16 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Image
+import com.example.core.text.PdfTextSearcher
+import com.example.core.text.PdfSearchResult
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderSpecial
@@ -141,7 +151,7 @@ fun FilePreviewScreen(
     }
 
     var isWebRenderActive by remember(activeFile) {
-        mutableStateOf(isHtmlFile)
+        mutableStateOf(true)
     }
 
     // HTML files are untrusted input: scripts stay off until the user opts in for this file.
@@ -159,6 +169,52 @@ fun FilePreviewScreen(
     var scrollToPage by remember { mutableStateOf<Int?>(null) }
     var pendingLinkToOpen by remember { mutableStateOf<String?>(null) }
     var showJumpDialog by remember { mutableStateOf(false) }
+
+    var isSearchInDocumentOpen by rememberSaveable { mutableStateOf(false) }
+    var inViewerSearchQuery by rememberSaveable { mutableStateOf("") }
+    var currentMatchIndex by remember { mutableStateOf(0) }
+    var totalMatchesCount by remember { mutableStateOf(0) }
+    var pdfSearchResults by remember { mutableStateOf<List<PdfSearchResult>>(emptyList()) }
+
+    // PDF search effect
+    LaunchedEffect(inViewerSearchQuery, activeFile?.path, fileState) {
+        if (fileState is MainViewModel.FileContentState.PdfSuccess && inViewerSearchQuery.length >= 2 && activeFile != null) {
+            val file = java.io.File(activeFile.path)
+            val res = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                PdfTextSearcher.searchInPdf(file, inViewerSearchQuery)
+            }
+            pdfSearchResults = res
+            totalMatchesCount = res.size
+            currentMatchIndex = 0
+            if (res.isNotEmpty()) {
+                scrollToPage = res[0].pageNumber - 1
+            }
+        } else if (fileState is MainViewModel.FileContentState.PdfSuccess) {
+            pdfSearchResults = emptyList()
+            totalMatchesCount = 0
+            currentMatchIndex = 0
+        }
+    }
+
+    // Text search effect
+    val textContent = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content ?: ""
+    val textMatches = remember(textContent, inViewerSearchQuery) {
+        if (inViewerSearchQuery.length >= 2 && textContent.isNotEmpty()) {
+            val list = mutableListOf<Int>()
+            var idx = textContent.indexOf(inViewerSearchQuery, ignoreCase = true)
+            while (idx >= 0 && list.size < 500) {
+                list.add(idx)
+                idx = textContent.indexOf(inViewerSearchQuery, idx + inViewerSearchQuery.length.coerceAtLeast(1), ignoreCase = true)
+            }
+            list
+        } else emptyList()
+    }
+    LaunchedEffect(textMatches) {
+        if (fileState is MainViewModel.FileContentState.TextSuccess) {
+            totalMatchesCount = textMatches.size
+            currentMatchIndex = 0
+        }
+    }
 
     val context = LocalContext.current
 
@@ -217,6 +273,40 @@ fun FilePreviewScreen(
                     onNavIconClick = handleBack,
                     navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                     actions = {
+                        val canSearchInDoc = fileState is MainViewModel.FileContentState.PdfSuccess ||
+                            fileState is MainViewModel.FileContentState.TextSuccess ||
+                            (activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"))
+                        if (canSearchInDoc) {
+                            IconButton(onClick = { isSearchInDocumentOpen = !isSearchInDocumentOpen }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Search,
+                                    contentDescription = "Find in document",
+                                    tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        val isTextState = fileState is MainViewModel.FileContentState.TextSuccess ||
+                            (activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"))
+                        if (isTextState) {
+                            IconButton(onClick = {
+                                val textToCopy = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
+                                    ?: runCatching { activeFile?.let { java.io.File(it.path).readText() } }.getOrNull()
+                                if (!textToCopy.isNullOrEmpty()) {
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText(activeFile?.name ?: "File Content", textToCopy)
+                                    clipboard?.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(context, "Text copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = "Copy all text",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
                         Box {
                             IconButton(onClick = { showMenu = true }) {
                                 Icon(Icons.Default.MoreVert, contentDescription = "More Options")
@@ -290,24 +380,6 @@ fun FilePreviewScreen(
                                     }
                                 }
 
-                                if (canBeRenderedInWeb && activeFile?.extension?.lowercase() != "pdf") {
-                                    DropdownMenuItem(
-                                        text = { 
-                                            Text(if (isWebRenderActive) "Show Syntax Code" else "App Browser Preview") 
-                                        },
-                                        onClick = {
-                                            showMenu = false
-                                            isWebRenderActive = !isWebRenderActive
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = if (isWebRenderActive) Icons.Outlined.Code else Icons.Outlined.Language,
-                                                contentDescription = "Toggle Web Preview"
-                                            )
-                                        }
-                                    )
-                                }
-
                                 DropdownMenuItem(
                                     text = { Text("Properties") },
                                     onClick = {
@@ -346,42 +418,218 @@ fun FilePreviewScreen(
             }
         },
         bottomBar = {
-            val isEditable = when (val state = fileState) {
-                is MainViewModel.FileContentState.TextSuccess -> state.editable
-                else -> false
-            }
-            if (isEditable) {
+            val isPdf = fileState is MainViewModel.FileContentState.PdfSuccess
+            val isImage = fileState is MainViewModel.FileContentState.ImageSuccess
+            val isText = fileState is MainViewModel.FileContentState.TextSuccess ||
+                (activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"))
+
+            val showFloatingBar = isPdf || isImage || isText
+
+            if (showFloatingBar) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = isBarsVisible,
                     enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
                     exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut()
                 ) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        modifier = Modifier.fillMaxWidth()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(bottom = 12.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .navigationBarsPadding()
-                                .padding(16.dp)
-                                .fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        Surface(
+                            shape = RoundedCornerShape(32.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                            shadowElevation = 8.dp,
+                            modifier = Modifier.padding(horizontal = 16.dp)
                         ) {
-                            Button(
-                                onClick = onNavigateToEditor,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                             ) {
-                                Icon(Icons.Default.Edit, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Edit Code / Text", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                if (isPdf) {
+                                    // Page indicator / Jump button
+                                    Surface(
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.clickable { showJumpDialog = true }
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.MenuBook,
+                                                contentDescription = "Page indicator",
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "$currentPdfPage / ${totalPdfPages.coerceAtLeast(1)}",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+
+                                    // Find in PDF
+                                    IconButton(
+                                        onClick = { isSearchInDocumentOpen = !isSearchInDocumentOpen },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Search,
+                                            contentDescription = "Find in document",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Night / Light Mode toggle pill
+                                    IconButton(
+                                        onClick = { isPdfNightMode = !isPdfNightMode },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isPdfNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                            contentDescription = "Toggle night mode",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = if (isPdfNightMode) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Share File
+                                    IconButton(
+                                        onClick = { activeFile?.let { shareFile(context, File(it.path), it.extension) } },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Share,
+                                            contentDescription = "Share PDF",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                } else if (isImage) {
+                                    // Image counter
+                                    Surface(
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.Image,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Photo Viewer",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+
+                                    // Share Image
+                                    IconButton(
+                                        onClick = { activeFile?.let { shareFile(context, File(it.path), it.extension) } },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Share,
+                                            contentDescription = "Share image",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                } else if (isText) {
+                                    // Find in Text
+                                    IconButton(
+                                        onClick = { isSearchInDocumentOpen = !isSearchInDocumentOpen },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Search,
+                                            contentDescription = "Find in document",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Copy all text
+                                    IconButton(
+                                        onClick = {
+                                            val textToCopy = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
+                                                ?: runCatching { activeFile?.let { java.io.File(it.path).readText() } }.getOrNull()
+                                            if (!textToCopy.isNullOrEmpty()) {
+                                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                                val clip = android.content.ClipData.newPlainText(activeFile?.name ?: "File Content", textToCopy)
+                                                clipboard?.setPrimaryClip(clip)
+                                                android.widget.Toast.makeText(context, "Text copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.ContentCopy,
+                                            contentDescription = "Copy all text",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    val isEditable = (fileState as? MainViewModel.FileContentState.TextSuccess)?.editable == true
+                                    if (isEditable) {
+                                        Surface(
+                                            shape = RoundedCornerShape(18.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.clickable { onNavigateToEditor() }
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Edit,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    "Edit",
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Share Text
+                                    IconButton(
+                                        onClick = { activeFile?.let { shareFile(context, File(it.path), it.extension) } },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Share,
+                                            contentDescription = "Share file",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -402,6 +650,114 @@ fun FilePreviewScreen(
                     }
                 }
         ) {
+            // Floating In-Viewer Search Bar Overlay
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isSearchInDocumentOpen,
+                enter = androidx.compose.animation.slideInVertically { -it } + androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.slideOutVertically { -it } + androidx.compose.animation.fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .fillMaxWidth()
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .height(44.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                            if (inViewerSearchQuery.isEmpty()) {
+                                Text(
+                                    "Find in document...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                )
+                            }
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = inViewerSearchQuery,
+                                onValueChange = { inViewerSearchQuery = it },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        if (inViewerSearchQuery.isNotEmpty()) {
+                            val matchLabel = if (totalMatchesCount > 0) {
+                                val pageInfo = if (pdfSearchResults.isNotEmpty()) " (p.${pdfSearchResults.getOrNull(currentMatchIndex)?.pageNumber ?: 1})" else ""
+                                "${currentMatchIndex + 1}/$totalMatchesCount$pageInfo"
+                            } else "0 matches"
+
+                            Text(
+                                text = matchLabel,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+
+                            // Previous Match
+                            IconButton(
+                                onClick = {
+                                    if (pdfSearchResults.isNotEmpty()) {
+                                        currentMatchIndex = (currentMatchIndex - 1 + pdfSearchResults.size) % pdfSearchResults.size
+                                        scrollToPage = pdfSearchResults[currentMatchIndex].pageNumber - 1
+                                    } else if (textMatches.isNotEmpty()) {
+                                        currentMatchIndex = (currentMatchIndex - 1 + textMatches.size) % textMatches.size
+                                    }
+                                },
+                                enabled = totalMatchesCount > 0,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous match", modifier = Modifier.size(18.dp))
+                            }
+
+                            // Next Match
+                            IconButton(
+                                onClick = {
+                                    if (pdfSearchResults.isNotEmpty()) {
+                                        currentMatchIndex = (currentMatchIndex + 1) % pdfSearchResults.size
+                                        scrollToPage = pdfSearchResults[currentMatchIndex].pageNumber - 1
+                                    } else if (textMatches.isNotEmpty()) {
+                                        currentMatchIndex = (currentMatchIndex + 1) % textMatches.size
+                                    }
+                                },
+                                enabled = totalMatchesCount > 0,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next match", modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        IconButton(
+                            onClick = {
+                                isSearchInDocumentOpen = false
+                                inViewerSearchQuery = ""
+                                pdfSearchResults = emptyList()
+                                totalMatchesCount = 0
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Close search", modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
             when (val state = fileState) {
                 is MainViewModel.FileContentState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -499,6 +855,8 @@ fun FilePreviewScreen(
                                 WebViewPreview(
                                     fileEntity = state.file,
                                     allowScripts = htmlScriptsEnabled,
+                                    searchQuery = inViewerSearchQuery,
+                                    onSingleTap = { isBarsVisible = !isBarsVisible },
                                     modifier = Modifier.fillMaxSize()
                                 )
                             } else if (state.file.extension.lowercase() == "md") {
@@ -550,7 +908,8 @@ fun FilePreviewScreen(
                 is MainViewModel.FileContentState.ImageSuccess -> {
                     ImagePreview(
                         fileEntity = state.file,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        onTap = { isBarsVisible = !isBarsVisible }
                     )
                 }
                 is MainViewModel.FileContentState.PdfSuccess -> {
@@ -795,7 +1154,7 @@ fun MarkdownPreview(
             <!DOCTYPE html>
             <html>
             <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes">
                 <style>
                     :root {
                         --bg-color: $bgColor;
@@ -1216,7 +1575,7 @@ fun CodePreview(
                 <!DOCTYPE html>
                 <html>
                 <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes">
                 <style>
                   body { 
                     background-color: $bgColor; 
@@ -1716,7 +2075,8 @@ fun buildNodesList(
 @Composable
 fun ImagePreview(
     fileEntity: RecentFileEntity,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onTap: () -> Unit = {}
 ) {
     val parentDir = remember(fileEntity) { java.io.File(fileEntity.path).parentFile }
     val imageFiles = remember(parentDir) {
@@ -1771,12 +2131,10 @@ fun ImagePreview(
         }
     }
 
-    var showOverlay by remember { mutableStateOf(true) }
-
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         androidx.compose.foundation.pager.HorizontalPager(
@@ -1784,59 +2142,19 @@ fun ImagePreview(
             modifier = Modifier.fillMaxSize()
         ) { page ->
             val file = imageFiles[page]
+            val zoomSpec = remember {
+                me.saket.telephoto.zoomable.ZoomSpec(maxZoomFactor = 15f)
+            }
+            val zoomableState = me.saket.telephoto.zoomable.rememberZoomableState(zoomSpec = zoomSpec)
+            val zoomableImageState = me.saket.telephoto.zoomable.rememberZoomableImageState(zoomableState = zoomableState)
+
             me.saket.telephoto.zoomable.coil.ZoomableAsyncImage(
                 model = file,
                 contentDescription = "Image preview",
                 modifier = Modifier.fillMaxSize(),
-                onClick = { showOverlay = !showOverlay }
+                state = zoomableImageState,
+                onClick = { onTap() }
             )
-        }
-        
-        // Top Bar overlay for 3-dots and name
-        androidx.compose.animation.AnimatedVisibility(
-            visible = showOverlay,
-            enter = androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.fadeOut(),
-            modifier = Modifier.align(Alignment.TopCenter)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(
-                        listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent)
-                    ))
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "${currentFile.name} (${pagerState.currentPage + 1}/${imageFiles.size})",
-                    color = Color.White,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
-                    modifier = Modifier.weight(1f)
-                )
-                
-                var showMenu by remember { mutableStateOf(false) }
-                Box {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Properties", tint = Color.White)
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Properties") },
-                            onClick = { showMenu = false },
-                            leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Size: ${formatFileSize(currentFile.length())}") },
-                            onClick = { showMenu = false }
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -1906,7 +2224,7 @@ fun PdfPreview(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(if (isNightMode) Color(0xFF121212) else Color(0xFFF4F4F9))
+            .background(if (isNightMode) Color(0xFF181715) else Color(0xFFF4F4F9))
     ) {
         if (pdfErrorMessage != null) {
             Column(
@@ -1949,10 +2267,16 @@ fun PdfPreview(
                             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                             android.view.ViewGroup.LayoutParams.MATCH_PARENT
                         )
+                        minZoom = 1.0f
+                        midZoom = 3.5f
+                        maxZoom = 10.0f
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
                 update = { pdfView ->
+                    pdfView.minZoom = 1.0f
+                    pdfView.midZoom = 3.5f
+                    pdfView.maxZoom = 10.0f
                     if ((!isReady && originalFile.exists()) || loadTrigger > 0) {
                         val configurator = pdfView.fromFile(originalFile)
                             .enableSwipe(true)
@@ -1969,13 +2293,14 @@ fun PdfPreview(
                             .spacing(0)
                             .autoSpacing(false)
                             .pageFitPolicy(com.github.barteksc.pdfviewer.util.FitPolicy.WIDTH)
-                            .nightMode(isNightMode)
+                            .nightMode(false)
                             .onLoad {
                                 isReady = true
                                 requirePassword = false
                                 passwordError = false
                                 loadTrigger = 0
                                 pdfErrorMessage = null
+                                applySmartPdfNightMode(pdfView, isNightMode)
                                 if (scrollToPage != null) {
                                     onScrollToPageHandled()
                                 }
@@ -2004,7 +2329,7 @@ fun PdfPreview(
                     }
                     
                     if (isReady) {
-                        pdfView.setNightMode(isNightMode)
+                        applySmartPdfNightMode(pdfView, isNightMode)
                     }
                 }
             )
@@ -2015,6 +2340,34 @@ fun PdfPreview(
                 }
             }
         }
+    }
+}
+
+/**
+ * Smart hue-preserving dark mode for PDFView:
+ * Inverts white paper to dark charcoal (#1e1e1e) and black text to off-white (#e1e1e1),
+ * while preserving natural skin tones and photographic colors so photos don't look like negative ghosts.
+ */
+private fun applySmartPdfNightMode(pdfView: com.github.barteksc.pdfviewer.PDFView, isNight: Boolean) {
+    try {
+        pdfView.setNightMode(false)
+        val paintField = com.github.barteksc.pdfviewer.PDFView::class.java.getDeclaredField("paint")
+        paintField.isAccessible = true
+        val paint = paintField.get(pdfView) as? android.graphics.Paint
+        if (paint != null) {
+            paint.colorFilter = if (isNight) {
+                val matrix = floatArrayOf(
+                     0.25f, -0.70f, -0.315f, 0f, 225f,
+                    -0.35f,  0.05f, -0.465f, 0f, 225f,
+                    -0.45f, -0.45f,  0.135f, 0f, 225f,
+                     0.00f,  0.00f,  0.000f, 1f,   0f
+                )
+                android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(matrix))
+            } else null
+            pdfView.invalidate()
+        }
+    } catch (e: Exception) {
+        pdfView.setNightMode(isNight)
     }
 }
 
@@ -2293,6 +2646,7 @@ fun WebViewPreview(
     fileEntity: RecentFileEntity,
     modifier: Modifier = Modifier,
     allowScripts: Boolean = false,
+    searchQuery: String = "",
     onSingleTap: () -> Unit = {}
 ) {
     val isDark = MaterialTheme.colorScheme.background == com.example.ui.theme.ClaudeOnyx
@@ -2341,6 +2695,7 @@ fun WebViewPreview(
                         val htmlPage = fileEntity.extension.lowercase().let { it == "html" || it == "htm" }
                         settings.javaScriptEnabled = !htmlPage
                         settings.domStorageEnabled = !htmlPage
+                        settings.setSupportZoom(true)
                         settings.builtInZoomControls = true
                         settings.displayZoomControls = false
                         settings.useWideViewPort = true
@@ -2372,6 +2727,11 @@ fun WebViewPreview(
                     }
                 },
                 update = { webView ->
+                    if (searchQuery.isNotEmpty()) {
+                        webView.findAllAsync(searchQuery)
+                    } else {
+                        webView.clearMatches()
+                    }
                     val ext = fileEntity.extension.lowercase()
                     if (ext == "html" || ext == "htm") {
                         loadLocalFileOnce(webView, fileEntity.path, allowScripts)
@@ -2559,7 +2919,7 @@ fun WebViewPreview(
                             """
                             <html>
                             <head>
-                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes">
                             <style>
                                 body {
                                     background-color: ${if (isDark) "#181715" else "#FAF9F5"};
@@ -2568,6 +2928,7 @@ fun WebViewPreview(
                                     padding: 16px;
                                     line-height: 1.6;
                                     margin: 0;
+                                    -webkit-text-size-adjust: none;
                                 }
                                 h1, h2, h3, h4, h5, h6 {
                                     color: ${if (isDark) "#E8A55A" else "#CC785C"};
@@ -2579,14 +2940,14 @@ fun WebViewPreview(
                                     padding: 12px;
                                     border-radius: 6px;
                                     overflow-x: auto;
-                                    font-family: monospace;
+                                    font-family: ui-monospace, monospace;
                                     font-size: 13px;
                                 }
                                 code {
                                     background-color: ${if (isDark) "#252320" else "#EFE9DE"};
                                     padding: 2px 4px;
                                     border-radius: 4px;
-                                    font-family: monospace;
+                                    font-family: ui-monospace, monospace;
                                 }
                                 blockquote {
                                     border-left: 4px solid ${if (isDark) "#E8A55A" else "#CC785C"};
@@ -2622,18 +2983,19 @@ fun WebViewPreview(
                             """
                             <html>
                             <head>
-                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes">
                             <style>
                                 body {
                                     background-color: ${if (isDark) "#181715" else "#FAF9F5"};
                                     color: ${if (isDark) "#FAF9F5" else "#141413"};
-                                    font-family: monospace;
+                                    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
                                     padding: 16px;
                                     white-space: pre-wrap;
                                     word-wrap: break-word;
-                                    line-height: 1.5;
+                                    line-height: 1.6;
                                     font-size: 14px;
                                     margin: 0;
+                                    -webkit-text-size-adjust: none;
                                 }
                             </style>
                             </head>

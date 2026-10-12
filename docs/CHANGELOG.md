@@ -4,6 +4,49 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [1.3.0] "Floating Action Pill, Grid View & In-Viewer Search": versionCode 5
+
+### Added
+- **Unified Floating Viewer Control Bar (Action Pill)**:
+  - Added a lightweight, floating M3 glassmorphism action pill across PDF, Image, and Text viewers.
+  - PDF: quick Page Indicator / Jump to page pill (`current / total`), in-viewer search toggle, night/light mode toggle pill, and share action.
+  - Image: photo counter badge, and quick share action.
+  - Text: in-viewer search toggle, copy all text shortcut, edit button, and quick share action.
+  - Smoothly auto-fades and toggles on screen tap with animated slide and fade transitions.
+- **Grid vs List View Toggle & Rich File Cards**:
+  - Added a compact Grid / List toggle icon button in `HomeScreen` and `AllFilesScreen`.
+  - Grid View displays a 2-column layout with high-contrast `FileExtensionBadge` (PDF, TXT, PNG, JSON, etc.), preview thumbnail, quick star button, file name, formatted size, and relative timestamp.
+- **Favorites / Starred Files & Filter Tabs**:
+  - Added interactive Star button (`Icons.Filled.Star` / `Icons.Outlined.StarOutline`) to every file card in both list and grid views.
+  - Added Filter Tabs (`All Files` vs `★ Favorites`) across `HomeScreen` and `AllFilesScreen` allowing instant filtering with empty-state guidance.
+  - Persistent favorite state stored across sessions in `SharedPreferences`.
+- **In-Viewer Text Search (PDF & Text files)**:
+  - Added a floating "Find in document" overlay search bar with match count indicator (`Match X of Y`) and Previous (`<`) / Next (`>`) navigation buttons.
+  - Text files: matches occurrences across the document, highlights them, and updates search match positions.
+  - PDF documents: pure-Kotlin `PdfTextSearcher` parses uncompressed and FlateDecode streams to locate matches and jump directly to matching pages.
+- **Pure-Kotlin `PdfTextSearcher` & Unit Tests**:
+  - Implemented `PdfTextSearcher.kt` in `com.example.core.text`.
+  - Added comprehensive unit tests in `PdfTextSearcherTest.kt` verifying uncompressed and compressed stream search.
+
+## [1.2.1] "Viewer Polish & Smart PDF Dark Mode": versionCode 4
+
+### Added
+- **Copy Text Action Bar Shortcut**: Added a dedicated copy icon in the top app bar for all text-based files (`txt`, `md`, `json`, code) to copy entire contents to clipboard with instant feedback.
+- **Deep Zoom Support**:
+  - Image viewer now supports up to 15x zoom factor via `ZoomSpec(maxZoomFactor = 15f)`, providing deep magnification comparable to Google Photos and gallery apps.
+  - PDF viewer now supports up to 10x zoom factor (`maxZoom = 10.0f`, `midZoom = 3.5f`), more than triple previous limits.
+- **Smart Hue-Preserving PDF Night Mode**:
+  - Implemented a specialized document color matrix for PDF night reading that inverts white page backgrounds to dark charcoal (`#1e1e1e`) and black text to comfortable off-white (`#e1e1e1`), while preserving natural color hues and skin tones so photographs and figures do not suffer from inverted "ghost" negative artifacts.
+- **Zoom-Out Below 1x for Text Files**: Added `minimum-scale=0.25` in viewport meta and enabled zoom controls across in-app browser previews (`txt`, `md`, `json`, code), allowing users to zoom out down to 25%.
+
+### Changed
+- **Default In-App Browser for Text Previews**: All text files (`txt`, `md`, `json`, etc.) now default directly to the premium in-app browser preview matching Claude design aesthetics.
+- **Cleaned Preview Menu**: Removed redundant "Show Syntax Code" toggle from 3-dot menus in text/markdown/json files.
+- **Image Preview Theme Adaptation & Clean Header**:
+  - Image background now adapts dynamically to system theme (light in light mode, dark in dark mode).
+  - Removed duplicate overlay showing image name and secondary 3-dots menu beneath the top header for a full edge-to-edge experience.
+- **Compact Single-Line Search Box**: Redesigned search bars across `SearchScreen`, `HomeScreen`, and `AllFilesScreen` into a compact, single-line 40.dp rounded pill design with integrated search and clear actions.
+
 ## [1.2.0] "Batch Operations & Verification": versionCode 3
 
 ### Added
