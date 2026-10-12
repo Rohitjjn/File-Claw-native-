@@ -450,6 +450,7 @@ fun FilePreviewScreen(
                                     value = inputPassword,
                                     onValueChange = { inputPassword = it },
                                     singleLine = true,
+                                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                                     label = { Text("Password") },
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -1861,6 +1862,7 @@ fun PdfPreview(
     var submittedPassword by remember { mutableStateOf<String?>(null) }
     var loadTrigger by remember { mutableStateOf(0) }
     var passwordError by remember { mutableStateOf(false) }
+    var pdfErrorMessage by remember { mutableStateOf<String?>(null) }
 
     if (requirePassword) {
         AlertDialog(
@@ -1874,6 +1876,7 @@ fun PdfPreview(
                         value = pdfPassword,
                         onValueChange = { pdfPassword = it; passwordError = false },
                         singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                         isError = passwordError,
                         label = { Text("Password") },
                         modifier = Modifier.fillMaxWidth()
@@ -1905,74 +1908,111 @@ fun PdfPreview(
             .fillMaxSize()
             .background(if (isNightMode) Color(0xFF121212) else Color(0xFFF4F4F9))
     ) {
-        androidx.compose.ui.viewinterop.AndroidView(
-            factory = { context ->
-                com.github.barteksc.pdfviewer.PDFView(context, null).apply {
-                    layoutParams = android.view.ViewGroup.LayoutParams(
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-            update = { pdfView ->
-                if ((!isReady && originalFile.exists()) || loadTrigger > 0) {
-                    val configurator = pdfView.fromFile(originalFile)
-                        .enableSwipe(true)
-                        .swipeHorizontal(false)
-                        .enableDoubletap(true)
-                        .defaultPage(scrollToPage ?: 0)
-                        .onPageChange { page, pageCount ->
-                            onPageChanged(page + 1, pageCount)
-                        }
-                        .enableAnnotationRendering(true)
-                        .password(submittedPassword)
-                        .scrollHandle(com.github.barteksc.pdfviewer.scroll.DefaultScrollHandle(pdfView.context))
-                        .enableAntialiasing(true)
-                        .spacing(0)
-                        .autoSpacing(false)
-                        .pageFitPolicy(com.github.barteksc.pdfviewer.util.FitPolicy.WIDTH)
-                        .nightMode(isNightMode)
-                        .onLoad {
-                            isReady = true
-                            requirePassword = false
-                            passwordError = false
-                            loadTrigger = 0
-                            if (scrollToPage != null) {
-                                onScrollToPageHandled()
-                            }
-                        }
-                        .onError { t ->
-                            if (t is com.shockwave.pdfium.PdfPasswordException || t.message?.contains("Password required") == true) {
-                                requirePassword = true
-                                if (!submittedPassword.isNullOrEmpty()) {
-                                    passwordError = true
-                                }
-                            } else {
-                                t.printStackTrace()
-                            }
-                        }
-                        .onTap {
-                            onSingleTap()
-                            true
-                        }
-                        
-                    configurator.load()
-                    if (loadTrigger > 0) loadTrigger = 0
-                } else if (isReady && scrollToPage != null) {
-                    pdfView.jumpTo(scrollToPage, true)
-                    onScrollToPageHandled()
-                }
-                
-                if (isReady) {
-                    pdfView.setNightMode(isNightMode)
+        if (pdfErrorMessage != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = "PDF Error",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(56.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Could not open PDF",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = pdfErrorMessage ?: "The PDF file appears corrupted or has an invalid structure.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = onBackClick) {
+                    Text("Go Back")
                 }
             }
-        )
-        
-        if (!isReady) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                com.example.ui.component.PremiumLoadingIndicator(text = "Loading perfect PDF...")
+        } else {
+            androidx.compose.ui.viewinterop.AndroidView(
+                factory = { context ->
+                    com.github.barteksc.pdfviewer.PDFView(context, null).apply {
+                        layoutParams = android.view.ViewGroup.LayoutParams(
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+                update = { pdfView ->
+                    if ((!isReady && originalFile.exists()) || loadTrigger > 0) {
+                        val configurator = pdfView.fromFile(originalFile)
+                            .enableSwipe(true)
+                            .swipeHorizontal(false)
+                            .enableDoubletap(true)
+                            .defaultPage(scrollToPage ?: 0)
+                            .onPageChange { page, pageCount ->
+                                onPageChanged(page + 1, pageCount)
+                            }
+                            .enableAnnotationRendering(true)
+                            .password(submittedPassword)
+                            .scrollHandle(com.github.barteksc.pdfviewer.scroll.DefaultScrollHandle(pdfView.context))
+                            .enableAntialiasing(true)
+                            .spacing(0)
+                            .autoSpacing(false)
+                            .pageFitPolicy(com.github.barteksc.pdfviewer.util.FitPolicy.WIDTH)
+                            .nightMode(isNightMode)
+                            .onLoad {
+                                isReady = true
+                                requirePassword = false
+                                passwordError = false
+                                loadTrigger = 0
+                                pdfErrorMessage = null
+                                if (scrollToPage != null) {
+                                    onScrollToPageHandled()
+                                }
+                            }
+                            .onError { t ->
+                                if (t is com.shockwave.pdfium.PdfPasswordException || t.message?.contains("Password required") == true) {
+                                    requirePassword = true
+                                    if (!submittedPassword.isNullOrEmpty()) {
+                                        passwordError = true
+                                    }
+                                } else {
+                                    pdfErrorMessage = t.localizedMessage ?: "This PDF file is corrupted or cannot be read."
+                                    t.printStackTrace()
+                                }
+                            }
+                            .onTap {
+                                onSingleTap()
+                                true
+                            }
+                            
+                        configurator.load()
+                        if (loadTrigger > 0) loadTrigger = 0
+                    } else if (isReady && scrollToPage != null) {
+                        pdfView.jumpTo(scrollToPage, true)
+                        onScrollToPageHandled()
+                    }
+                    
+                    if (isReady) {
+                        pdfView.setNightMode(isNightMode)
+                    }
+                }
+            )
+            
+            if (!isReady) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    com.example.ui.component.PremiumLoadingIndicator(text = "Loading PDF...")
+                }
             }
         }
     }

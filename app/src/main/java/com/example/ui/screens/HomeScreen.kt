@@ -299,6 +299,7 @@ fun HomeScreen(
                                     )
                                 }
                             },
+                            viewModel = viewModel,
                             modifier = Modifier.weight(1f)
                         )
                     }

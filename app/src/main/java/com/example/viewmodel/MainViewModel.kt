@@ -14,6 +14,7 @@ import com.example.core.format.FileKind
 import com.example.core.format.FormatDetector
 import com.example.core.format.FormatRegistry
 import com.example.core.format.Support
+import com.example.core.io.BatchFileOperations
 import com.example.core.io.TextEncoding
 import com.example.core.io.TextLoadException
 import com.example.core.io.TextLoader
@@ -762,6 +763,115 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 currentState is FileContentState.CsvSuccess && currentState.file.id == fileEntity.id ||
                 currentState is FileContentState.ZipSuccess && currentState.file.id == fileEntity.id) {
                 _currentFileState.value = FileContentState.Idle
+            }
+        }
+    }
+
+    fun deleteBatchFiles(
+        files: List<File>,
+        onResult: ((BatchFileOperations.BatchOperationResult) -> Unit)? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = BatchFileOperations.deleteFiles(files)
+            for (file in result.affectedFiles) {
+                repository.removeRecentFileByPath(file.absolutePath)
+                synchronized(allIndexedFiles) {
+                    allIndexedFiles.remove(file.absolutePath)
+                }
+            }
+            val current = _currentFileState.value.fileOrNull
+            if (current != null && result.affectedFiles.any { it.absolutePath == current.path }) {
+                _currentFileState.value = FileContentState.Idle
+            }
+            if (result.isAllSuccessful) {
+                _fileEvent.value = "Deleted ${result.successfulCount} item(s)"
+            } else if (result.isPartialFailure) {
+                _fileEvent.value = "Deleted ${result.successfulCount} item(s), ${result.failedCount} failed"
+            } else if (result.failedCount > 0) {
+                _fileEvent.value = "Delete failed: ${result.errors.firstOrNull() ?: "Unknown error"}"
+            }
+            withContext(Dispatchers.Main) {
+                onResult?.invoke(result)
+            }
+        }
+    }
+
+    fun copyBatchFiles(
+        files: List<File>,
+        destinationDir: File,
+        overwrite: Boolean = false,
+        onResult: ((BatchFileOperations.BatchOperationResult) -> Unit)? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = BatchFileOperations.copyFiles(files, destinationDir, overwrite)
+            for (file in result.affectedFiles) {
+                indexFile(file.absolutePath)
+            }
+            if (result.isAllSuccessful) {
+                _fileEvent.value = "Copied ${result.successfulCount} item(s) to ${destinationDir.name}"
+            } else if (result.isPartialFailure) {
+                _fileEvent.value = "Copied ${result.successfulCount} item(s), ${result.failedCount} failed"
+            } else if (result.failedCount > 0) {
+                _fileEvent.value = "Copy failed: ${result.errors.firstOrNull() ?: "Unknown error"}"
+            }
+            withContext(Dispatchers.Main) {
+                onResult?.invoke(result)
+            }
+        }
+    }
+
+    fun moveBatchFiles(
+        files: List<File>,
+        destinationDir: File,
+        overwrite: Boolean = false,
+        onResult: ((BatchFileOperations.BatchOperationResult) -> Unit)? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = BatchFileOperations.moveFiles(files, destinationDir, overwrite)
+            for (file in files) {
+                repository.removeRecentFileByPath(file.absolutePath)
+                synchronized(allIndexedFiles) {
+                    allIndexedFiles.remove(file.absolutePath)
+                }
+            }
+            for (destFile in result.affectedFiles) {
+                indexFile(destFile.absolutePath)
+            }
+            if (result.isAllSuccessful) {
+                _fileEvent.value = "Moved ${result.successfulCount} item(s) to ${destinationDir.name}"
+            } else if (result.isPartialFailure) {
+                _fileEvent.value = "Moved ${result.successfulCount} item(s), ${result.failedCount} failed"
+            } else if (result.failedCount > 0) {
+                _fileEvent.value = "Move failed: ${result.errors.firstOrNull() ?: "Unknown error"}"
+            }
+            withContext(Dispatchers.Main) {
+                onResult?.invoke(result)
+            }
+        }
+    }
+
+    fun deleteRecentFilesBatch(entities: List<RecentFileEntity>, deleteFromDisk: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val openFileId = _currentFileState.value.fileOrNull?.id
+            var resetOpen = false
+            for (entity in entities) {
+                repository.removeRecentFileById(entity.id)
+                if (openFileId == entity.id) resetOpen = true
+                if (deleteFromDisk) {
+                    val f = File(entity.path)
+                    if (f.exists()) f.delete()
+                    synchronized(allIndexedFiles) {
+                        allIndexedFiles.remove(entity.path)
+                    }
+                }
+            }
+            if (resetOpen) {
+                _currentFileState.value = FileContentState.Idle
+            }
+            _fileEvent.value = if (deleteFromDisk) {
+                "Deleted ${entities.size} file(s) from device"
+            } else {
+                "Removed ${entities.size} file(s) from history"
             }
         }
     }

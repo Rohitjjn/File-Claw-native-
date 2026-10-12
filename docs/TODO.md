@@ -20,9 +20,11 @@ Priorities: **P0** data loss / crash / security · **P1** high-impact feature or
 9. `applicationId` is still the AI-Studio-generated `com.aistudio.filesclaw.apxqzy`; JitPack repository is unscoped (supply-chain exposure).
 
 ## P0
-- [ ] Run the Quality Gate on a real machine and fix compile fallout (see KNOWN ISSUES 1).
-- [ ] Archive-password dialog should mask input (`PasswordVisualTransformation`).
-- [ ] `autoSaveDrafts` overwrites the original on exit; it's an auto-save, not a draft. Rename or write real drafts.
+- [x] Run the Quality Gate on a real machine and fix compile fallout (Verified: compile_applet and testDebugUnitTest green).
+- [x] Archive-password dialog masks input (`PasswordVisualTransformation`), PDF password also masked.
+- [x] `autoSaveDrafts` renamed to "Auto-save on Exit" with clear explanation; notification updated to "Changes saved to file."
+- [x] Surface corrupt-PDF errors cleanly with error display and back action instead of endless spinner.
+- [x] **Batch Selection Mode** in File Browser (`FileTreeComponent` and `AllFilesScreen`): multi-select files/directories with simultaneous batch Move, Copy, and Delete, backed by pure-Kotlin `BatchFileOperations` and unit tests.
 
 ## P1
 - [ ] **Write-back to source URI** for files opened from other apps (store `sourceUri` on `RecentFileEntity`, Room `Migration(3,4)`, `openOutputStream(uri, "wt")`).

@@ -31,8 +31,8 @@ android {
         applicationId = "com.aistudio.filesclaw.apxqzy"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = (project.findProperty("versionCode") ?: project.findProperty("appVersionCode"))?.toString()?.toIntOrNull() ?: 2
+        versionName = (project.findProperty("versionName") ?: project.findProperty("appVersionName"))?.toString() ?: "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -32,7 +33,7 @@ import com.example.ui.component.ClaudeCard
 import com.example.ui.component.FileIcon
 import com.example.ui.component.premiumLoadingPulse
 import com.example.viewmodel.MainViewModel
-
+import java.io.File
 import androidx.compose.foundation.lazy.rememberLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,7 +51,13 @@ fun AllFilesScreen(
 
     var isSearchActive by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
+    var showBatchDeleteDialog by remember { mutableStateOf(false) }
+    var deleteFromDiskChecked by remember { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
+
+    // Batch Selection Mode State
+    var isBatchMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf(setOf<Int>()) }
 
     val pickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -62,7 +69,55 @@ fun AllFilesScreen(
 
     Scaffold(
         topBar = {
-            if (isSearchActive) {
+            if (isBatchMode) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .statusBarsPadding()
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = {
+                                isBatchMode = false
+                                selectedIds = emptySet()
+                            }) {
+                                Icon(Icons.Default.Close, contentDescription = "Close batch selection")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "${selectedIds.size} selected",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(
+                                onClick = {
+                                    selectedIds = if (selectedIds.size == files.size) {
+                                        emptySet()
+                                    } else {
+                                        files.map { it.id }.toSet()
+                                    }
+                                }
+                            ) {
+                                Text(
+                                    text = if (selectedIds.size == files.size && files.isNotEmpty()) "Deselect All" else "Select All",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            } else if (isSearchActive) {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier.fillMaxWidth()
@@ -115,6 +170,16 @@ fun AllFilesScreen(
                                 tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
+                        IconButton(
+                            onClick = { isBatchMode = true },
+                            modifier = Modifier.testTag("all_files_batch_select_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Checklist,
+                                contentDescription = "Batch Select",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                         IconButton(onClick = { showConfirmDialog = true }) {
                             Icon(
                                 imageVector = Icons.Outlined.DeleteSweep,
@@ -138,7 +203,12 @@ fun AllFilesScreen(
                 state = rememberLazyListState(),
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp)
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 16.dp,
+                    bottom = if (isBatchMode && selectedIds.isNotEmpty()) 120.dp else 40.dp
+                )
             ) {
                 if (files.isEmpty()) {
                     item(contentType = "EmptyState") {
@@ -166,8 +236,16 @@ fun AllFilesScreen(
                     }
                 } else {
                     items(files, key = { it.id }, contentType = { "FileItem" }) { file ->
+                        val isSelected = selectedIds.contains(file.id)
+
                         ClaudeCard(
-                            onClick = { viewModel.openFile(file) }
+                            onClick = {
+                                if (isBatchMode) {
+                                    selectedIds = if (isSelected) selectedIds - file.id else selectedIds + file.id
+                                } else {
+                                    viewModel.openFile(file)
+                                }
+                            }
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -178,6 +256,17 @@ fun AllFilesScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.weight(1f)
                                 ) {
+                                    if (isBatchMode) {
+                                        Checkbox(
+                                            checked = isSelected,
+                                            onCheckedChange = { checked ->
+                                                selectedIds = if (checked) selectedIds + file.id else selectedIds - file.id
+                                            },
+                                            colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary),
+                                            modifier = Modifier.padding(end = 8.dp)
+                                        )
+                                    }
+
                                     val isLoading by remember(file.path) { androidx.compose.runtime.derivedStateOf { loadingFilePathState.value == file.path } }
                                     FileIcon(
                                         extension = file.extension, 
@@ -206,23 +295,25 @@ fun AllFilesScreen(
                                     }
                                 }
 
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(
-                                        onClick = { viewModel.deleteRecentFile(file) }
-                                    ) {
+                                if (!isBatchMode) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(
+                                            onClick = { viewModel.deleteRecentFile(file) }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Close,
+                                                contentDescription = "Remove from history",
+                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
                                         Icon(
-                                            imageVector = Icons.Outlined.Close,
-                                            contentDescription = "Remove from history",
-                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                            imageVector = Icons.Default.ChevronRight,
+                                            contentDescription = "Open Preview",
+                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronRight,
-                                        contentDescription = "Open Preview",
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
                                 }
                             }
                         }
@@ -230,9 +321,113 @@ fun AllFilesScreen(
                 }
             }
 
-            // Bottom space instead of capsule button
-            Spacer(modifier = Modifier.height(24.dp))
+            // Bottom Batch Action Bar
+            AnimatedVisibility(
+                visible = isBatchMode && selectedIds.isNotEmpty(),
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 8.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${selectedIds.size} files selected",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Row {
+                            TextButton(
+                                onClick = {
+                                    val selectedEntities = files.filter { selectedIds.contains(it.id) }
+                                    viewModel.deleteRecentFilesBatch(selectedEntities, deleteFromDisk = false)
+                                    isBatchMode = false
+                                    selectedIds = emptySet()
+                                }
+                            ) {
+                                Text("Remove History", fontSize = 13.sp)
+                            }
+
+                            Button(
+                                onClick = { showBatchDeleteDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Delete", fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    // Batch Delete Dialog
+    if (showBatchDeleteDialog) {
+        val selectedEntities = files.filter { selectedIds.contains(it.id) }
+
+        AlertDialog(
+            onDismissRequest = { showBatchDeleteDialog = false },
+            title = { Text("Delete ${selectedEntities.size} File(s)?") },
+            text = {
+                Column {
+                    Text("Select how you want to remove the selected files:")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { deleteFromDiskChecked = !deleteFromDiskChecked }
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Checkbox(
+                            checked = deleteFromDiskChecked,
+                            onCheckedChange = { deleteFromDiskChecked = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Also delete permanently from device storage", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                            Text("Warning: cannot be undone", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteRecentFilesBatch(selectedEntities, deleteFromDisk = deleteFromDiskChecked)
+                        showBatchDeleteDialog = false
+                        isBatchMode = false
+                        selectedIds = emptySet()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(if (deleteFromDiskChecked) "Delete from Disk" else "Remove from History")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (showConfirmDialog) {

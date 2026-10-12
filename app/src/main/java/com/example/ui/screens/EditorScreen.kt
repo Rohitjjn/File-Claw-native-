@@ -99,7 +99,7 @@ fun EditorScreen(
                 activeFileEntity?.let {
                     viewModel.saveTextFile(it, textValue.text)
                 }
-                viewModel.showNotification("Draft auto-saved successfully!")
+                viewModel.showNotification("Changes saved to file.")
                 onBackClick()
             } else {
                 showUnsavedDialog = true

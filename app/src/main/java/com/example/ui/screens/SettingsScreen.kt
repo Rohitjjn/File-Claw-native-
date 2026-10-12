@@ -190,8 +190,8 @@ fun SettingsScreen(
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                     SettingsToggleRow(
-                        title = "Auto-save Drafts",
-                        description = "Restore unsaved edits later",
+                        title = "Auto-save on Exit",
+                        description = "Save edits directly to the original file when exiting the editor",
                         checked = settings.autoSaveDrafts,
                         onCheckedChange = { viewModel.updateSettings(settings.copy(autoSaveDrafts = it)) }
                     )

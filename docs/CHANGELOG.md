@@ -4,6 +4,28 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [1.2.0] "Batch Operations & Verification": versionCode 3
+
+### Added
+- **Batch Selection Mode in File Browser (`FileTreeComponent`)**:
+  - Multi-select mode activated via top "Select" button or long-pressing any file or directory.
+  - Interactive checkboxes with smooth selection state management and "Select All" / "Deselect All".
+  - **Simultaneous Batch Delete**: Deletes multiple selected files and directories with confirmation preview dialog and instant database/cache cleanup.
+  - **Simultaneous Batch Copy**: Non-destructive batch copy with recursive directory support, unique renaming collision safeguards, and interactive destination folder picker.
+  - **Simultaneous Batch Move**: Atomic move with cross-filesystem fallback, cycle/self-containment validation, and automatic database index path synchronization.
+- **Batch Selection Mode in Recent History (`AllFilesScreen`)**:
+  - Multi-select files in history with options to batch remove from history or permanently delete from disk.
+- **Pure-Kotlin `BatchFileOperations` Engine & Unit Tests**:
+  - `BatchFileOperations.kt` with thread-safe copy, move, and recursive delete routines.
+  - Full unit test coverage in `BatchFileOperationsTest.kt` verifying deletion, unique copy name preservation, cycle prevention, and directory moves.
+- **GitHub Actions Release Workflow**:
+  - Added `.github/workflows/build-and-release.yml` with `workflow_dispatch` manual trigger for parameterized versioning (`version_name`, `version_code`) and automated release artifact publishing.
+
+### Fixed
+- **Corrupt PDF Feedback**: Replaced endless loading spinner with honest error UI displaying exact failure diagnostics and a "Go Back" action.
+- **Password Field Masking**: Protected user privacy in archive password and PDF password dialogs using `PasswordVisualTransformation`.
+- **Honest Auto-Save Messaging**: Renamed "Auto-save Drafts" to "Auto-save on Exit" in Settings and updated editor notification from "Draft auto-saved" to "Changes saved to file" so users know changes write directly to disk.
+
 ## [1.1.0] "Foundation & Safety": versionCode 2
 
 ### Scoreboard (v1.0 → v1.1.0)
