@@ -20,6 +20,7 @@ no Maven access). See `TODO.md` → KNOWN ISSUES.
   - Full unit test coverage in `BatchFileOperationsTest.kt` verifying deletion, unique copy name preservation, cycle prevention, and directory moves.
 - **GitHub Actions Release Workflow**:
   - Added `.github/workflows/build-and-release.yml` with `workflow_dispatch` manual trigger for parameterized versioning (`version_name`, `version_code`) and automated release artifact publishing.
+  - Fixed runner initialization error (`Failed to find package 'tools'`) by removing deprecated `android-actions/setup-android@v3`, configuring native runner Android SDK and `cmdline-tools`, adopting `gradle/actions/setup-gradle@v4`, and adding automated fallback keystore generation and GitHub CLI release publishing.
 
 ### Fixed
 - **Corrupt PDF Feedback**: Replaced endless loading spinner with honest error UI displaying exact failure diagnostics and a "Go Back" action.
