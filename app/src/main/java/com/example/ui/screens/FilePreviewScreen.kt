@@ -118,7 +118,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import com.tom_roush.pdfbox.pdmodel.PDDocument
 import androidx.compose.foundation.lazy.rememberLazyListState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -133,19 +132,7 @@ fun FilePreviewScreen(
     val expandedZipPaths by viewModel.expandedZipPaths.collectAsState()
     val settings by viewModel.settingsState.collectAsState()
     
-    val activeFile = remember(fileState) {
-        when (val state = fileState) {
-            is MainViewModel.FileContentState.TextSuccess -> state.file
-            is MainViewModel.FileContentState.CsvSuccess -> state.file
-            is MainViewModel.FileContentState.ZipSuccess -> state.file
-            is MainViewModel.FileContentState.ImageSuccess -> state.file
-            is MainViewModel.FileContentState.PdfSuccess -> state.file
-            is MainViewModel.FileContentState.DocxSuccess -> state.file
-            is MainViewModel.FileContentState.MediaSuccess -> state.file
-            is MainViewModel.FileContentState.BinarySuccess -> state.file
-            else -> null
-        }
-    }
+    val activeFile = remember(fileState) { fileState.fileOrNull }
 
     var isBarsVisible by remember { mutableStateOf(true) }
 
@@ -156,6 +143,9 @@ fun FilePreviewScreen(
     var isWebRenderActive by remember(activeFile) {
         mutableStateOf(isHtmlFile)
     }
+
+    // HTML files are untrusted input: scripts stay off until the user opts in for this file.
+    var htmlScriptsEnabled by remember(activeFile) { mutableStateOf(false) }
 
     val canBeRenderedInWeb = remember(activeFile) {
         activeFile?.extension?.lowercase() in setOf("html", "htm", "js", "ts", "css", "xml", "txt", "json", "md", "pdf")
@@ -173,8 +163,12 @@ fun FilePreviewScreen(
     val context = LocalContext.current
 
     // Restore previously opened file state on recreate
+    // Attempted once per screen instance (process-death recovery). Without the flag, "Remove from history"
+    // set the state to Idle and this effect immediately re-opened the same file.
+    var restoreAttempted by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(fileState) {
-        if (fileState is MainViewModel.FileContentState.Idle) {
+        if (fileState is MainViewModel.FileContentState.Idle && !restoreAttempted) {
+            restoreAttempted = true
             val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
             val lastPath = prefs.getString("last_previewed_file_path", null)
             if (lastPath != null) {
@@ -213,17 +207,7 @@ fun FilePreviewScreen(
                 enter = androidx.compose.animation.slideInVertically(initialOffsetY = { -it }) + androidx.compose.animation.fadeIn(),
                 exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it }) + androidx.compose.animation.fadeOut()
             ) {
-                val titleText = when (val state = fileState) {
-                    is MainViewModel.FileContentState.TextSuccess -> state.file.name
-                    is MainViewModel.FileContentState.CsvSuccess -> state.file.name
-                    is MainViewModel.FileContentState.ZipSuccess -> state.file.name
-                    is MainViewModel.FileContentState.ImageSuccess -> state.file.name
-                    is MainViewModel.FileContentState.PdfSuccess -> state.file.name
-                    is MainViewModel.FileContentState.DocxSuccess -> state.file.name
-                    is MainViewModel.FileContentState.MediaSuccess -> state.file.name
-                    is MainViewModel.FileContentState.BinarySuccess -> state.file.name
-                    else -> "Preview"
-                }
+                val titleText = fileState.fileOrNull?.name ?: "Preview"
                 
                 var showMenu by remember { mutableStateOf(false) }
                 val context = LocalContext.current
@@ -363,9 +347,7 @@ fun FilePreviewScreen(
         },
         bottomBar = {
             val isEditable = when (val state = fileState) {
-                is MainViewModel.FileContentState.TextSuccess -> {
-                    state.file.extension.lowercase() != "zip" && state.file.extension.lowercase() != "csv"
-                }
+                is MainViewModel.FileContentState.TextSuccess -> state.editable
                 else -> false
             }
             if (isEditable) {
@@ -488,29 +470,53 @@ fun FilePreviewScreen(
                     )
                 }
                 is MainViewModel.FileContentState.TextSuccess -> {
-                    if (isWebRenderActive) {
-                        WebViewPreview(
-                            fileEntity = state.file,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        // Check if it's dynamic markdown or standard text code
-                        if (state.file.extension.lowercase() == "md") {
-                            MarkdownPreview(
-                                markdownText = state.content,
-                                fileEntity = state.file,
-                                fontSizeSetting = settings.fontSize,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            CodePreview(
-                                codeText = state.content,
-                                fileEntity = state.file,
-                                fontSizeSetting = settings.fontSize,
-                                wrapSetting = settings.wordWrap,
-                                showLineNumbers = settings.showLineNumbers,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        val notice = state.readOnlyReason
+                            ?: if (state.truncated) {
+                                "Showing the first ${state.content.length} characters of a ${formatFileSize(state.totalBytes)} file. " +
+                                    "Read-only, so the rest of the file can't be overwritten."
+                            } else null
+                        if (notice != null) NoticeBanner(notice)
+                        if (isHtmlFile && isWebRenderActive && !htmlScriptsEnabled) {
+                            Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(start = 16.dp, end = 4.dp)
+                                ) {
+                                    Text(
+                                        "Scripts are off for safety.",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(onClick = { htmlScriptsEnabled = true }) { Text("Run scripts") }
+                                }
+                            }
+                        }
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                            if (isWebRenderActive) {
+                                WebViewPreview(
+                                    fileEntity = state.file,
+                                    allowScripts = htmlScriptsEnabled,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else if (state.file.extension.lowercase() == "md") {
+                                MarkdownPreview(
+                                    markdownText = state.content,
+                                    fileEntity = state.file,
+                                    fontSizeSetting = settings.fontSize,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                CodePreview(
+                                    codeText = state.content,
+                                    fileEntity = state.file,
+                                    fontSizeSetting = settings.fontSize,
+                                    wrapSetting = settings.wordWrap,
+                                    showLineNumbers = settings.showLineNumbers,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
                 }
@@ -519,6 +525,10 @@ fun FilePreviewScreen(
                         csvRows = state.rows,
                         fileEntity = state.file,
                         viewModel = viewModel,
+                        editable = state.editable,
+                        notice = state.readOnlyReason
+                            ?: if (state.truncated) "Large file: showing the first ${state.rows.size} rows. Read-only, so nothing is lost on save." else null,
+                        onDiscardAndExit = { handleBack() },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -596,13 +606,22 @@ fun FilePreviewScreen(
                     }
                 }
                 is MainViewModel.FileContentState.BinarySuccess -> {
-                    HexViewer(
-                        hexRows = state.hexRows,
-                        asciiRows = state.asciiRows,
-                        fileEntity = state.file,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        val header = listOfNotNull(state.label?.let { "Detected: $it" }, state.note).joinToString(" \u2022 ")
+                        if (header.isNotEmpty()) NoticeBanner(header)
+                        HexViewer(
+                            hexRows = state.hexRows,
+                            asciiRows = state.asciiRows,
+                            fileEntity = state.file,
+                            modifier = Modifier.weight(1f).fillMaxWidth()
+                        )
+                    }
                 }
+                is MainViewModel.FileContentState.SvgSuccess -> SvgViewer(state.file, Modifier.fillMaxSize())
+                is MainViewModel.FileContentState.SqliteSuccess -> SqliteViewer(state.file, Modifier.fillMaxSize())
+                is MainViewModel.FileContentState.FontSuccess -> FontViewer(state.file, Modifier.fillMaxSize())
+                is MainViewModel.FileContentState.Model3dSuccess -> Model3dViewer(state.mesh, state.label, Modifier.fillMaxSize())
+                is MainViewModel.FileContentState.HtmlSuccess -> HtmlStringViewer(state.html, Modifier.fillMaxSize())
                 else -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No file selected", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
@@ -723,255 +742,8 @@ fun PropertyItem(label: String, value: String) {
     }
 }
 
-sealed class MarkdownElement {
-    data class Header(val level: Int, val text: String) : MarkdownElement()
-    data class ListItem(val text: String) : MarkdownElement()
-    object Rule : MarkdownElement()
-    data class Table(val rows: List<String>) : MarkdownElement()
-    data class Paragraph(val text: String) : MarkdownElement()
-    data class CodeBlock(val language: String, val content: String) : MarkdownElement()
-    data class Blockquote(val text: String) : MarkdownElement()
-}
 
 // Helper: Fast and robust code syntax highlighter
-@Composable
-fun highlightCode(code: String, primaryColor: Color): androidx.compose.ui.text.AnnotatedString {
-    val keywordStyle = SpanStyle(color = primaryColor, fontWeight = FontWeight.Bold)
-    val typeStyle = SpanStyle(color = Color(0xFF3B67A4), fontWeight = FontWeight.SemiBold)
-    val annotationStyle = SpanStyle(color = Color(0xFF7F52FF), fontWeight = FontWeight.SemiBold)
-    val commentStyle = SpanStyle(color = Color(0xFF7B7875), fontStyle = FontStyle.Italic)
-    val wordRegex = Regex("[a-zA-Z0-9_]+|[^a-zA-Z0-9_]")
-
-    return remember(code, primaryColor) {
-        val lines = code.split("\n")
-        buildAnnotatedString {
-            lines.forEachIndexed { index, line ->
-                if (line.trim().startsWith("//") || line.trim().startsWith("/*") || line.trim().startsWith("*") || line.trim().startsWith("#")) {
-                    withStyle(commentStyle) { append(line) }
-                } else {
-                    val matches = wordRegex.findAll(line)
-                    matches.forEach { match ->
-                        val word = match.value
-                        when (word) {
-                            "val", "var", "fun", "class", "package", "import", "private", "override", "suspend", "interface", "null", "if", "else", "when", "return", "true", "false", "for", "while", "const", "def", "import", "from", "as", "let", "function" -> {
-                                withStyle(keywordStyle) { append(word) }
-                            }
-                            "String", "Int", "Boolean", "Long", "Double", "Color", "MaterialTheme", "Composable", "Modifier", "RecentFileEntity", "RecentFileDao", "Flow", "List", "ArrayList", "Map", "Set" -> {
-                                withStyle(typeStyle) { append(word) }
-                            }
-                            "Annotation", "Database", "Entity", "PrimaryKey", "Dao", "Query", "Insert" -> {
-                                withStyle(annotationStyle) { append(word) }
-                            }
-                            else -> append(word)
-                        }
-                    }
-                }
-                if (index < lines.lastIndex) {
-                    append("\n")
-                }
-            }
-        }
-    }
-}
-
-// Helper: Custom inline Markdown parser
-fun parseInlineMarkdown(text: String, primaryColor: Color, onBackgroundColor: Color): androidx.compose.ui.text.AnnotatedString {
-    return buildAnnotatedString {
-        var i = 0
-        while (i < text.length) {
-            when {
-                text.startsWith("***", i) -> {
-                    val endIdx = text.indexOf("***", i + 3)
-                    if (endIdx != -1) {
-                        withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) {
-                            append(text.substring(i + 3, endIdx))
-                        }
-                        i = endIdx + 3
-                    } else {
-                        append("***")
-                        i += 3
-                    }
-                }
-                text.startsWith("**", i) -> {
-                    val endIdx = text.indexOf("**", i + 2)
-                    if (endIdx != -1) {
-                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                            append(text.substring(i + 2, endIdx))
-                        }
-                        i = endIdx + 2
-                    } else {
-                        append("**")
-                        i += 2
-                    }
-                }
-                text.startsWith("*", i) -> {
-                    val endIdx = text.indexOf("*", i + 1)
-                    if (endIdx != -1) {
-                        withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                            append(text.substring(i + 1, endIdx))
-                        }
-                        i = endIdx + 1
-                    } else {
-                        append("*")
-                        i += 1
-                    }
-                }
-                text.startsWith("`", i) -> {
-                    val endIdx = text.indexOf("`", i + 1)
-                    if (endIdx != -1) {
-                        withStyle(
-                            SpanStyle(
-                                fontFamily = FontFamily.Monospace,
-                                color = primaryColor,
-                                background = primaryColor.copy(alpha = 0.08f),
-                                fontWeight = FontWeight.Medium
-                            )
-                        ) {
-                            append(text.substring(i + 1, endIdx))
-                        }
-                        i = endIdx + 1
-                    } else {
-                        append("`")
-                        i += 1
-                    }
-                }
-                text.startsWith("[", i) -> {
-                    val midIdx = text.indexOf("]", i + 1)
-                    if (midIdx != -1 && text.startsWith("(", midIdx + 1)) {
-                        val endIdx = text.indexOf(")", midIdx + 2)
-                        if (endIdx != -1) {
-                            val linkText = text.substring(i + 1, midIdx)
-                            withStyle(
-                                SpanStyle(
-                                    color = primaryColor,
-                                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            ) {
-                                append(linkText)
-                            }
-                            i = endIdx + 1
-                        } else {
-                            append("[")
-                            i += 1
-                        }
-                    } else {
-                        append("[")
-                        i += 1
-                    }
-                }
-                else -> {
-                    append(text[i])
-                    i++
-                }
-            }
-        }
-    }
-}
-
-// Premium Code Block Renderer with integrated Copy button and dynamic Copied transitions
-@Composable
-fun MarkdownCodeBlockRenderer(
-    language: String,
-    content: String,
-    fontSize: androidx.compose.ui.unit.TextUnit
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
-    var isCopied by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isCopied) {
-        if (isCopied) {
-            kotlinx.coroutines.delay(1800)
-            isCopied = false
-        }
-    }
-
-    val highlightedText = highlightCode(code = content, primaryColor = MaterialTheme.colorScheme.primary)
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF4F4F4)
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
-        Column {
-            // Header Action Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Code,
-                        contentDescription = "Code Block",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = language.ifEmpty { "Code" }.uppercase(),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                TextButton(
-                    onClick = {
-                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(content))
-                        isCopied = true
-                    },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.height(28.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (isCopied) Icons.Outlined.Check else Icons.Outlined.ContentCopy,
-                            contentDescription = if (isCopied) "Copied" else "Copy Code",
-                            modifier = Modifier.size(14.dp),
-                            tint = if (isCopied) Color(0xFF427A5B) else MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (isCopied) "Copied!" else "Copy",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isCopied) Color(0xFF427A5B) else MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
-            // Code Content Workspace
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(14.dp)
-            ) {
-                Text(
-                    text = highlightedText,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = fontSize,
-                    lineHeight = fontSize * 1.5f,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-    }
-}
-
-// 1. HIGH-FIDELITY MARKDOWN PREVIEW COMPONENT
 @Composable
 fun MarkdownPreview(
     markdownText: String,
@@ -987,7 +759,10 @@ fun MarkdownPreview(
         val htmlContent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             val parser = org.intellij.markdown.parser.MarkdownParser(org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor())
             val parsedTree = parser.buildMarkdownTreeFromString(markdownText)
-            val rawHtml = org.intellij.markdown.html.HtmlGenerator(markdownText, parsedTree, org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor()).generateHtml()
+            val rawHtml = com.example.core.text.HtmlSanitizer.sanitize(
+                org.intellij.markdown.html.HtmlGenerator(markdownText, parsedTree, org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor()).generateHtml(),
+                keepImages = true
+            )
 
             val fontSize = when (fontSizeSetting) {
                 "Small" -> "14px"
@@ -1255,6 +1030,8 @@ fun MarkdownPreview(
                     android.webkit.WebView(context).apply {
                         settings.apply {
                             javaScriptEnabled = true
+                            allowFileAccess = false
+                            allowContentAccess = false
                             domStorageEnabled = true
                             loadWithOverviewMode = true
                             useWideViewPort = true
@@ -1307,78 +1084,6 @@ class WebAppInterface(private val context: android.content.Context) {
     }
 }
 
-@Composable
-fun MarkdownTableRenderer(tableRows: List<String>) {
-    val data = remember(tableRows) {
-        // Filter separating alignment line (e.g. |:---|:---|)
-        val rowsToRender = tableRows.filterIndexed { index, _ -> index != 1 }
-        rowsToRender.map { row ->
-            val rawParts = row.split("|").map { it.trim() }
-            // Drop leading empty element if row starts with a pipe
-            val partsTemp = if (rawParts.isNotEmpty() && rawParts.first().isEmpty()) rawParts.drop(1) else rawParts
-            // Drop trailing empty element if row ends with a pipe
-            val finalParts = if (partsTemp.isNotEmpty() && partsTemp.last().isEmpty()) partsTemp.dropLast(1) else partsTemp
-            finalParts
-        }
-    }
-
-    if (data.isEmpty()) return
-
-    val scrollState = rememberScrollState()
-    val isDark = MaterialTheme.colorScheme.background == com.example.ui.theme.ClaudeOnyx
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .horizontalScroll(scrollState)
-    ) {
-        Column {
-            data.forEachIndexed { rIdx, row ->
-                val isHeader = (rIdx == 0)
-                val rowColor = if (isHeader) {
-                    if (isDark) Color(0xFF1E3A5F) else Color(0xFFE6F0FA)
-                } else if (rIdx % 2 == 1) {
-                    if (isDark) Color(0xFF181C24) else Color(0xFFF7F9FC)
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
-
-                Row(
-                    modifier = Modifier
-                        .background(rowColor)
-                        .height(IntrinsicSize.Min)
-                ) {
-                    row.forEachIndexed { cIdx, cell ->
-                        Box(
-                            modifier = Modifier
-                                .width(150.dp)
-                                .fillMaxHeight()
-                                .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(
-                                text = cell,
-                                fontSize = 13.sp,
-                                fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isHeader) {
-                                    if (isDark) Color(0xFF90CAF9) else Color(0xFF1A56B1)
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// 2. MONOSPACE SYNTAX HIGHLIGHTED CODE COMPONENT
 @Composable
 fun CodePreview(
     codeText: String,
@@ -1545,6 +1250,8 @@ fun CodePreview(
                 factory = { ctx ->
                     android.webkit.WebView(ctx).apply {
                         settings.javaScriptEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
                         settings.builtInZoomControls = true
                         settings.displayZoomControls = false
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -1564,15 +1271,49 @@ fun CsvPreview(
     csvRows: List<List<String>>,
     fileEntity: RecentFileEntity,
     viewModel: MainViewModel,
+    editable: Boolean,
+    notice: String?,
+    onDiscardAndExit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isNightMode = androidx.compose.foundation.isSystemInDarkTheme()
 
+    // Edits are held here and written only when the user taps Save. The old code overwrote the file on
+    // every keystroke, which for .xlsx also flattened the workbook to one sheet of plain values.
+    var pendingRows by remember { mutableStateOf<List<List<String>>?>(null) }
+    var showDiscardDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(csvRows) { pendingRows = null }
+
+    androidx.activity.compose.BackHandler(enabled = pendingRows != null) { showDiscardDialog = true }
+
+    if (showDiscardDialog) {
+        AlertDialog(
+            onDismissRequest = { showDiscardDialog = false },
+            title = { Text("Unsaved changes") },
+            text = { Text("Save your edits to ${fileEntity.name} before leaving?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRows?.let { viewModel.saveSpreadsheetFile(fileEntity, it) }
+                    showDiscardDialog = false
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { showDiscardDialog = false }) { Text("Cancel") }
+                    TextButton(onClick = {
+                        pendingRows = null
+                        showDiscardDialog = false
+                        onDiscardAndExit()
+                    }) { Text("Discard") }
+                }
+            }
+        )
+    }
+
     Column(modifier = modifier) {
-        // Tag Header
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
         ) {
             Surface(
                 shape = RoundedCornerShape(4.dp),
@@ -1593,13 +1334,28 @@ fun CsvPreview(
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
             )
             Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = "Edit Mode",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold
-            )
+            val dirty = pendingRows
+            if (!editable) {
+                Text(
+                    text = "View only",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    fontWeight = FontWeight.Bold
+                )
+            } else if (dirty != null) {
+                TextButton(onClick = { viewModel.saveSpreadsheetFile(fileEntity, dirty) }) {
+                    Text("Save", fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Text(
+                    text = "Edit Mode",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
+        if (notice != null) NoticeBanner(notice)
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
         // Optimized Compose Excel View with x-spreadsheet via WebView
@@ -1621,8 +1377,9 @@ fun CsvPreview(
                 android.webkit.WebView(ctx).apply {
                     settings.apply {
                         javaScriptEnabled = true
-                        allowFileAccess = true
-                        allowContentAccess = true
+                        // The page and scripts come from file:///android_asset/, which is always readable.
+                        allowFileAccess = false
+                        allowContentAccess = false
                         domStorageEnabled = true
                         builtInZoomControls = true
                         displayZoomControls = false
@@ -1632,6 +1389,7 @@ fun CsvPreview(
                     addJavascriptInterface(object : Any() {
                         @android.webkit.JavascriptInterface
                         fun onDataChanged(jsonStr: String) {
+                            if (!editable) return
                             try {
                                 val parser = org.json.JSONArray(jsonStr)
                                 val newRows = mutableListOf<List<String>>()
@@ -1643,9 +1401,9 @@ fun CsvPreview(
                                     }
                                     newRows.add(row)
                                 }
-                                viewModel.saveSpreadsheetFile(fileEntity, newRows)
+                                pendingRows = newRows
                             } catch (e: Exception) {
-                                e.printStackTrace()
+                                // Malformed payload from the page: keep the last good pending state.
                             }
                         }
                     }, "Android")
@@ -1673,7 +1431,8 @@ fun CsvPreview(
                             <div id="x-spreadsheet-demo"></div>
                             <script>
                                 var s = x_spreadsheet('#x-spreadsheet-demo', {
-                                    showToolbar: true,
+                                    mode: '${if (editable) "edit" else "read"}',
+                                    showToolbar: ${if (editable) "true" else "false"},
                                     showGrid: true,
                                     view: {
                                         height: () => document.documentElement.clientHeight,
@@ -1948,122 +1707,6 @@ fun buildNodesList(
     if (isExpanded || node.path.isEmpty()) {
         node.children.forEach { child ->
             buildNodesList(child, if (node.path.isEmpty()) 0 else currentDepth + 1, expandedPaths, result)
-        }
-    }
-}
-
-@Composable
-fun ZoomableContainer(
-    maxScale: Float = 5f,
-    modifier: Modifier = Modifier,
-    onVerticalScroll: ((Float) -> Unit)? = null,
-    onSingleTap: (() -> Unit)? = null,
-    content: @Composable BoxScope.(scale: Float, scrollEnabled: Boolean) -> Unit
-) {
-    val coroutineScope = rememberCoroutineScope()
-    
-    var scale by remember { mutableStateOf(1f) }
-    var offsetX by remember { mutableStateOf(0f) }
-    var offsetY by remember { mutableStateOf(0f) }
-    
-    var pointerCount by remember { mutableStateOf(0) }
-    
-    BoxWithConstraints(
-        modifier = modifier
-            .clipToBounds()
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val activeFingers = event.changes.count { it.pressed }
-                        if (pointerCount != activeFingers) {
-                            pointerCount = activeFingers
-                        }
-                    }
-                }
-            }
-    ) {
-        val density = LocalDensity.current
-        val widthPx = with(density) { maxWidth.toPx() }
-        val heightPx = with(density) { maxHeight.toPx() }
-        
-        val isZoomed = scale > 1.05f
-        val scrollEnabled = !isZoomed && pointerCount < 2
-        
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offsetX
-                    translationY = offsetY
-                }
-                // Stable double-tap and single-tap gesture binding, never cancelled during zooms
-                .pointerInput(onSingleTap) {
-                    detectTapGestures(
-                        onDoubleTap = { tapOffset ->
-                            val targetScale = if (scale > 1.1f) 1f else 2.5f
-                            val targetOffsetX = if (targetScale == 1f) 0f else {
-                                val centerX = size.width / 2f
-                                val dx = centerX - tapOffset.x
-                                val maxTx = (widthPx * (targetScale - 1f)) / 2f
-                                (dx * targetScale).coerceIn(-maxTx, maxTx)
-                            }
-                            val targetOffsetY = if (targetScale == 1f) 0f else {
-                                val centerY = size.height / 2f
-                                val dy = centerY - tapOffset.y
-                                val maxTy = (heightPx * (targetScale - 1f)) / 2f
-                                (dy * targetScale).coerceIn(-maxTy, maxTy)
-                            }
-                            coroutineScope.launch {
-                                val startScale = scale
-                                val startOffsetX = offsetX
-                                val startOffsetY = offsetY
-                                androidx.compose.animation.core.animate(
-                                    initialValue = 0f,
-                                    targetValue = 1f,
-                                    animationSpec = tween(100, easing = FastOutSlowInEasing)
-                                ) { fraction, _ ->
-                                    scale = startScale + (targetScale - startScale) * fraction
-                                    offsetX = startOffsetX + (targetOffsetX - startOffsetX) * fraction
-                                    offsetY = startOffsetY + (targetOffsetY - startOffsetY) * fraction
-                                }
-                            }
-                        },
-                        onTap = {
-                            onSingleTap?.invoke()
-                        }
-                    )
-                }
-                // Persistent transform gesture stream (pinch & rotate & pan), never disconnected across recompositions
-                .pointerInput(onVerticalScroll) {
-                    detectTransformGestures(panZoomLock = false) { _, pan, zoom, _ ->
-                        val newScale = (scale * zoom).coerceIn(1f, maxScale)
-                        val maxTx = (widthPx * (newScale - 1f)) / 2f
-                        val maxTy = (heightPx * (newScale - 1f)) / 2f
-                        
-                        val nextOffsetX = if (newScale == 1f) 0f else (offsetX + pan.x).coerceIn(-maxTx, maxTx)
-                        
-                        // Handle vertical translation smoothly and programmatically scroll only when scale is 1
-                        val nextOffsetY = if (newScale == 1f) {
-                            0f
-                        } else {
-                            (offsetY + pan.y).coerceIn(-maxTy, maxTy)
-                        }
-
-                        // Propagate scroll to parent container ONLY if scale is 1 and dragging vertically
-                        if (newScale == 1f && pan.y != 0f && onVerticalScroll != null) {
-                            onVerticalScroll(-pan.y)
-                        }
-                        
-                        scale = newScale
-                        offsetX = nextOffsetX
-                        offsetY = nextOffsetY
-                    }
-                }
-        ) {
-            content(scale, scrollEnabled)
         }
     }
 }
@@ -2609,6 +2252,7 @@ private fun shareFile(context: android.content.Context, file: File, extension: S
 fun WebViewPreview(
     fileEntity: RecentFileEntity,
     modifier: Modifier = Modifier,
+    allowScripts: Boolean = false,
     onSingleTap: () -> Unit = {}
 ) {
     val isDark = MaterialTheme.colorScheme.background == com.example.ui.theme.ClaudeOnyx
@@ -2652,34 +2296,45 @@ fun WebViewPreview(
             AndroidView(
                 factory = { ctx ->
                     android.webkit.WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
+                        // HTML files are untrusted: scripts start off (see allowScripts), no bridge object is
+                        // exposed to them, and navigation away from local files is blocked.
+                        val htmlPage = fileEntity.extension.lowercase().let { it == "html" || it == "htm" }
+                        settings.javaScriptEnabled = !htmlPage
+                        settings.domStorageEnabled = !htmlPage
                         settings.builtInZoomControls = true
                         settings.displayZoomControls = false
                         settings.useWideViewPort = true
                         settings.loadWithOverviewMode = true
-                        
-                        settings.allowFileAccess = true
-                        settings.allowContentAccess = true
-                        
-                        addJavascriptInterface(object {
-                            @android.webkit.JavascriptInterface
-                            fun performSingleTap() {
-                                mainHandler.post {
-                                    onSingleTap()
+
+                        // file:///android_asset is always readable; real file access is only for local HTML.
+                        settings.allowFileAccess = htmlPage
+                        settings.allowContentAccess = false
+
+                        if (!htmlPage) {
+                            addJavascriptInterface(object {
+                                @android.webkit.JavascriptInterface
+                                fun performSingleTap() {
+                                    mainHandler.post {
+                                        onSingleTap()
+                                    }
                                 }
-                            }
-                        }, "Android")
+                            }, "Android")
+                        }
 
                         setBackgroundColor(if (isDark) 0xFF181715.toInt() else 0xFFFAF9F5.toInt())
-                        webViewClient = android.webkit.WebViewClient()
+                        webViewClient = object : android.webkit.WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                view: android.webkit.WebView,
+                                request: android.webkit.WebResourceRequest
+                            ): Boolean = request.url.scheme != "file"
+                        }
                         webChromeClient = android.webkit.WebChromeClient()
                     }
                 },
                 update = { webView ->
                     val ext = fileEntity.extension.lowercase()
                     if (ext == "html" || ext == "htm") {
-                        webView.loadUrl("file://" + fileEntity.path)
+                        loadLocalFileOnce(webView, fileEntity.path, allowScripts)
                     } else if (ext == "pdf") {
                         try {
                             val base64Pdf = base64Data ?: ""
@@ -2948,13 +2603,24 @@ fun WebViewPreview(
                         }
                         webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
                     } catch (e: Exception) {
-                        webView.loadUrl("file://" + fileEntity.path)
+                        loadLocalFileOnce(webView, fileEntity.path, allowScripts)
                     }
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
         }
+    }
+}
+
+/** Loads a local file only when the file or script setting changes, instead of on every recomposition. */
+private fun loadLocalFileOnce(webView: android.webkit.WebView, path: String, allowScripts: Boolean) {
+    webView.settings.javaScriptEnabled = allowScripts
+    val url = android.net.Uri.fromFile(java.io.File(path)).toString()
+    val key = "$url|$allowScripts"
+    if (webView.tag != key) {
+        webView.tag = key
+        webView.loadUrl(url)
     }
 }
 
@@ -3073,281 +2739,6 @@ fun formatInlineMarkdownToHtml(text: String): String {
     return formatted
 }
 
-@Composable
-fun DocxPreview(
-    docxElements: List<com.example.services.FileManager.DocxElement>,
-    fileEntity: RecentFileEntity,
-    modifier: Modifier = Modifier
-) {
-    val isDark = MaterialTheme.colorScheme.background == com.example.ui.theme.ClaudeOnyx
-    
-    // Background of the "word processor editor"
-    val processorBgColor = if (isDark) Color(0xFF14181F) else Color(0xFFF0F2F5)
-    
-    // Paper page color
-    val paperColor = if (isDark) Color(0xFF1F242F) else Color(0xFFFFFFFF)
-    val paperTextColor = if (isDark) Color(0xFFE2E8F0) else Color(0xFF1A1D20)
-    val paperBorderColor = if (isDark) Color(0xFF2D3748) else Color(0xFFE2E8F0)
-
-    val pages = remember(docxElements) {
-        val result = mutableListOf<List<com.example.services.FileManager.DocxElement>>()
-        var currentPage = mutableListOf<com.example.services.FileManager.DocxElement>()
-        var paragraphCount = 0
-        var characterCount = 0
-
-        docxElements.forEach { element ->
-            when (element) {
-                is com.example.services.FileManager.DocxElement.PageBreak -> {
-                    if (currentPage.isNotEmpty()) {
-                        result.add(currentPage.toList())
-                        currentPage.clear()
-                    }
-                    paragraphCount = 0
-                    characterCount = 0
-                }
-                is com.example.services.FileManager.DocxElement.Table -> {
-                    // Start tables on a new page if current page has significant elements to look like a real document
-                    if (currentPage.isNotEmpty() && (paragraphCount > 5 || characterCount > 500)) {
-                        result.add(currentPage.toList())
-                        currentPage.clear()
-                        paragraphCount = 0
-                        characterCount = 0
-                    }
-                    currentPage.add(element)
-                    // Push following elements to a new page to keep tables clean
-                    result.add(currentPage.toList())
-                    currentPage.clear()
-                    paragraphCount = 0
-                    characterCount = 0
-                }
-                is com.example.services.FileManager.DocxElement.Image -> {
-                    currentPage.add(element)
-                }
-                is com.example.services.FileManager.DocxElement.Paragraph -> {
-                    currentPage.add(element)
-                    paragraphCount++
-                    characterCount += element.text.length
-                    
-                    // Automatic page splitting for a clean Google Docs view
-                    if (paragraphCount >= 10 || characterCount >= 1200) {
-                        result.add(currentPage.toList())
-                        currentPage.clear()
-                        paragraphCount = 0
-                        characterCount = 0
-                    }
-                }
-            }
-        }
-        if (currentPage.isNotEmpty()) {
-            result.add(currentPage.toList())
-        }
-        result
-    }
-
-    ZoomableContainer(
-        modifier = modifier
-            .background(processorBgColor)
-            .fillMaxSize()
-    ) { scale, scrollEnabled ->
-        LazyColumn(
-            state = rememberLazyListState(),
-            modifier = Modifier.fillMaxSize(),
-            userScrollEnabled = scrollEnabled,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-        itemsIndexed(
-            items = pages,
-            key = { pageIdx, _ -> "docx_page_$pageIdx" },
-            contentType = { _, _ -> "docx_page" }
-        ) { pageIdx, pageElements ->
-            // Simulated Paper sheet like Google Docs
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 800.dp)
-                    .animateItemPlacement(),
-                shape = RoundedCornerShape(4.dp),
-                colors = CardDefaults.cardColors(containerColor = paperColor),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                border = BorderStroke(1.dp, paperBorderColor)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 28.dp)
-                ) {
-                    pageElements.forEachIndexed { itemIdx, element ->
-                        when (element) {
-                            is com.example.services.FileManager.DocxElement.Paragraph -> {
-                                if (element.text.isNotEmpty()) {
-                                    val fontSize = if (element.isHeading) {
-                                        when (element.headingLevel) {
-                                            1 -> 24.sp
-                                            2 -> 20.sp
-                                            else -> 18.sp
-                                        }
-                                    } else 15.sp
-
-                                    val fontWeight = if (element.isHeading || element.isBold) {
-                                        FontWeight.Bold
-                                    } else {
-                                        FontWeight.Normal
-                                    }
-
-                                    val fontStyle = if (element.isItalic) {
-                                        FontStyle.Italic
-                                    } else {
-                                        FontStyle.Normal
-                                    }
-
-                                    val bottomPadding = if (element.isHeading) 12.dp else 8.dp
-                                    val topPadding = if (element.isHeading && itemIdx > 0) 16.dp else 0.dp
-
-                                    Text(
-                                        text = element.text,
-                                        fontSize = fontSize,
-                                        fontWeight = fontWeight,
-                                        fontStyle = fontStyle,
-                                        lineHeight = fontSize * 1.5f,
-                                        color = if (element.isHeading) {
-                                            if (isDark) Color(0xFF90CAF9) else Color(0xFF1E56B1)
-                                        } else {
-                                            paperTextColor
-                                        },
-                                        modifier = Modifier
-                                            .padding(top = topPadding, bottom = bottomPadding)
-                                            .fillMaxWidth()
-                                    )
-                                } else {
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                }
-                            }
-                            is com.example.services.FileManager.DocxElement.Image -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 12.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    AsyncImage(
-                                        model = File(element.localPath),
-                                        contentDescription = "Embedded Image",
-                                        modifier = Modifier
-                                            .fillMaxWidth(0.9f)
-                                            .heightIn(max = 350.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .border(1.dp, paperBorderColor, RoundedCornerShape(8.dp)),
-                                        contentScale = ContentScale.Fit
-                                    )
-                                }
-                            }
-                            is com.example.services.FileManager.DocxElement.Table -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 12.dp)
-                                        .border(1.dp, paperBorderColor, RoundedCornerShape(6.dp))
-                                        .horizontalScroll(rememberScrollState())
-                                ) {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
-                                        element.rows.forEachIndexed { rIdx, row ->
-                                            val isRowHeader = (rIdx == 0)
-                                            val rowBg = if (isRowHeader) {
-                                                if (isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9)
-                                            } else if (rIdx % 2 == 1) {
-                                                if (isDark) Color(0xFF131A26) else Color(0xFFF8FAFC)
-                                            } else {
-                                                Color.Transparent
-                                            }
-                                            Row(
-                                                modifier = Modifier
-                                                    .background(rowBg)
-                                                     .border(
-                                                        width = 0.5.dp,
-                                                        color = paperBorderColor.copy(alpha = 0.5f)
-                                                    )
-                                            ) {
-                                                row.forEach { cell ->
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .width(150.dp)
-                                                            .padding(10.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = cell,
-                                                            fontSize = 13.sp,
-                                                            fontWeight = if (isRowHeader) FontWeight.Bold else FontWeight.Normal,
-                                                            color = paperTextColor
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            else -> {}
-                        }
-                    }
-                }
-            }
-
-            // Page break centered dashed indicator
-            if (pageIdx < pages.size - 1) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 800.dp)
-                        .padding(vertical = 20.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        val strokeColor = if (isDark) Color(0xFF4A5568) else Color(0xFFCBD5E1)
-                        
-                        // Left dashed line
-                        androidx.compose.foundation.Canvas(modifier = Modifier.weight(1f).height(1.dp)) {
-                            drawLine(
-                                color = strokeColor,
-                                start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                                end = androidx.compose.ui.geometry.Offset(size.width, 0f),
-                                strokeWidth = 1f,
-                                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                            )
-                        }
-                        
-                        Text(
-                            text = "Page break",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = strokeColor,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                        
-                        // Right dashed line
-                        androidx.compose.foundation.Canvas(modifier = Modifier.weight(1f).height(1.dp)) {
-                            drawLine(
-                                color = strokeColor,
-                                start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                                end = androidx.compose.ui.geometry.Offset(size.width, 0f),
-                                strokeWidth = 1f,
-                                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                            )
-                        }
-                    }
-                }
-            } else {
-                Spacer(modifier = Modifier.height(32.dp))
-            }
-        }
-    }
-}
-}
-
 private fun openPdfInBrowser(context: android.content.Context, file: File) {
     try {
         val uri = androidx.core.content.FileProvider.getUriForFile(
@@ -3382,297 +2773,6 @@ private fun openPdfInBrowser(context: android.content.Context, file: File) {
 
 
 @Composable
-fun PdfPreviewWebView(
-    base64Pdf: String,
-    fileEntity: RecentFileEntity,
-    isNightMode: Boolean,
-    modifier: Modifier = Modifier,
-    onSingleTap: () -> Unit = {},
-    onPageChanged: (Int, Int) -> Unit = { _, _ -> },
-    scrollToPage: Int? = null,
-    onScrollProgressHandled: () -> Unit = {}
-) {
-    var isWebViewLoading by remember(base64Pdf) { mutableStateOf(true) }
-    var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
-    
-    val htmlContent = remember(base64Pdf, isNightMode) {
-        val bgColor = if (isNightMode) "#151514" else "#faf9f5"
-        val containerBg = if (isNightMode) "#1d1b19" else "white"
-        
-        """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-            <script src="file:///android_asset/pdfjs/build/pdf.js"></script>
-            <style>
-                body {
-                    margin: 0;
-                    padding: 12px;
-                    background-color: $bgColor;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    font-family: -apple-system, sans-serif;
-                    user-select: text !important;
-                    -webkit-user-select: text !important;
-                }
-                .page-container {
-                    position: relative;
-                    margin-bottom: 20px;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    background-color: $containerBg;
-                    border-radius: 8px;
-                    overflow: hidden;
-                    max-width: 100%;
-                }
-                canvas {
-                    display: block;
-                    width: 100%;
-                    height: auto !important;
-                }
-                .textLayer {
-                    position: absolute;
-                    left: 0;
-                    top: 0;
-                    right: 0;
-                    bottom: 0;
-                    overflow: hidden;
-                    opacity: 1.0;
-                    line-height: 1.0;
-                    pointer-events: auto !important;
-                    user-select: text !important;
-                    -webkit-user-select: text !important;
-                }
-                .textLayer > span {
-                    color: transparent !important;
-                    position: absolute;
-                    white-space: pre;
-                    cursor: text !important;
-                    transform-origin: 0% 0%;
-                    user-select: text !important;
-                    -webkit-user-select: text !important;
-                }
-                .textLayer ::selection {
-                    background: rgba(0, 100, 255, 0.3) !important;
-                }
-            </style>
-        </head>
-        <body>
-            <div id="viewer"></div>
-            <script>
-                function base64ToUint8Array(base64) {
-                    var raw = window.atob(base64);
-                    var rawLength = raw.length;
-                    var array = new Uint8Array(new ArrayBuffer(rawLength));
-                    for(var i = 0; i < rawLength; i++) {
-                        array[i] = raw.charCodeAt(i);
-                    }
-                    return array;
-                }
-
-                var totalPagesCount = 0;
-
-                window.scrollToPage = function(pageNum) {
-                    var el = document.getElementById('page-' + pageNum);
-                    if (el) {
-                        el.scrollIntoView({behavior: 'smooth'});
-                    }
-                };
-
-                // Listen to scroll to update current page
-                window.addEventListener('scroll', function() {
-                    var pages = document.querySelectorAll('.page-container');
-                    var scrollPos = window.scrollY + window.innerHeight / 3;
-                    for (var i = 0; i < pages.length; i++) {
-                        var page = pages[i];
-                        var top = page.offsetTop;
-                        var bottom = top + page.offsetHeight;
-                        if (scrollPos >= top && scrollPos <= bottom) {
-                            var currentPage = i + 1;
-                            if (window.Android && window.Android.onPageChanged) {
-                                window.Android.onPageChanged(currentPage, pages.length);
-                            }
-                            break;
-                        }
-                    }
-                });
-
-                try {
-                    var pdfData = base64ToUint8Array("$base64Pdf");
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'file:///android_asset/pdfjs/build/pdf.worker.js';
-
-                    var loadingTask = pdfjsLib.getDocument({data: pdfData});
-                    loadingTask.promise.then(function(pdf) {
-                        var viewer = document.getElementById('viewer');
-                        var pagesToRender = pdf.numPages;
-                        totalPagesCount = pagesToRender;
-                        var renderedPages = 0;
-                        
-                        function renderPage(pageNum) {
-                            pdf.getPage(pageNum).then(function(page) {
-                                // Dynamic scale matching device DPI (bounded 2.0 to 3.0) for razor sharp view on zooming
-                                var dpr = window.devicePixelRatio || 2.0;
-                                var scale = Math.min(3.0, Math.max(2.0, dpr));
-                                var viewport = page.getViewport({scale: scale});
-                                
-                                var pageDiv = document.createElement('div');
-                                pageDiv.className = 'page-container';
-                                pageDiv.id = 'page-' + pageNum;
-                                pageDiv.style.width = '100%';
-                                
-                                var canvas = document.createElement('canvas');
-                                var context = canvas.getContext('2d');
-                                canvas.height = viewport.height;
-                                canvas.width = viewport.width;
-                                
-                                var renderContext = {
-                                    canvasContext: context,
-                                    viewport: viewport
-                                };
-                                
-                                pageDiv.appendChild(canvas);
-                                
-                                var textLayerDiv = document.createElement('div');
-                                textLayerDiv.className = 'textLayer';
-                                pageDiv.appendChild(textLayerDiv);
-                                
-                                viewer.appendChild(pageDiv);
-                                
-                                // Render page graphics
-                                var renderTask = page.render(renderContext);
-                                renderTask.promise.then(function() {
-                                    // Fetch text items to render selectable/copyable text Layer overlay
-                                    return page.getTextContent();
-                                }).then(function(textContent) {
-                                    return pdfjsLib.renderTextLayer({
-                                        textContent: textContent,
-                                        container: textLayerDiv,
-                                        viewport: viewport,
-                                        textDivs: []
-                                    }).promise;
-                                }).then(function() {
-                                    renderedPages++;
-                                    if (renderedPages === pagesToRender) {
-                                        if (window.Android && window.Android.onDocumentLoaded) {
-                                            window.Android.onDocumentLoaded(pagesToRender);
-                                        }
-                                    }
-                                    if (pageNum < pagesToRender) {
-                                        renderPage(pageNum + 1);
-                                    }
-                                }).catch(function(err) {
-                                    console.error("Error drawing textLayer: ", err);
-                                    // Fallback if text layer fails so the document remains available
-                                    renderedPages++;
-                                    if (renderedPages === pagesToRender) {
-                                        if (window.Android && window.Android.onDocumentLoaded) {
-                                            window.Android.onDocumentLoaded(pagesToRender);
-                                        }
-                                    }
-                                    if (pageNum < pagesToRender) {
-                                        renderPage(pageNum + 1);
-                                    }
-                                });
-                            });
-                        }
-                        
-                        renderPage(1);
-                    }, function (reason) {
-                        if (window.Android && window.Android.onDocumentError) {
-                            window.Android.onDocumentError(reason.message);
-                        }
-                    });
-                } catch (e) {
-                    if (window.Android && window.Android.onDocumentError) {
-                        window.Android.onDocumentError(e.message);
-                    }
-                }
-            </script>
-        </body>
-        </html>
-        """.trimIndent()
-    }
-
-    LaunchedEffect(scrollToPage) {
-        if (scrollToPage != null) {
-            val pageNum = scrollToPage + 1
-            webViewRef?.evaluateJavascript("if (typeof window.scrollToPage === 'function') { window.scrollToPage($pageNum); }", null)
-            onScrollProgressHandled()
-        }
-    }
-
-    Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
-        val context = androidx.compose.ui.platform.LocalContext.current
-        
-        AndroidView(
-            factory = { ctx ->
-                android.webkit.WebView(ctx).apply {
-                    webViewRef = this
-                    settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        allowFileAccess = true
-                        allowContentAccess = true
-                        builtInZoomControls = true
-                        displayZoomControls = false
-                        setSupportZoom(true)
-                        useWideViewPort = true
-                        loadWithOverviewMode = true
-                    }
-                    setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
-                    
-                    addJavascriptInterface(object : Any() {
-                        @android.webkit.JavascriptInterface
-                        fun onDocumentLoaded(totalPages: Int) {
-                            post { 
-                                isWebViewLoading = false
-                                onPageChanged(1, totalPages)
-                            }
-                        }
-                        @android.webkit.JavascriptInterface
-                        fun onPageChanged(currentPage: Int, totalPages: Int) {
-                            post {
-                                onPageChanged(currentPage, totalPages)
-                            }
-                        }
-                        @android.webkit.JavascriptInterface
-                        fun onDocumentError(error: String) {
-                            post { 
-                                isWebViewLoading = false
-                                android.widget.Toast.makeText(context, "Error: $error", android.widget.Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    }, "Android")
-                    
-                    webViewClient = object : android.webkit.WebViewClient() {
-                        override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
-                            postDelayed({ isWebViewLoading = false }, 500)
-                        }
-                    }
-                    loadDataWithBaseURL("file:///android_asset/", htmlContent, "text/html", "UTF-8", null)
-                }
-            },
-            update = { webView ->
-                // No-op
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-
-        if (isWebViewLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
-                contentAlignment = Alignment.Center
-            ) {
-                com.example.ui.component.PremiumLoadingIndicator(text = "Preparing PDF Document...")
-            }
-        }
-    }
-}
-
-@Composable
 fun DocxPreviewWebView(
     base64Docx: String,
     fileEntity: RecentFileEntity,
@@ -3704,8 +2804,8 @@ fun DocxPreviewWebView(
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
-                        allowFileAccess = true
-                        allowContentAccess = true
+                        allowFileAccess = false
+                        allowContentAccess = false
                         builtInZoomControls = true
                         displayZoomControls = false
                         setSupportZoom(true)
@@ -3805,8 +2905,8 @@ fun PptxPreviewWebView(
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
-                        allowFileAccess = true
-                        allowContentAccess = true
+                        allowFileAccess = false
+                        allowContentAccess = false
                         builtInZoomControls = true
                         displayZoomControls = false
                         setSupportZoom(true)

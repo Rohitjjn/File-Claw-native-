@@ -1,10 +1,3 @@
-# Apache POI
--keep class org.apache.poi.** { *; }
--keep class org.apache.xmlbeans.** { *; }
--dontwarn org.apache.poi.**
--dontwarn org.apache.xmlbeans.**
--dontwarn org.openxmlformats.**
-
 # Room
 -keep class * extends androidx.room.RoomDatabase
 -keep @androidx.room.Entity class *
@@ -12,16 +5,6 @@
 
 # Coil
 -keep class coil.** { *; }
-
-# Kotlinx Serialization
--keepattributes *Annotation*, InnerClasses
--dontnote kotlinx.serialization.**
--keep class kotlinx.serialization.** { *; }
-
-# PDFBox
--keep class org.apache.pdfbox.** { *; }
--keep class com.tom_roush.pdfbox.** { *; }
--dontwarn org.apache.pdfbox.**
 
 # FastExcel
 -keep class org.dhatim.fastexcel.** { *; }

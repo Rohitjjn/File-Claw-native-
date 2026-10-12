@@ -1,18 +1,45 @@
 package com.example.services
 
-import android.content.Context
+import com.example.core.archive.ArchiveEntryInfo
+import com.example.core.archive.ArchiveLimits
+import com.example.core.archive.ArchiveNode
+import com.example.core.archive.ArchiveTreeBuilder
+import com.example.core.archive.copyLimited
+import com.example.core.csv.DelimitedParser
+import com.example.core.csv.DelimitedWriter
+import com.example.core.format.FormatDetector
+import com.example.core.io.AtomicFileWriter
+import com.example.core.io.TextEncoding
+import com.example.core.io.TextLoadResult
+import com.example.core.io.TextLoader
+import com.example.core.io.TextSaver
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.lang.StringBuilder
+import java.io.IOException
+import java.io.InputStream
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.nio.charset.Charset
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import org.apache.commons.compress.archivers.ArchiveEntry
+import org.apache.commons.compress.archivers.ArchiveInputStream
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream
+import org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream
 import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
-import java.util.zip.GZIPInputStream
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 
+/**
+ * Thin Android-facing facade over the pure-Kotlin `com.example.core` layer.
+ * Every write is atomic, every read is bounded, every archive is limit-checked.
+ */
 class FileManager {
 
     data class ZipNode(
@@ -20,944 +47,344 @@ class FileManager {
         val isDirectory: Boolean,
         val path: String,
         val size: Long = 0,
-        val children: MutableList<ZipNode> = mutableListOf()
+        val children: MutableList<ZipNode> = mutableListOf(),
+        /** Entry name was rejected as unsafe (zip-slip / too deep): shown with a warning, never extractable. */
+        val unsafe: Boolean = false
     )
 
-    fun createSampleFilesIfNotExist(context: Context): List<File> {
-        val samplesDir = File(context.filesDir, "samples")
-        if (!samplesDir.exists()) {
-            samplesDir.mkdirs()
-        }
-
-        val result = mutableListOf<File>()
-
-        // 1. Markdown file: AI_Model_Census.md
-        val mdFile = File(samplesDir, "AI_Model_Census.md")
-        if (!mdFile.exists()) {
-            mdFile.writeText("""
-# Chronological AI Model Census
-
-Welcome to the census of pioneering AI models. Here we track historical and contemporary developments in intelligence engines.
-
-## Essential Summary
-*   **Founded**: 2015
-*   **Headquarters**: San Francisco, CA, USA
-*   **Website**: https://openai.com
-*   **Total Publicly Released Models**: ~103
-
-## Chronological Model Timeline
-
-| Model Name | Release Date | Type | Key Specs | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| OpenAI Gym | 2016 | RL Environment | Toolkit for developing and comparing reinforcement learning algorithms | Active (open-source) |
-| OpenAI Universe | 2016 | RL Platform | Software platform for measuring/training AI across games, websites | Retired |
-| GPT-1 | 2018 | Language Model | 117M params; 12-layer transformer decoder | Research |
-| GPT-2 | 2019 | Language Model | 1.5B params; Zero-shot learning cap | Open weight |
-| GPT-3 | 2020 | Language Model | 175B params; Few-shot learner | Active (API) |
-| DALL-E | 2021 | Text-to-Image | 12B params; Zero-shot text-to-image generator | Retired |
-| ChatGPT | 2022 | Chat Assistant | Bottom conversational reinforcement learning feedback | Active |
-| GPT-4 | 2023 | Multimodal | Benchmark-redefining language & vision understanding | Active |
-| Gemini 1.5 Pro | 2024 | Multimodal | Dynamic context reasoning, extreme efficiency | Active |
-| Gemini 3.5 Flash | 2026 | Agent Multimodal | Extreme latency optimization and speed | Active |
-
-## Visualizing Progress
-As models increase in parameter scale and structural flexibility, safety alignment processes (such as RLHF and Constitutional AI) have moved from optional post-processing to core architectural constraints.
-            """.trimIndent())
-        }
-        result.add(mdFile)
-
-        // 2. Kotlin code file: Theme.kt
-        val codeFile = File(samplesDir, "Theme.kt")
-        if (!codeFile.exists()) {
-            codeFile.writeText("""
-package com.example.ui.theme
-
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
-
-// Claude-inspired warm minimalist palette
-val ClaudePrim = Color(0xFFD97757) // Terracotta Ginger
-val ClaudeSec = Color(0xFFE89D82) // Soft Peach
-val ClaudeBgL = Color(0xFFFAF9F8) // Alabaster Off-white
-val ClaudeSurfL = Color(0xFFFFFFFF) // Pure White
-val ClaudeCharcoal = Color(0xFF201F1E) // Slate Dark Text
-val ClaudeBorderL = Color(0xFFEDEBE9)
-
-val ClaudeBgD = Color(0xFF1C1C1E) // Dark Onyx
-val ClaudeSurfD = Color(0xFF2C2C2E)
-val ClaudeBorderD = Color(0xFF38383A)
-val ClaudeOnSecD = Color(0xFFEBEBF5)
-
-private val LightColorScheme = lightColorScheme(
-    primary = ClaudePrim,
-    secondary = ClaudeSec,
-    background = ClaudeBgL,
-    surface = ClaudeSurfL,
-    onPrimary = Color.White,
-    onSecondary = ClaudeCharcoal,
-    onBackground = ClaudeCharcoal,
-    onSurface = ClaudeCharcoal
-)
-
-private val DarkColorScheme = darkColorScheme(
-    primary = ClaudePrim,
-    secondary = ClaudeSec,
-    background = ClaudeBgD,
-    surface = ClaudeSurfD,
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onBackground = Color.White,
-    onSurface = Color.White
-)
-
-@Composable
-fun FilesClawTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable () -> Unit
-) {
-    val colors = if (darkTheme) DarkColorScheme else LightColorScheme
-    MaterialTheme(
-        colorScheme = colors,
-        typography = Typography,
-        content = content
+    /** Parsed delimited text plus what is needed to write it back byte-compatibly. */
+    data class TableData(
+        val rows: List<List<String>>,
+        val truncated: Boolean,
+        val delimiter: Char,
+        val charset: Charset,
+        val hadBom: Boolean,
+        val lineEnd: String
     )
-}
-            """.trimIndent())
+
+    data class ExcelData(val rows: List<List<String>>, val truncated: Boolean, val sheetCount: Int, val sheetName: String)
+
+    // ------------------------------------------------------------------------------------------
+    // Text
+    // ------------------------------------------------------------------------------------------
+
+    /** Bounded text load. Throws instead of returning error strings as content. */
+    fun loadText(filePath: String, encoding: String): TextLoadResult =
+        TextLoader.load(File(filePath), encoding)
+
+    fun saveText(filePath: String, content: String, charset: Charset, writeBom: Boolean) {
+        TextSaver.save(File(filePath), content, charset, writeBom)
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Delimited text (CSV / TSV / PSV)
+    // ------------------------------------------------------------------------------------------
+
+    fun loadDelimited(filePath: String, extension: String, encoding: String): TableData {
+        val file = File(filePath)
+        if (!file.isFile) throw IOException("File not found")
+        val head = ByteArray(8192)
+        val n = file.inputStream().use { it.read(head) }.coerceAtLeast(0)
+        val detected = TextEncoding.detect(head, n)
+        val charset = TextEncoding.resolve(encoding) ?: detected.charset
+        val hadBom = detected.bomLength > 0 && charset == detected.charset
+        val sample = String(head, 0, n, charset)
+        val ext = extension.lowercase()
+        val base = DelimitedParser.delimiterFor(ext)
+        val delimiter = if (ext == "csv") DelimitedParser.sniffDelimiter(sample, base) else base
+        val lineEnd = if (sample.contains("\r\n")) "\r\n" else "\n"
+        val result = InputStreamReader(file.inputStream().buffered(64 * 1024), charset).use { reader ->
+            DelimitedParser.parse(reader, delimiter, VIEW_MAX_ROWS, VIEW_MAX_COLS)
         }
-        result.add(codeFile)
-
-        // 3. CSV file: simple_sheet.csv
-        val csvFile = File(samplesDir, "simple_sheet.csv")
-        if (!csvFile.exists()) {
-            csvFile.writeText("""
-Month,Sales,Expenses,Category,Growth
-January,12200,8500,A,12%
-February,14300,9200,A,15%
-March,15600,10400,B,8%
-April,18900,11000,B,21%
-May,20400,12500,C,10%
-June,23100,13200,C,14%
-            """.trimIndent())
+        var rows = result.rows
+        if (rows.isNotEmpty() && rows[0].isNotEmpty() && rows[0][0].startsWith("\uFEFF")) {
+            val first = rows[0].toMutableList().also { it[0] = it[0].removePrefix("\uFEFF") }
+            rows = listOf<List<String>>(first) + rows.drop(1)
         }
-        result.add(csvFile)
+        return TableData(rows, result.truncated, delimiter, charset, hadBom, lineEnd)
+    }
 
-        // 4. Text file: Welcome_Notes.txt
-        val txtFile = File(samplesDir, "Welcome_Notes.txt")
-        if (!txtFile.exists()) {
-            txtFile.writeText("""
-### WELCOME TO FILES CLAW ###
-
-Files Claw is your ultimate offline safe-space for previewing, browsing, and refining local documents. Styled with a Claude-inspired warm terracotta minimalist design, the app contains:
-
-1. Interactive Markdown Preview: Elegant tables, bullet points, headers, and formatted links.
-2. Code Syntax highlighters and Plain Text Editors: Word wrap toggles, typography scale, tab-spacing adjustments, and real-time line numbers!
-3. ZIP Archive Tree Navigator: Traverse directories inside any compressed .zip file without extraction.
-4. Rich CSV Data Sheets: Preview raw CSV datasets inside styled, clean, spreadsheet-like scrolling rows.
-
-Designed to assist files manipulation completely offline, preventing telemetry leaks and ensuring total privacy.
-
-Thank you for choosing Files Claw.
-            """.trimIndent())
+    fun saveDelimited(filePath: String, rows: List<List<String>>, data: TableData) {
+        AtomicFileWriter.write(File(filePath)) { out ->
+            if (data.hadBom) out.write(TextEncoding.bomBytes(data.charset))
+            // Not closed on purpose: AtomicFileWriter owns the stream and must fsync before closing it.
+            val writer = OutputStreamWriter(out, data.charset)
+            DelimitedWriter.write(rows, writer, data.delimiter, data.lineEnd)
         }
-        result.add(txtFile)
+    }
 
-        // 5. ZIP file: app_blueprint_package.zip
-        val zipFile = File(samplesDir, "app_blueprint_package.zip")
-        if (!zipFile.exists()) {
-            try {
-                ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-                    val entries = mapOf(
-                        "docs/APP_OVERVIEW.md" to "Files Claw is a local-only viewer, optimized for privacy.",
-                        "docs/DESIGN_SYSTEM.md" to "Inspired by Anthropic Claude aesthetic. Primary scale uses Warm Terracotta Ginger (#D97757).",
-                        "docs/COLOR_SYSTEM.md" to "Base Alabaster Background, Warm Charcoal body typography.",
-                        "assets_inventory/ASSETS.md" to "Includes vector launcher icons and native layout graphics."
-                    )
-                    for ((name, content) in entries) {
-                        val entry = ZipEntry(name)
-                        zos.putNextEntry(entry)
-                        zos.write(content.toByteArray())
-                        zos.closeEntry()
+    // ------------------------------------------------------------------------------------------
+    // Excel (read-only: writing would flatten multi-sheet workbooks and drop formulas/styles)
+    // ------------------------------------------------------------------------------------------
+
+    fun loadExcel(filePath: String): ExcelData {
+        val file = File(filePath)
+        if (!file.isFile) throw IOException("File not found")
+        org.dhatim.fastexcel.reader.ReadableWorkbook(file).use { wb ->
+            val sheetCount = wb.sheets.count().toInt()
+            if (sheetCount == 0) return ExcelData(emptyList(), false, 0, "")
+            val sheet = wb.firstSheet
+            val rows = ArrayList<List<String>>()
+            var truncated = false
+            sheet.openStream().use { stream ->
+                val iter = stream.iterator()
+                while (iter.hasNext()) {
+                    if (rows.size >= VIEW_MAX_ROWS) {
+                        truncated = true
+                        break
                     }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-        result.add(zipFile)
-
-        return result
-    }
-
-    private fun determineCharset(file: File, requestedEncoding: String): java.nio.charset.Charset {
-        if (requestedEncoding != "Auto") {
-            return try {
-                charset(requestedEncoding)
-            } catch (e: Exception) {
-                Charsets.UTF_8
-            }
-        }
-        val bytes = file.readBytes().take(4).toByteArray()
-        if (bytes.size >= 3 && bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()) {
-            return Charsets.UTF_8
-        }
-        if (bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) {
-            return Charsets.UTF_16BE
-        }
-        if (bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte()) {
-            return Charsets.UTF_16LE
-        }
-        return Charsets.UTF_8
-    }
-
-    fun readFileContent(filePath: String, encoding: String = "UTF-8"): String {
-        return try {
-            val file = File(filePath)
-            if (file.exists() && file.isFile) {
-                val charset = determineCharset(file, encoding)
-                val stringBuilder = java.lang.StringBuilder()
-                val buffer = CharArray(8192)
-                val maxChars = 250_000 // Limit to ~250k chars to prevent UI ANRs
-                
-                java.io.InputStreamReader(java.io.FileInputStream(file), charset).use { reader ->
-                    var charsRead = reader.read(buffer)
-                    while (charsRead != -1) {
-                        if (stringBuilder.length + charsRead > maxChars) {
-                            val allowed = maxChars - stringBuilder.length
-                            if (allowed > 0) {
-                                stringBuilder.append(buffer, 0, allowed)
-                            }
-                            stringBuilder.append("\n\n... [File truncated for preview performance] ...")
+                    val values = ArrayList<String>()
+                    for (cell in iter.next()) {
+                        if (values.size >= VIEW_MAX_COLS) {
+                            truncated = true
                             break
-                        } else {
-                            stringBuilder.append(buffer, 0, charsRead)
                         }
-                        charsRead = reader.read(buffer)
+                        values.add(cell?.text ?: "")
                     }
-                }
-                stringBuilder.toString()
-            } else {
-                "Error: File does not exist or is a directory: $filePath"
-            }
-        } catch (e: Exception) {
-            "Error reading file: ${e.message}"
-        }
-    }
-
-    fun writeFileContent(filePath: String, content: String, encoding: String = "UTF-8") {
-        val file = File(filePath)
-        val charset = if (encoding == "Auto") Charsets.UTF_8 else try { charset(encoding) } catch (e: Exception) { Charsets.UTF_8 }
-        file.writeText(content, charset)
-    }
-
-    fun parseCsv(filePath: String): List<List<String>> {
-        val file = File(filePath)
-        if (!file.exists()) return emptyList()
-        return try {
-            com.github.doyaaaaaken.kotlincsv.dsl.csvReader().readAll(file)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
-        }
-    }
-
-    fun saveCsv(filePath: String, rows: List<List<String>>) {
-        val file = File(filePath)
-        try {
-            com.github.doyaaaaaken.kotlincsv.dsl.csvWriter().writeAll(rows, file)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun parseExcel(filePath: String): List<List<String>> {
-        val file = File(filePath)
-        if (!file.exists()) return emptyList()
-        val result = mutableListOf<List<String>>()
-        try {
-            org.dhatim.fastexcel.reader.ReadableWorkbook(file).use { wb ->
-                val sheet = wb.firstSheet
-                sheet.openStream().forEach { row ->
-                    val rowData = mutableListOf<String>()
-                    for (cell in row) {
-                        rowData.add(cell?.text ?: "")
-                    }
-                    result.add(rowData)
+                    rows.add(values)
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+            return ExcelData(rows, truncated, sheetCount, sheet.name ?: "")
         }
-        return result
     }
 
-    fun saveExcel(filePath: String, rows: List<List<String>>) {
-        val file = File(filePath)
-        try {
-            java.io.FileOutputStream(file).use { fos ->
-                val wb = org.dhatim.fastexcel.Workbook(fos, "Application", "1.0")
-                val ws = wb.newWorksheet("Sheet1")
-                for (rIdx in rows.indices) {
-                    val row = rows[rIdx]
-                    for (cIdx in row.indices) {
-                        ws.value(rIdx, cIdx, row[cIdx])
-                    }
-                }
-                wb.finish()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
+    // ------------------------------------------------------------------------------------------
+    // Archives
+    // ------------------------------------------------------------------------------------------
+
+    private val limits = ArchiveLimits()
+
+    private val zip4jIds = setOf("zip", "zip-app", "docx", "xlsx", "pptx", "odt", "ods", "odp", "epub")
+    private val tarLikeIds = setOf("tar", "tgz", "tbz2", "txz", "ar", "cpio")
+    private val singleStreamIds = setOf("gz", "bz2", "xz")
+
+    private fun archiveId(file: File): String = FormatDetector.detect(file).spec.id
 
     fun isArchiveEncrypted(filePath: String): Boolean {
         val file = File(filePath)
         if (!file.exists()) return false
-        val ext = file.name.substringAfterLast('.', "").lowercase()
         return try {
-            when (ext) {
-                "7z" -> {
-                    try {
-                        SevenZFile(file).use {}
-                        false
-                    } catch (e: Exception) {
-                        e.message?.lowercase()?.contains("password") == true || e.javaClass.simpleName.contains("Password")
-                    }
-                }
-                "zip" -> {
-                    net.lingala.zip4j.ZipFile(file).isEncrypted
-                }
-                "rar" -> {
-                    // RAR support removed as per request to drop junrar dependency
+            when (archiveId(file)) {
+                "7z" -> try {
+                    SevenZFile(file).use { }
                     false
+                } catch (e: Exception) {
+                    looksLikePasswordError(e)
                 }
+                in zip4jIds -> net.lingala.zip4j.ZipFile(file).use { it.isEncrypted }
                 else -> false
             }
         } catch (e: Exception) {
-            e.message?.lowercase()?.contains("password") == true || e.javaClass.simpleName.contains("Password")
+            looksLikePasswordError(e)
         }
     }
 
+    private fun looksLikePasswordError(e: Exception): Boolean =
+        e.message?.lowercase()?.contains("password") == true || e.javaClass.simpleName.contains("Password")
+
+    /**
+     * Lists an archive as a tree. Throws [UnsupportedOperationException] for formats that can be
+     * identified but not read (RAR, ISO...) and [IOException] for corrupt archives, so the UI can
+     * show a real error instead of an empty folder.
+     */
     fun parseZipStructure(filePath: String, password: String? = null): ZipNode {
         val file = File(filePath)
-        val root = ZipNode(name = file.name, isDirectory = true, path = "", size = file.length())
-        if (!file.exists()) return root
-
-        try {
-            val ext = file.name.substringAfterLast('.', "").lowercase()
-            val entriesList = mutableListOf<Pair<String, Boolean>>() // Pair of path/name, and isDirectory
-            val sizesMap = mutableMapOf<String, Long>()
-
-            when {
-                ext == "7z" -> {
-                    SevenZFile(file).use { sevenZFile ->
-                        var entry = sevenZFile.nextEntry
-                        while (entry != null) {
-                            entriesList.add(Pair(entry.name, entry.isDirectory))
-                            if (!entry.isDirectory) sizesMap[entry.name] = entry.size
-                            entry = sevenZFile.nextEntry
-                        }
-                    }
+        if (!file.isFile) throw IOException("Archive not found")
+        val id = archiveId(file)
+        val rootName = file.name
+        val tree = when {
+            id in zip4jIds -> net.lingala.zip4j.ZipFile(file).use { zf ->
+                if (!password.isNullOrEmpty()) zf.setPassword(password.toCharArray())
+                val entries = zf.fileHeaders.asSequence().map {
+                    ArchiveEntryInfo(it.fileName, it.isDirectory, it.uncompressedSize, it.compressedSize)
                 }
-                ext == "rar" -> {
-                    // RAR support removed
-                }
-                ext == "tar" || ext == "gz" || ext == "tgz" -> {
-                    val fis = FileInputStream(file)
-                    val input = if (ext == "gz" || ext == "tgz" || file.name.endsWith(".tar.gz")) {
-                        GzipCompressorInputStream(fis)
-                    } else {
-                        fis
+                ArchiveTreeBuilder.build(rootName, entries, limits)
+            }
+            id == "7z" -> {
+                val sz = if (!password.isNullOrEmpty()) SevenZFile(file, password.toCharArray()) else SevenZFile(file)
+                sz.use { s ->
+                    val entries = generateSequence { s.nextEntry }.map {
+                        ArchiveEntryInfo(it.name ?: "", it.isDirectory, it.size)
                     }
-                    TarArchiveInputStream(input).use { tarIn ->
-                        var entry = tarIn.nextTarEntry
-                        while (entry != null) {
-                            entriesList.add(Pair(entry.name, entry.isDirectory))
-                            if (!entry.isDirectory) sizesMap[entry.name] = entry.size
-                            entry = tarIn.nextTarEntry
-                        }
-                    }
-                }
-                else -> {
-                    net.lingala.zip4j.ZipFile(file).use { zipFile ->
-                        zipFile.fileHeaders.forEach { header ->
-                            val cleanName = header.fileName.replace("\\", "/")
-                            entriesList.add(Pair(cleanName, header.isDirectory))
-                            if (!header.isDirectory) sizesMap[cleanName] = header.uncompressedSize
-                        }
-                    }
+                    ArchiveTreeBuilder.build(rootName, entries, limits)
                 }
             }
-
-            for ((entryName, isDirectory) in entriesList) {
-                val parts = entryName.split("/").filter { it.isNotEmpty() }
-                var current = root
-                var currentPath = ""
-                for (i in parts.indices) {
-                    val partName = parts[i]
-                    currentPath = if (currentPath.isEmpty()) partName else "$currentPath/$partName"
-                    val isLast = (i == parts.lastIndex)
-                    val isDir = isDirectory || (!isLast)
-
-                    var child = current.children.find { it.name == partName && it.isDirectory == isDir }
-                    if (child == null) {
-                        child = ZipNode(
-                            name = partName,
-                            isDirectory = isDir,
-                            path = currentPath,
-                            size = if (isLast && !isDir) (sizesMap[entryName] ?: 0L) else 0L
-                        )
-                        current.children.add(child)
-                    }
-                    current = child
+            id in tarLikeIds -> openArchiveStream(file, id).use { s ->
+                val entries = generateSequence { s.nextEntry }.map { e: ArchiveEntry ->
+                    ArchiveEntryInfo(e.name ?: "", e.isDirectory, e.size)
                 }
+                ArchiveTreeBuilder.build(rootName, entries, limits)
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+            id in singleStreamIds -> {
+                val inner = singleStreamEntryName(file)
+                ArchiveTreeBuilder.build(rootName, sequenceOf(ArchiveEntryInfo(inner, false, 0)), limits)
+            }
+            id == "rar" -> throw UnsupportedOperationException("RAR archives are not supported yet")
+            else -> throw UnsupportedOperationException("This archive type is not supported yet")
         }
-
-        // Sort folders first, then files alphabetically
-        fun sortNode(node: ZipNode) {
-            node.children.sortWith(compareByDescending<ZipNode> { it.isDirectory }.thenBy { it.name })
-            node.children.forEach { sortNode(it) }
-        }
-        sortNode(root)
-
-        return root
+        return convert(tree.root)
     }
 
-    fun extractZipEntry(zipFilePath: String, entryPath: String, destFile: File, password: String? = null): Boolean {
+    /** Iterative conversion: archive trees can be deep, and recursion would risk a StackOverflowError. */
+    private fun convert(root: ArchiveNode): ZipNode {
+        val out = ZipNode(root.name, true, root.path, root.size)
+        val stack = ArrayDeque<Pair<ArchiveNode, ZipNode>>()
+        stack.addLast(root to out)
+        while (stack.isNotEmpty()) {
+            val (src, dst) = stack.removeLast()
+            for (c in src.children) {
+                val z = ZipNode(c.name, c.isDirectory, c.path, c.size, unsafe = c.unsafe)
+                dst.children.add(z)
+                if (c.children.isNotEmpty()) stack.addLast(c to z)
+            }
+        }
+        return out
+    }
+
+    private fun openArchiveStream(file: File, id: String): ArchiveInputStream<*> {
+        val raw = BufferedInputStream(FileInputStream(file), 64 * 1024)
         return try {
-            val file = File(zipFilePath)
-            val ext = file.name.substringAfterLast('.', "").lowercase()
+            when (id) {
+                "tar" -> TarArchiveInputStream(raw)
+                "tgz" -> TarArchiveInputStream(GzipCompressorInputStream(raw))
+                "tbz2" -> TarArchiveInputStream(BZip2CompressorInputStream(raw))
+                "txz" -> TarArchiveInputStream(XZCompressorInputStream(raw))
+                "ar" -> ArArchiveInputStream(raw)
+                "cpio" -> CpioArchiveInputStream(raw)
+                else -> throw UnsupportedOperationException("Unsupported archive type")
+            }
+        } catch (e: Exception) {
+            raw.close()
+            throw e
+        }
+    }
 
+    private fun singleStreamEntryName(file: File): String {
+        val n = file.name
+        val lower = n.lowercase()
+        return listOf(".gz", ".bz2", ".xz", ".lzma").firstOrNull { lower.endsWith(it) && n.length > it.length }
+            ?.let { n.substring(0, n.length - it.length) } ?: (n + ".out")
+    }
+
+    private fun openSingleStream(file: File, id: String): InputStream {
+        val raw = BufferedInputStream(FileInputStream(file), 64 * 1024)
+        return when (id) {
+            "gz" -> GzipCompressorInputStream(raw)
+            "bz2" -> BZip2CompressorInputStream(raw)
+            "xz" -> XZCompressorInputStream(raw)
+            else -> raw
+        }
+    }
+
+    /**
+     * Extracts one entry to [destFile] (a cache path chosen by the app, never derived from the entry name).
+     * Enforces per-entry size and compression-ratio limits; a partial file is deleted on any failure.
+     */
+    fun extractZipEntry(zipFilePath: String, entryPath: String, destFile: File, password: String? = null): Boolean {
+        if (entryPath.startsWith("!unsafe/")) return false
+        val file = File(zipFilePath)
+        if (!file.isFile) return false
+        var ok = false
+        try {
+            destFile.parentFile?.mkdirs()
+            val id = archiveId(file)
             when {
-                ext == "7z" -> {
-                    val sevenZFile = if (!password.isNullOrEmpty()) {
-                        SevenZFile(file, password.toCharArray())
-                    } else {
-                        SevenZFile(file)
+                id in zip4jIds -> net.lingala.zip4j.ZipFile(file).use { zf ->
+                    if (!password.isNullOrEmpty()) zf.setPassword(password.toCharArray())
+                    val header = zf.getFileHeader(entryPath) ?: return false
+                    limits.violation(header.compressedSize, header.uncompressedSize)?.let { throw IOException(it) }
+                    zf.getInputStream(header).use { input ->
+                        destFile.outputStream().buffered().use { copyLimited(input, it, limits.maxEntryBytes) }
                     }
-                    sevenZFile.use { szFile ->
-                        var entry = szFile.nextEntry
-                        while (entry != null) {
-                            if (entry.name == entryPath) {
-                                val content = ByteArray(entry.size.toInt())
-                                szFile.read(content)
-                                destFile.writeBytes(content)
-                                return true
-                            }
-                            entry = szFile.nextEntry
-                        }
-                    }
+                    ok = true
                 }
-                ext == "rar" -> {
-                    // RAR support removed
-                }
-                ext == "tar" || ext == "gz" || ext == "tgz" -> {
-                    val fis = FileInputStream(file)
-                    val input = if (ext == "gz" || ext == "tgz" || file.name.endsWith(".tar.gz")) {
-                        GzipCompressorInputStream(fis)
-                    } else {
-                        fis
-                    }
-                    TarArchiveInputStream(input).use { tarIn ->
-                        var entry = tarIn.nextTarEntry
+                id == "7z" -> {
+                    val sz = if (!password.isNullOrEmpty()) SevenZFile(file, password.toCharArray()) else SevenZFile(file)
+                    sz.use { s ->
+                        var entry = s.nextEntry
                         while (entry != null) {
-                            if (entry.name == entryPath) {
-                                FileOutputStream(destFile).use { fos ->
-                                    tarIn.copyTo(fos)
+                            if (entry.name == entryPath && !entry.isDirectory) {
+                                limits.violation(-1, entry.size)?.let { throw IOException(it) }
+                                s.getInputStream(entry).use { input ->
+                                    destFile.outputStream().buffered().use { copyLimited(input, it, limits.maxEntryBytes) }
                                 }
-                                return true
+                                ok = true
+                                break
                             }
-                            entry = tarIn.nextTarEntry
+                            entry = s.nextEntry
                         }
                     }
                 }
-                else -> {
-                    net.lingala.zip4j.ZipFile(file).use { zipFile ->
-                        if (!password.isNullOrEmpty() && zipFile.isEncrypted) {
-                            zipFile.setPassword(password.toCharArray())
+                id in tarLikeIds -> openArchiveStream(file, id).use { s ->
+                    var entry = s.nextEntry
+                    while (entry != null) {
+                        if (entry.name?.trimStart('/') == entryPath && !entry.isDirectory) {
+                            limits.violation(-1, entry.size)?.let { throw IOException(it) }
+                            destFile.outputStream().buffered().use { copyLimited(s, it, limits.maxEntryBytes) }
+                            ok = true
+                            break
                         }
-                        val header = zipFile.getFileHeader(entryPath) ?: return false
-                        zipFile.getInputStream(header).use { input ->
-                            destFile.outputStream().use { output ->
-                                input.copyTo(output)
-                            }
-                        }
+                        entry = s.nextEntry
                     }
-                    return true
+                }
+                id in singleStreamIds -> openSingleStream(file, id).use { input ->
+                    destFile.outputStream().buffered().use { copyLimited(input, it, limits.maxEntryBytes) }
+                    ok = true
                 }
             }
-            false
         } catch (e: Exception) {
-            e.printStackTrace()
-            false
+            ok = false
+        } finally {
+            if (!ok) destFile.delete()
         }
+        return ok
     }
 
+    /**
+     * Replaces one entry inside a ZIP. The new archive is built beside the original and swapped in
+     * with an atomic rename, so a crash can never leave the user without their archive.
+     */
     fun updateZipEntry(zipFilePath: String, entryPath: String, entrySrcFile: File): Boolean {
-        val zipFile = File(zipFilePath)
-        if (!zipFile.exists()) return false
-        val tempZip = File(zipFile.parentFile, "temp_${System.currentTimeMillis()}.zip")
-        try {
-            ZipFile(zipFile).use { srcZipFile ->
-                ZipOutputStream(FileOutputStream(tempZip)).use { zos ->
-                    val entries = srcZipFile.entries()
-                    var replaced = false
+        val zip = File(zipFilePath)
+        val dir = zip.absoluteFile.parentFile ?: return false
+        var temp: File? = null
+        return try {
+            val tmp = File.createTempFile(".fc-zip-", ".tmp", dir)
+            temp = tmp
+            ZipFile(zip).use { zf ->
+                ZipOutputStream(tmp.outputStream().buffered()).use { zos ->
+                    val seen = HashSet<String>()
+                    val entries = zf.entries()
                     while (entries.hasMoreElements()) {
-                        val entry = entries.nextElement()
-                        val newEntry = ZipEntry(entry.name)
-                        zos.putNextEntry(newEntry)
-                        if (entry.name == entryPath) {
-                            FileInputStream(entrySrcFile).use { fis ->
-                                fis.copyTo(zos)
-                            }
-                            replaced = true
-                        } else {
-                            srcZipFile.getInputStream(entry).use { input ->
-                                input.copyTo(zos)
-                            }
-                        }
-                        zos.closeEntry()
-                    }
-                    if (!replaced) {
-                        val newEntry = ZipEntry(entryPath)
-                        zos.putNextEntry(newEntry)
-                        FileInputStream(entrySrcFile).use { fis ->
-                            fis.copyTo(zos)
+                        val old = entries.nextElement()
+                        if (!seen.add(old.name)) continue
+                        val copy = ZipEntry(old.name).apply { time = old.time }
+                        zos.putNextEntry(copy)
+                        if (old.name == entryPath) {
+                            entrySrcFile.inputStream().use { it.copyTo(zos) }
+                        } else if (!old.isDirectory) {
+                            zf.getInputStream(old).use { it.copyTo(zos) }
                         }
                         zos.closeEntry()
                     }
                 }
             }
-            if (zipFile.delete()) {
-                tempZip.renameTo(zipFile)
-                return true
-            }
-            return false
-        } catch (e: Exception) {
-            e.printStackTrace()
-            if (tempZip.exists()) tempZip.delete()
-            return false
-        }
-    }
-
-    sealed class DocxElement {
-        data class Paragraph(
-            val text: String,
-            val isBold: Boolean = false,
-            val isItalic: Boolean = false,
-            val isHeading: Boolean = false,
-            val headingLevel: Int = 0
-        ) : DocxElement()
-        data class Image(val localPath: String) : DocxElement()
-        data class Table(val rows: List<List<String>>) : DocxElement()
-        object PageBreak : DocxElement()
-    }
-
-    fun parseDocx(docxPath: String, context: Context): List<DocxElement> {
-        val elements = mutableListOf<DocxElement>()
-        val mediaFiles = mutableListOf<String>()
-        try {
-            val cacheDir = context.cacheDir
-            val docxMediaDir = File(cacheDir, "docx_media_${docxPath.hashCode()}")
-            if (docxMediaDir.exists()) {
-                docxMediaDir.deleteRecursively()
-            }
-            docxMediaDir.mkdirs()
-            
-            ZipFile(File(docxPath)).use { zipFile ->
-                val entries = zipFile.entries()
-                while (entries.hasMoreElements()) {
-                    val entry = entries.nextElement()
-                    if (entry.name.startsWith("word/media/") && !entry.isDirectory) {
-                        try {
-                            val name = entry.name.substringAfterLast("/")
-                            val outFile = File(docxMediaDir, name)
-                            zipFile.getInputStream(entry).use { input ->
-                                outFile.outputStream().use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                            mediaFiles.add(outFile.absolutePath)
-                        } catch (ex: Exception) {
-                            ex.printStackTrace()
-                        }
-                    }
-                }
-            }
-            mediaFiles.sort()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        var imageIndex = 0
-        try {
-            ZipFile(File(docxPath)).use { zipFile ->
-                val entry = zipFile.getEntry("word/document.xml") ?: return@use
-                zipFile.getInputStream(entry).use { inputStream ->
-                    val parser = org.xmlpull.v1.XmlPullParserFactory.newInstance().newPullParser()
-                    parser.setInput(inputStream, "UTF-8")
-                    var eventType = parser.eventType
-                    
-                    var currentParagraph = StringBuilder()
-                    var isBoldParagraph = false
-                    var isItalicParagraph = false
-                    var headingLevel = 0
-                    
-                    var inTable = false
-                    val currentTableRows = mutableListOf<MutableList<String>>()
-                    var currentTableRow = mutableListOf<String>()
-                    var currentTableCell = StringBuilder()
-                    
-                    var inText = false
-                    var inBold = false
-                    var inItalic = false
-                    
-                    while (eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
-                        val tagName = parser.name
-                        if (eventType == org.xmlpull.v1.XmlPullParser.START_TAG) {
-                            when {
-                                tagName == "tbl" || tagName == "w:tbl" || (tagName != null && tagName.endsWith(":tbl")) -> {
-                                    inTable = true
-                                    currentTableRows.clear()
-                                }
-                                tagName == "tr" || tagName == "w:tr" || (tagName != null && tagName.endsWith(":tr")) -> {
-                                    currentTableRow = mutableListOf()
-                                }
-                                tagName == "tc" || tagName == "w:tc" || (tagName != null && tagName.endsWith(":tc")) -> {
-                                    currentTableCell = StringBuilder()
-                                }
-                                tagName == "p" || tagName == "w:p" || (tagName != null && tagName.endsWith(":p")) -> {
-                                    currentParagraph = StringBuilder()
-                                    isBoldParagraph = false
-                                    isItalicParagraph = false
-                                    headingLevel = 0
-                                }
-                                tagName == "pStyle" || tagName == "w:pStyle" || (tagName != null && tagName.endsWith(":pStyle")) -> {
-                                    val styleVal = parser.getAttributeValue(null, "w:val") ?: parser.getAttributeValue("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "val")
-                                    if (styleVal != null) {
-                                        if (styleVal.startsWith("Heading", ignoreCase = true) || styleVal.contains("Title", ignoreCase = true)) {
-                                            headingLevel = styleVal.filter { it.isDigit() }.toIntOrNull() ?: 1
-                                        }
-                                    }
-                                }
-                                tagName == "b" || tagName == "w:b" || (tagName != null && tagName.endsWith(":b")) -> {
-                                    inBold = true
-                                }
-                                tagName == "i" || tagName == "w:i" || (tagName != null && tagName.endsWith(":i")) -> {
-                                    inItalic = true
-                                }
-                                tagName == "t" || tagName == "w:t" || (tagName != null && tagName.endsWith(":t")) -> {
-                                    inText = true
-                                }
-                                tagName == "br" || tagName == "w:br" || (tagName != null && tagName.endsWith(":br")) -> {
-                                    val brType = parser.getAttributeValue(null, "w:type") ?: parser.getAttributeValue("http://schemas.openxmlformats.org/wordprocessingml/2006/main", "type")
-                                    if (brType == "page") {
-                                        elements.add(DocxElement.PageBreak)
-                                    }
-                                }
-                                tagName == "lastRenderedPageBreak" || tagName == "w:lastRenderedPageBreak" || (tagName != null && tagName.endsWith(":lastRenderedPageBreak")) -> {
-                                    elements.add(DocxElement.PageBreak)
-                                }
-                                tagName == "drawing" || tagName == "w:drawing" || (tagName != null && tagName.endsWith(":drawing")) -> {
-                                    if (imageIndex < mediaFiles.size) {
-                                        elements.add(DocxElement.Image(mediaFiles[imageIndex]))
-                                        imageIndex++
-                                    }
-                                }
-                            }
-                        } else if (eventType == org.xmlpull.v1.XmlPullParser.TEXT) {
-                            if (inText && parser.text != null) {
-                                val textVal = parser.text
-                                if (inTable) {
-                                    currentTableCell.append(textVal)
-                                } else {
-                                    currentParagraph.append(textVal)
-                                    if (inBold) isBoldParagraph = true
-                                    if (inItalic) isItalicParagraph = true
-                                }
-                            }
-                        } else if (eventType == org.xmlpull.v1.XmlPullParser.END_TAG) {
-                            when {
-                                tagName == "tbl" || tagName == "w:tbl" || (tagName != null && tagName.endsWith(":tbl")) -> {
-                                    inTable = false
-                                    elements.add(DocxElement.Table(currentTableRows.map { it.toList() }))
-                                }
-                                tagName == "tr" || tagName == "w:tr" || (tagName != null && tagName.endsWith(":tr")) -> {
-                                    if (inTable) {
-                                        currentTableRows.add(currentTableRow)
-                                    }
-                                }
-                                tagName == "tc" || tagName == "w:tc" || (tagName != null && tagName.endsWith(":tc")) -> {
-                                    if (inTable) {
-                                        currentTableRow.add(currentTableCell.toString().trim())
-                                    }
-                                }
-                                tagName == "p" || tagName == "w:p" || (tagName != null && tagName.endsWith(":p")) -> {
-                                    if (!inTable) {
-                                        val text = currentParagraph.toString().trim()
-                                        if (text.isNotEmpty() || (eventType == org.xmlpull.v1.XmlPullParser.END_TAG && currentParagraph.isNotEmpty())) {
-                                            elements.add(
-                                                DocxElement.Paragraph(
-                                                    text = text,
-                                                    isBold = isBoldParagraph,
-                                                    isItalic = isItalicParagraph,
-                                                    isHeading = (headingLevel > 0),
-                                                    headingLevel = headingLevel
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                                tagName == "b" || tagName == "w:b" || (tagName != null && tagName.endsWith(":b")) -> {
-                                    inBold = false
-                                }
-                                tagName == "i" || tagName == "w:i" || (tagName != null && tagName.endsWith(":i")) -> {
-                                    inItalic = false
-                                }
-                                tagName == "t" || tagName == "w:t" || (tagName != null && tagName.endsWith(":t")) -> {
-                                    inText = false
-                                }
-                            }
-                        }
-                        eventType = parser.next()
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        if (elements.isEmpty()) {
-            val fallbackText = readDocxText(docxPath)
-            elements.add(DocxElement.Paragraph(text = fallbackText))
-        }
-        return elements
-    }
-
-    fun readDocxText(docxPath: String): String {
-        val textBuilder = StringBuilder()
-        try {
-            java.util.zip.ZipFile(File(docxPath)).use { zipFile ->
-                val entry = zipFile.getEntry("word/document.xml") ?: return "No readable body text found in DOCX structure."
-                zipFile.getInputStream(entry).use { inputStream ->
-                    val parser = org.xmlpull.v1.XmlPullParserFactory.newInstance().newPullParser()
-                    parser.setInput(inputStream, "UTF-8")
-                    var eventType = parser.eventType
-                    var inTextTag = false
-                    while (eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
-                        val tagName = parser.name
-                        if (eventType == org.xmlpull.v1.XmlPullParser.START_TAG) {
-                            if (tagName == "t" || tagName == "w:t" || (tagName != null && tagName.endsWith(":t"))) {
-                                inTextTag = true
-                            } else if (tagName == "p" || tagName == "w:p" || (tagName != null && tagName.endsWith(":p"))) {
-                                if (textBuilder.isNotEmpty() && !textBuilder.endsWith("\n")) {
-                                    textBuilder.append("\n")
-                                }
-                            }
-                        } else if (eventType == org.xmlpull.v1.XmlPullParser.TEXT) {
-                            if (inTextTag && parser.text != null) {
-                                textBuilder.append(parser.text)
-                            }
-                        } else if (eventType == org.xmlpull.v1.XmlPullParser.END_TAG) {
-                            if (tagName == "t" || tagName == "w:t" || (tagName != null && tagName.endsWith(":t"))) {
-                                inTextTag = false
-                            }
-                        }
-                        eventType = parser.next()
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            return "Failed to open Word template document: ${e.message}"
-        }
-        return textBuilder.toString()
-    }
-
-    fun writeDocxText(docxPath: String, newContent: String): Boolean {
-        val xmlBuilder = StringBuilder()
-        xmlBuilder.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>")
-        xmlBuilder.append("<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">")
-        xmlBuilder.append("<w:body>")
-        for (line in newContent.split("\n")) {
-            val sanitized = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            xmlBuilder.append("<w:p><w:r><w:t>").append(sanitized).append("</w:t></w:r></w:p>")
-        }
-        xmlBuilder.append("</w:body></w:document>")
-        val xmlData = xmlBuilder.toString().toByteArray(Charsets.UTF_8)
-
-        val zipFile = File(docxPath)
-        val tempFile = File(zipFile.parentFile, "edit_temp_${System.currentTimeMillis()}.docx")
-        try {
-            java.util.zip.ZipInputStream(FileInputStream(zipFile)).use { zis ->
-                java.util.zip.ZipOutputStream(FileOutputStream(tempFile)).use { zos ->
-                    var entry = zis.nextEntry
-                    var replaced = false
-                    while (entry != null) {
-                        if (entry.name != "word/document.xml") {
-                            zos.putNextEntry(java.util.zip.ZipEntry(entry.name))
-                            zis.copyTo(zos)
-                        } else {
-                            zos.putNextEntry(java.util.zip.ZipEntry("word/document.xml"))
-                            zos.write(xmlData)
-                            replaced = true
-                        }
-                        zos.closeEntry()
-                        entry = zis.nextEntry
-                    }
-                    if (!replaced) {
-                        zos.putNextEntry(java.util.zip.ZipEntry("word/document.xml"))
-                        zos.write(xmlData)
-                        zos.closeEntry()
-                    }
-                }
-            }
-            if (zipFile.delete()) {
-                tempFile.renameTo(zipFile)
-                return true
-            }
-            return false
-        } catch (e: Exception) {
-            e.printStackTrace()
-            if (tempFile.exists()) tempFile.delete()
-            return false
-        }
-    }
-
-    fun readPptxText(pptxPath: String): String {
-        val textBuilder = StringBuilder()
-        try {
-            java.util.zip.ZipFile(File(pptxPath)).use { zipFile ->
-                val entries = zipFile.entries()
-                val sortedEntries = mutableListOf<java.util.zip.ZipEntry>()
-                while (entries.hasMoreElements()) {
-                    val entry = entries.nextElement()
-                    if (entry.name.startsWith("ppt/slides/slide") && entry.name.endsWith(".xml")) {
-                        sortedEntries.add(entry)
-                    }
-                }
-                sortedEntries.sortBy { it.name }
-                for (entry in sortedEntries) {
-                    val slideNum = entry.name.substringAfter("slide").substringBefore(".xml")
-                    textBuilder.append("--- Slide $slideNum ---\n")
-                    zipFile.getInputStream(entry).use { inputStream ->
-                        val parser = org.xmlpull.v1.XmlPullParserFactory.newInstance().newPullParser()
-                        parser.setInput(inputStream, "UTF-8")
-                        var eventType = parser.eventType
-                        while (eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
-                            if (eventType == org.xmlpull.v1.XmlPullParser.START_TAG && parser.name == "t") {
-                                textBuilder.append(parser.nextText()).append(" ")
-                            }
-                            eventType = parser.next()
-                        }
-                    }
-                    textBuilder.append("\n\n")
-                }
-            }
-        } catch (e: Exception) {
-            return "Failed to open PowerPoint slides: ${e.message}"
-        }
-        return textBuilder.toString().trim()
-    }
-
-    fun writePptxText(pptxPath: String, newContent: String): Boolean {
-        // Writes edited presentation slide texts by taking lines and bundling them as a clean slide content template
-        val xmlBuilder = StringBuilder()
-        xmlBuilder.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>")
-        xmlBuilder.append("<p:sld xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">")
-        xmlBuilder.append("<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>")
-        
-        var idCounter = 10
-        for (line in newContent.split("\n")) {
-            if (line.isBlank() || line.startsWith("--- Slide")) continue
-            val sanitized = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            idCounter++
-            xmlBuilder.append("<p:sp><p:nvSpPr><p:cNvPr id=\"$idCounter\" name=\"Text Box\"/><p:cNvSpPr><p:spLocks noGrp=\"1\"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr/>")
-            xmlBuilder.append("<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang=\"en-US\" sz=\"1800\"/><a:t>$sanitized</a:t></a:r></a:p></p:txBody></p:sp>")
-        }
-        xmlBuilder.append("</p:cSld></p:spTree></p:cSld></p:sld>")
-        val xmlData = xmlBuilder.toString().toByteArray(Charsets.UTF_8)
-
-        val zipFile = File(pptxPath)
-        val tempFile = File(zipFile.parentFile, "edit_temp_${System.currentTimeMillis()}.pptx")
-        try {
-            java.util.zip.ZipInputStream(FileInputStream(zipFile)).use { zis ->
-                java.util.zip.ZipOutputStream(FileOutputStream(tempFile)).use { zos ->
-                    var entry = zis.nextEntry
-                    var replaced = false
-                    while (entry != null) {
-                        if (entry.name == "ppt/slides/slide1.xml") {
-                            zos.putNextEntry(java.util.zip.ZipEntry("ppt/slides/slide1.xml"))
-                            zos.write(xmlData)
-                            replaced = true
-                        } else {
-                            zos.putNextEntry(java.util.zip.ZipEntry(entry.name))
-                            zis.copyTo(zos)
-                        }
-                        zos.closeEntry()
-                        entry = zis.nextEntry
-                    }
-                    if (!replaced) {
-                        zos.putNextEntry(java.util.zip.ZipEntry("ppt/slides/slide1.xml"))
-                        zos.write(xmlData)
-                        zos.closeEntry()
-                    }
-                }
-            }
-            if (zipFile.delete()) {
-                tempFile.renameTo(zipFile)
-                return true
-            }
-            return false
-        } catch (e: Exception) {
-            e.printStackTrace()
-            if (tempFile.exists()) tempFile.delete()
-            return false
-        }
-    }
-
-    fun searchLocalDeviceFiles(query: String): List<File> {
-        if (query.trim().length < 2) return emptyList()
-        val results = mutableListOf<File>()
-        val scanDirs = listOf(
-            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
-            android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS),
-            File("/sdcard/Download"),
-            File("/sdcard/Documents"),
-            File("/sdcard")
-        )
-        
-        for (dir in scanDirs) {
-            if (!dir.exists() || !dir.isDirectory) continue
             try {
-                recurseScan(dir, query, results, maxResultsNum = 20)
-                if (results.size >= 20) break
-            } catch (e: Exception) {
-                e.printStackTrace()
+                Files.move(tmp.toPath(), zip.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } catch (e: java.nio.file.AtomicMoveNotSupportedException) {
+                Files.move(tmp.toPath(), zip.toPath(), StandardCopyOption.REPLACE_EXISTING)
             }
+            true
+        } catch (e: Exception) {
+            false
+        } finally {
+            temp?.takeIf { it.exists() }?.delete()
         }
-        return results
     }
 
-    private fun recurseScan(dir: File, query: String, results: MutableList<File>, maxResultsNum: Int) {
-        if (results.size >= maxResultsNum) return
-        val filesList = dir.listFiles() ?: return
-        for (f in filesList) {
-            if (results.size >= maxResultsNum) return
-            if (f.isDirectory) {
-                if (!f.name.startsWith(".")) {
-                    recurseScan(f, query, results, maxResultsNum)
-                }
-            } else if (f.isFile) {
-                if (f.name.contains(query, ignoreCase = true)) {
-                    results.add(f)
-                }
-            }
-        }
+    companion object {
+        /** Row/column caps for the in-app grid; beyond these the sheet is shown read-only. */
+        const val VIEW_MAX_ROWS = 50_000
+        const val VIEW_MAX_COLS = 256
     }
 }

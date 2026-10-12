@@ -4,7 +4,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.detekt)
+    jacoco
 }
 
 // Triggering fresh build packaging and clearing build state artifacts for successful installation
@@ -30,8 +31,8 @@ android {
         applicationId = "com.aistudio.filesclaw.apxqzy"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -39,18 +40,37 @@ android {
         }
     }
 
+    // A project-level debug key is optional (decoded from debug.keystore.base64 above). When it is absent,
+    // the Android Gradle Plugin's own debug keystore is used, so a fresh clone still builds.
+    val hasProjectDebugKey = keystoreFile.exists()
     signingConfigs {
-        register("debugSigning") {
-            storeFile = rootProject.file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        if (hasProjectDebugKey) {
+            register("debugSigning") {
+                storeFile = keystoreFile
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
+    // Real release signing comes from the environment so no secret is ever committed:
+    //   FILECLAW_KEYSTORE, FILECLAW_STORE_PASSWORD, FILECLAW_KEY_ALIAS, FILECLAW_KEY_PASSWORD
+    // Without them the release build falls back to the debug key (fine for sideloading, not for Play).
+    val releaseKeystore: String? = System.getenv("FILECLAW_KEYSTORE")
+    if (releaseKeystore != null) {
+        signingConfigs.register("release") {
+            storeFile = file(releaseKeystore)
+            storePassword = System.getenv("FILECLAW_STORE_PASSWORD")
+            keyAlias = System.getenv("FILECLAW_KEY_ALIAS")
+            keyPassword = System.getenv("FILECLAW_KEY_PASSWORD")
         }
     }
 
     buildTypes {
         getByName("debug") {
-            signingConfig = signingConfigs.getByName("debugSigning")
+            if (hasProjectDebugKey) signingConfig = signingConfigs.getByName("debugSigning")
+            enableUnitTestCoverage = true
         }
         getByName("release") {
             isMinifyEnabled = true
@@ -59,7 +79,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debugSigning")
+            signingConfig = when {
+                releaseKeystore != null -> signingConfigs.getByName("release")
+                hasProjectDebugKey -> signingConfigs.getByName("debugSigning")
+                else -> signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {
@@ -76,6 +100,13 @@ android {
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
+    }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+    lint {
+        abortOnError = true
+        checkReleaseBuilds = true
     }
     packaging {
         resources {
@@ -104,24 +135,20 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    // Navigation and Serialization
+    // Navigation
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.kotlinx.serialization.json)
 
     // Image loading (Coil)
     implementation(libs.coil.compose)
     implementation(libs.telephoto.zoomable.coil)
     implementation("androidx.work:work-runtime-ktx:2.9.0")
-    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     implementation("com.github.mhiew:android-pdf-viewer:3.2.0-beta.3")
     implementation("org.jetbrains:markdown:0.7.3")
 
-    // Archiving, Excel, CSV
+    // Archives and Excel (read-only). CSV/TSV is parsed by com.example.core.csv.
     implementation(libs.commons.compress)
     implementation(libs.xz)
-    implementation(libs.kotlin.csv)
     implementation(libs.fastexcel.reader)
-    implementation(libs.fastexcel.writer)
     implementation(libs.zip4j)
 
     // Apache POI for DOCX manipulation is disabled for lightweight native alternative to speed up builds and avoid memory limit issues
@@ -137,4 +164,60 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+// ---- Room schema export (needed to write real migrations; see AppDatabase) ----------------------
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+// ---- Static analysis: gates only the pure-Kotlin core for now ------------------------------------
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    source.setFrom("src/main/java/com/example/core")
+    // Advisory until the first green run on a machine with network access (tracked in docs/TODO.md).
+    ignoreFailures = true
+}
+
+// ---- Coverage for the core package (target: 80% lines) --------------------------------------------
+jacoco {
+    toolVersion = "0.8.11"
+}
+
+val coreClasses = fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) {
+    include("com/example/core/**")
+}
+val coverageData = fileTree(layout.buildDirectory) {
+    include("outputs/unit_test_code_coverage/**/*.exec", "jacoco/*.exec")
+}
+
+tasks.register<JacocoReport>("jacocoCoreReport") {
+    group = "verification"
+    description = "Coverage report for com.example.core (run after testDebugUnitTest)."
+    dependsOn("testDebugUnitTest")
+    classDirectories.setFrom(coreClasses)
+    sourceDirectories.setFrom("src/main/java")
+    executionData.setFrom(coverageData)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.register<JacocoCoverageVerification>("jacocoCoreVerify") {
+    group = "verification"
+    description = "Fails if line coverage of com.example.core drops below 80%."
+    dependsOn("jacocoCoreReport")
+    classDirectories.setFrom(coreClasses)
+    sourceDirectories.setFrom("src/main/java")
+    executionData.setFrom(coverageData)
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+    }
 }

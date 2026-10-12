@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -46,17 +47,55 @@ import kotlinx.coroutines.flow.first
 
 class MainActivity : ComponentActivity() {
 
+    private companion object {
+        const val STATE_SKIP_GATE = "skip_permission_gate"
+    }
+
     private val _permissionCheckState = mutableStateOf(false)
+
+    /** Same instance Compose gets from viewModel(): both are scoped to this Activity. */
+    private val mainViewModel: MainViewModel by viewModels()
+
+    /**
+     * Shortcut intents to act on. Deliberately Compose state that starts null on every (re)creation:
+     * the old code keyed a LaunchedEffect on Activity.getIntent(), which is not state, so a rotation
+     * re-ran it and re-imported the same file / re-opened the last file each time.
+     */
+    private val pendingShortcutIntent = mutableStateOf<android.content.Intent?>(null)
+
+    /** True once the user opened a file from another app or chose to continue without all-files access. */
+    private val skipPermissionGate = mutableStateOf(false)
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_SKIP_GATE, skipPermissionGate.value)
+    }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    /** Runs exactly once per delivered intent (never on configuration changes). */
+    private fun handleIncomingIntent(actIntent: android.content.Intent) {
+        if (actIntent.action == android.content.Intent.ACTION_VIEW) {
+            actIntent.data?.let { uri ->
+                // Opening a content:// document needs no broad storage permission at all.
+                skipPermissionGate.value = true
+                mainViewModel.importFileFromUri(uri)
+            }
+        } else {
+            pendingShortcutIntent.value = actIntent
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         _permissionCheckState.value = hasRequiredPermissions(this)
+        skipPermissionGate.value = savedInstanceState?.getBoolean(STATE_SKIP_GATE, false) == true
+        if (savedInstanceState == null) handleIncomingIntent(intent)
 
         val requestPermissionLauncher = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
@@ -103,21 +142,9 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            val mainViewModel: MainViewModel = viewModel()
             val settings by mainViewModel.settingsState.collectAsState()
             val fileEvent by mainViewModel.fileEvent.collectAsState()
-            val hasPermissions = _permissionCheckState.value
-
-            // Handle Open-With Intent launches and file streams
-            LaunchedEffect(intent) {
-                intent?.let { actIntent ->
-                    if (actIntent.action == android.content.Intent.ACTION_VIEW) {
-                        actIntent.data?.let { uri ->
-                            mainViewModel.importFileFromUri(uri)
-                        }
-                    }
-                }
-            }
+            val hasPermissions = _permissionCheckState.value || skipPermissionGate.value
 
             // Display dynamic notifications (e.g. Save completed, Import files complete)
             LaunchedEffect(fileEvent) {
@@ -133,7 +160,8 @@ class MainActivity : ComponentActivity() {
                     PermissionGateScreen(
                         onRequestPermissions = requestStandardPermissions,
                         onRequestAllFilesAccess = requestManageAllFilesPermission,
-                        isManageAllFilesRequired = isManageAllFilesRequired
+                        isManageAllFilesRequired = isManageAllFilesRequired,
+                        onContinueWithoutAccess = { skipPermissionGate.value = true }
                     )
                 } else {
                     val navController = rememberNavController()
@@ -187,8 +215,8 @@ class MainActivity : ComponentActivity() {
                     }
 
                     // Handle App Shortcuts Intents
-                    LaunchedEffect(intent) {
-                        intent?.let { actIntent ->
+                    LaunchedEffect(pendingShortcutIntent.value) {
+                        pendingShortcutIntent.value?.let { actIntent ->
                             val action = actIntent.action
                             if (action == "com.example.action.LAST_OPENED") {
                                 try {
@@ -229,7 +257,7 @@ class MainActivity : ComponentActivity() {
                         val fileState = mainViewModel.currentFileState.value
                         val currentRoute = navController.currentBackStackEntry?.destination?.route
                         if (currentRoute != "preview" && currentRoute != "editor") {
-                            if (fileState is MainViewModel.FileContentState.TextSuccess && settings.defaultToEditOnOpen) {
+                            if (fileState.opensInEditor() && settings.defaultToEditOnOpen) {
                                 navController.navigate("editor") {
                                     launchSingleTop = true
                                 }
@@ -248,7 +276,7 @@ class MainActivity : ComponentActivity() {
                                 is MainViewModel.NavigationEvent.NavigateToPreview -> {
                                     val currentRoute = navController.currentBackStackEntry?.destination?.route
                                     if (currentRoute != "preview" && currentRoute != "editor") {
-                                        if (event.fileState is MainViewModel.FileContentState.TextSuccess && settings.defaultToEditOnOpen) {
+                                        if (event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
                                             navController.navigate("editor") {
                                                 launchSingleTop = true
                                             }
@@ -257,7 +285,7 @@ class MainActivity : ComponentActivity() {
                                                 launchSingleTop = true
                                             }
                                         }
-                                    } else if (currentRoute == "preview" && event.fileState is MainViewModel.FileContentState.TextSuccess && settings.defaultToEditOnOpen) {
+                                    } else if (currentRoute == "preview" && event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
                                         navController.navigate("editor") {
                                             popUpTo("preview") { inclusive = true }
                                             launchSingleTop = true
@@ -407,12 +435,13 @@ class MainActivity : ComponentActivity() {
 fun PermissionGateScreen(
     onRequestPermissions: () -> Unit,
     onRequestAllFilesAccess: () -> Unit,
-    isManageAllFilesRequired: Boolean
+    isManageAllFilesRequired: Boolean,
+    onContinueWithoutAccess: () -> Unit = {}
 ) {
+    com.example.ui.theme.GlassBackdrop {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -446,7 +475,11 @@ fun PermissionGateScreen(
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(onClick = onContinueWithoutAccess) {
+                Text("Continue without full access")
+            }
+            Spacer(modifier = Modifier.height(24.dp))
 
             if (!isManageAllFilesRequired) {
                 Card(
@@ -511,4 +544,9 @@ fun PermissionGateScreen(
             }
         }
     }
+    }
 }
+
+/** Only fully loaded, writable text files go straight into the editor; truncated or converted views stay read-only. */
+private fun MainViewModel.FileContentState.opensInEditor(): Boolean =
+    this is MainViewModel.FileContentState.TextSuccess && this.editable

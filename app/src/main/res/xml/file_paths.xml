@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Narrowest practical scope. The old file declared <root-path path="."/>, i.e. the whole filesystem. -->
 <paths>
-    <root-path name="root" path="." />
     <external-path name="external" path="." />
     <cache-path name="temp_cache" path="." />
     <files-path name="files" path="." />

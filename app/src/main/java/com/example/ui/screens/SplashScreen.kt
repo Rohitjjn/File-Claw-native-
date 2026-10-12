@@ -53,7 +53,8 @@ fun SplashScreen(
             )
         }
         
-        delay(500)
+        // Was 500 ms of pure waiting inside the cold-start budget; the 250 ms fade still plays.
+        delay(150)
         onNavigateToHome()
     }
 

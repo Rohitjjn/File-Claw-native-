@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.ui.theme.glass
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
@@ -43,8 +44,9 @@ fun ClaudeAppBar(
     actions: @Composable RowScope.() -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val glass = com.example.ui.theme.LocalGlass.current
     Surface(
-        color = MaterialTheme.colorScheme.surface,
+        color = glass.fillStrong,
         modifier = modifier
             .testTag("claude_app_bar")
             .fillMaxWidth()
@@ -80,6 +82,7 @@ fun ClaudeAppBar(
                 ),
                 windowInsets = WindowInsets.statusBars
             )
+            androidx.compose.material3.HorizontalDivider(color = glass.strokeEnd)
         }
     }
 }
@@ -200,11 +203,13 @@ fun ClaudeCard(
         MaterialTheme.colorScheme.surface
     }
 
+    val cardShape = RoundedCornerShape(16.dp)
     androidx.compose.material3.Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = containerColor,
-        border = BorderStroke(1.dp, borderColor),
+        shape = cardShape,
+        color = androidx.compose.ui.graphics.Color.Transparent,
+        border = if (isSelected) BorderStroke(1.dp, borderColor) else null,
         modifier = modifier
+            .glass(cardShape, strong = isSelected)
             .let {
                 if (onClick != null) {
                     it.clickable(onClick = onClick)
