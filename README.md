@@ -1,3 +1,7 @@
+> **v1.1.0 "Foundation & Safety"**: see [`docs/CHANGELOG.md`](docs/CHANGELOG.md), [`BUILD_GUIDE.md`](BUILD_GUIDE.md) and
+> [`docs/TODO.md`](docs/TODO.md) (KNOWN ISSUES). Docs now live in [`docs/`](docs/); the pre-1.1.0 documents are in `docs/legacy/`
+> and are partly out of date. The Android layer of this release has not been compiled by its author: run the Quality Gate first.
+
 <div align="center">
 <img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
 </div>
