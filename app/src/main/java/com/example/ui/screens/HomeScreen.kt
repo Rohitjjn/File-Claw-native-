@@ -12,6 +12,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.outlined.ViewList
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.filled.Star
 import com.example.ui.component.FileExtensionBadge
+import com.example.ui.component.StaggeredAnimatedItem
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -668,55 +670,107 @@ fun HomeScreen(
                                         }
                                     }
                                 } else if (isGridView) {
-                                    // 2-Column Grid Layout
+                                    // 2-Column Grid Layout with Staggered Spring Animation
                                     val rows = displayedFiles.chunked(2)
-                                    items(rows, key = { row -> row.joinToString("-") { it.id.toString() } }, contentType = { "GridRow" }) { rowFiles ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            for (file in rowFiles) {
-                                                val isFav = favoritePaths.contains(file.path)
-                                                Box(modifier = Modifier.weight(1f)) {
-                                                    ClaudeCard(
-                                                        onClick = { viewModel.openFile(file) }
-                                                    ) {
-                                                        Column(modifier = Modifier.fillMaxWidth()) {
-                                                            Row(
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                                verticalAlignment = Alignment.CenterVertically
-                                                            ) {
-                                                                FileExtensionBadge(extension = file.extension)
-                                                                IconButton(
-                                                                    onClick = { viewModel.toggleFavorite(file.path) },
-                                                                    modifier = Modifier.size(28.dp)
+                                    itemsIndexed(rows, key = { _, row -> row.joinToString("-") { it.id.toString() } }, contentType = { _, _ -> "GridRow" }) { rowIndex, rowFiles ->
+                                        StaggeredAnimatedItem(index = rowIndex) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                for (file in rowFiles) {
+                                                    val isFav = favoritePaths.contains(file.path)
+                                                    Box(modifier = Modifier.weight(1f)) {
+                                                        ClaudeCard(
+                                                            onClick = { viewModel.openFile(file) }
+                                                        ) {
+                                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                                                Row(
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                                    verticalAlignment = Alignment.CenterVertically
                                                                 ) {
-                                                                    Icon(
-                                                                        imageVector = if (isFav) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                                                                        contentDescription = "Toggle favorite",
-                                                                        tint = if (isFav) Color(0xFFE5A93C) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                                                                        modifier = Modifier.size(18.dp)
+                                                                    FileExtensionBadge(extension = file.extension)
+                                                                    IconButton(
+                                                                        onClick = { viewModel.toggleFavorite(file.path) },
+                                                                        modifier = Modifier.size(28.dp)
+                                                                    ) {
+                                                                        Icon(
+                                                                            imageVector = if (isFav) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                                                                            contentDescription = "Toggle favorite",
+                                                                            tint = if (isFav) Color(0xFFE5A93C) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                                                                            modifier = Modifier.size(18.dp)
+                                                                        )
+                                                                    }
+                                                                }
+                                                                Spacer(modifier = Modifier.height(8.dp))
+                                                                Box(
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    val isLoading by remember(file.path) { androidx.compose.runtime.derivedStateOf { loadingFilePathState.value == file.path } }
+                                                                    FileIcon(
+                                                                        extension = file.extension,
+                                                                        size = 46,
+                                                                        isSample = file.isSample,
+                                                                        modifier = Modifier.premiumLoadingPulse(isLoading)
                                                                     )
                                                                 }
-                                                            }
-                                                            Spacer(modifier = Modifier.height(8.dp))
-                                                            Box(
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                contentAlignment = Alignment.Center
-                                                            ) {
-                                                                val isLoading by remember(file.path) { androidx.compose.runtime.derivedStateOf { loadingFilePathState.value == file.path } }
-                                                                FileIcon(
-                                                                    extension = file.extension,
-                                                                    size = 46,
-                                                                    isSample = file.isSample,
-                                                                    modifier = Modifier.premiumLoadingPulse(isLoading)
+                                                                Spacer(modifier = Modifier.height(10.dp))
+                                                                Text(
+                                                                    text = file.name,
+                                                                    fontSize = 14.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                                Spacer(modifier = Modifier.height(2.dp))
+                                                                val formattedSize = remember(file.size) { formatFileSize(file.size) }
+                                                                Text(
+                                                                    text = formattedSize,
+                                                                    fontSize = 11.sp,
+                                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                                                                 )
                                                             }
-                                                            Spacer(modifier = Modifier.height(10.dp))
+                                                        }
+                                                    }
+                                                }
+                                                if (rowFiles.size == 1) {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // List Layout
+                                    itemsIndexed(displayedFiles, key = { _, it -> it.id }, contentType = { _, _ -> "RecentFile" }) { fileIndex, file ->
+                                        val isFav = favoritePaths.contains(file.path)
+                                        StaggeredAnimatedItem(index = fileIndex) {
+                                            ClaudeCard(
+                                                onClick = { viewModel.openFile(file) }
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        modifier = Modifier.weight(1f)
+                                                    ) {
+                                                        val isLoading by remember(file.path) { androidx.compose.runtime.derivedStateOf { loadingFilePathState.value == file.path } }
+                                                        FileIcon(
+                                                            extension = file.extension, 
+                                                            size = 42, 
+                                                            isSample = file.isSample,
+                                                            modifier = Modifier.premiumLoadingPulse(isLoading)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(16.dp))
+                                                        Column {
                                                             Text(
                                                                 text = file.name,
-                                                                fontSize = 14.sp,
+                                                                fontSize = 16.sp,
                                                                 fontWeight = FontWeight.Bold,
                                                                 color = MaterialTheme.colorScheme.onSurface,
                                                                 maxLines = 1,
@@ -724,82 +778,34 @@ fun HomeScreen(
                                                             )
                                                             Spacer(modifier = Modifier.height(2.dp))
                                                             val formattedSize = remember(file.size) { formatFileSize(file.size) }
+                                                            val formattedTime = remember(file.lastOpened) { formatElapsedTime(file.lastOpened) }
                                                             Text(
-                                                                text = formattedSize,
-                                                                fontSize = 11.sp,
-                                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                                                text = "${file.extension.uppercase()}  •  $formattedSize  •  $formattedTime",
+                                                                fontSize = 12.sp,
+                                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                                             )
                                                         }
                                                     }
-                                                }
-                                            }
-                                            if (rowFiles.size == 1) {
-                                                Spacer(modifier = Modifier.weight(1f))
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // List Layout
-                                    items(displayedFiles, key = { it.id }, contentType = { "RecentFile" }) { file ->
-                                        val isFav = favoritePaths.contains(file.path)
-                                        ClaudeCard(
-                                            onClick = { viewModel.openFile(file) }
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    modifier = Modifier.weight(1f)
-                                                ) {
-                                                    val isLoading by remember(file.path) { androidx.compose.runtime.derivedStateOf { loadingFilePathState.value == file.path } }
-                                                    FileIcon(
-                                                        extension = file.extension, 
-                                                        size = 42, 
-                                                        isSample = file.isSample,
-                                                        modifier = Modifier.premiumLoadingPulse(isLoading)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(16.dp))
-                                                    Column {
-                                                        Text(
-                                                            text = file.name,
-                                                            fontSize = 16.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.onSurface,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
-                                                        Spacer(modifier = Modifier.height(2.dp))
-                                                        val formattedSize = remember(file.size) { formatFileSize(file.size) }
-                                                        val formattedTime = remember(file.lastOpened) { formatElapsedTime(file.lastOpened) }
-                                                        Text(
-                                                            text = "${file.extension.uppercase()}  •  $formattedSize  •  $formattedTime",
-                                                            fontSize = 12.sp,
-                                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                                        )
-                                                    }
-                                                }
 
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    IconButton(
-                                                        onClick = { viewModel.toggleFavorite(file.path) },
-                                                        modifier = Modifier.size(36.dp)
-                                                    ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        IconButton(
+                                                            onClick = { viewModel.toggleFavorite(file.path) },
+                                                            modifier = Modifier.size(36.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = if (isFav) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                                                                contentDescription = "Toggle favorite",
+                                                                tint = if (isFav) Color(0xFFE5A93C) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                                                                modifier = Modifier.size(20.dp)
+                                                            )
+                                                        }
                                                         Icon(
-                                                            imageVector = if (isFav) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                                                            contentDescription = "Toggle favorite",
-                                                            tint = if (isFav) Color(0xFFE5A93C) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                                                            modifier = Modifier.size(20.dp)
+                                                            imageVector = Icons.Default.ChevronRight,
+                                                            contentDescription = "Open Preview",
+                                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                                            modifier = Modifier.size(22.dp)
                                                         )
                                                     }
-                                                    Icon(
-                                                        imageVector = Icons.Default.ChevronRight,
-                                                        contentDescription = "Open Preview",
-                                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                                        modifier = Modifier.size(22.dp)
-                                                    )
                                                 }
                                             }
                                         }

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -74,6 +75,7 @@ fun EditorScreen(
     
     var originalContent by remember(fileContent) { mutableStateOf(fileContent) }
     var showUnsavedDialog by remember { mutableStateOf(false) }
+    var showSaveAsDialog by remember { mutableStateOf(false) }
 
     val activeFileEntity = textSuccess?.file
     val hasUnsavedChanges = textValue.text != originalContent
@@ -120,6 +122,18 @@ fun EditorScreen(
                 onNavIconClick = handleExit,
                 navIcon = Icons.Default.Close,
                 actions = {
+                    // Save As / Export Copy Button
+                    IconButton(
+                        onClick = { showSaveAsDialog = true },
+                        modifier = Modifier.testTag("save_as_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.DriveFileMove,
+                            contentDescription = "Save As / Export Copy",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
                     // Save Button
                     IconButton(
                         onClick = {
@@ -463,6 +477,66 @@ fun EditorScreen(
                     }
                 ) {
                     Text("Exit", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    }
+
+    if (showSaveAsDialog && activeFileEntity != null) {
+        val defaultName = remember(activeFileEntity.name) {
+            val dotIdx = activeFileEntity.name.lastIndexOf('.')
+            if (dotIdx > 0) {
+                activeFileEntity.name.substring(0, dotIdx) + "_copy." + activeFileEntity.extension
+            } else {
+                activeFileEntity.name + "_copy"
+            }
+        }
+        var copyFileNameInput by remember { mutableStateOf(defaultName) }
+
+        AlertDialog(
+            onDismissRequest = { showSaveAsDialog = false },
+            title = {
+                Text(
+                    text = "Export Modified Copy",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Atomically save changes into a new copy without overwriting the original file:",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = copyFileNameInput,
+                        onValueChange = { copyFileNameInput = it },
+                        singleLine = true,
+                        label = { Text("File Name") },
+                        modifier = Modifier.fillMaxWidth().testTag("save_as_filename_input")
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveAsDialog = false }) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (copyFileNameInput.isNotBlank()) {
+                            viewModel.exportCopy(activeFileEntity, copyFileNameInput.trim(), textValue.text)
+                            showSaveAsDialog = false
+                        }
+                    },
+                    modifier = Modifier.testTag("save_as_confirm_button")
+                ) {
+                    Text("Export Copy")
                 }
             },
             shape = RoundedCornerShape(16.dp),

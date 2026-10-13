@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,6 +33,7 @@ import com.example.ui.component.ClaudeButton
 import com.example.ui.component.ClaudeCard
 import com.example.ui.component.FileIcon
 import com.example.ui.component.FileExtensionBadge
+import com.example.ui.component.StaggeredAnimatedItem
 import com.example.ui.component.premiumLoadingPulse
 import com.example.viewmodel.MainViewModel
 import java.io.File
@@ -323,13 +325,14 @@ fun AllFilesScreen(
                         }
                     }
                 } else if (isGridView) {
-                    // 2-Column Grid Layout
+                    // 2-Column Grid Layout with Staggered Spring Animation
                     val rows = targetFiles.chunked(2)
-                    items(rows, key = { row -> row.joinToString("-") { it.id.toString() } }, contentType = { "GridRow" }) { rowFiles ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                    itemsIndexed(rows, key = { _, row -> row.joinToString("-") { it.id.toString() } }, contentType = { _, _ -> "GridRow" }) { rowIndex, rowFiles ->
+                        StaggeredAnimatedItem(index = rowIndex) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
                             for (file in rowFiles) {
                                 val isSelected = selectedIds.contains(file.id)
                                 val isFav = favoritePaths.contains(file.path)
@@ -412,11 +415,13 @@ fun AllFilesScreen(
                             }
                         }
                     }
-                } else {
-                    items(targetFiles, key = { it.id }, contentType = { "FileItem" }) { file ->
-                        val isSelected = selectedIds.contains(file.id)
-                        val isFav = favoritePaths.contains(file.path)
+                }
+            } else {
+                itemsIndexed(targetFiles, key = { _, it -> it.id }, contentType = { _, _ -> "FileItem" }) { fileIndex, file ->
+                    val isSelected = selectedIds.contains(file.id)
+                    val isFav = favoritePaths.contains(file.path)
 
+                    StaggeredAnimatedItem(index = fileIndex) {
                         ClaudeCard(
                             onClick = {
                                 if (isBatchMode) {
@@ -509,6 +514,7 @@ fun AllFilesScreen(
                         }
                     }
                 }
+            }
             }
 
             // Bottom Batch Action Bar

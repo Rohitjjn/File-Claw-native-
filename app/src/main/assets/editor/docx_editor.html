@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <script src="file:///android_asset/docx/jszip.min.js"></script>
-    <script src="file:///android_asset/docx/docx-preview.min.js"></script>
+    <script src="jszip.min.js"></script>
+    <script src="docx-preview.min.js"></script>
     <style>
         :root {
             --bg-color: #faf9f5;
@@ -16,106 +17,161 @@
             --border: #2d2b28;
         }
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-primary);
             margin: 0;
             padding: 0;
             display: flex;
             flex-direction: column;
-            height: 100vh;
-        }
-        #toolbar {
-            display: flex;
-            padding: 8px;
-            background: var(--bg-color);
-            border-bottom: 1px solid var(--border);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-        button {
-            padding: 6px 12px;
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-            border-radius: 4px;
-            cursor: pointer;
-            margin-left: auto;
-        }
-        button:active {
-            background: rgba(128,128,128,0.2);
+            min-height: 100vh;
         }
         #output {
             flex: 1;
             overflow-y: auto;
             padding: 16px;
+            box-sizing: border-box;
+        }
+        .docx-wrapper {
+            background: transparent !important;
+            padding: 0 !important;
+        }
+        .docx {
+            margin: 0 auto !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+            border-radius: 8px !important;
+        }
+        body.dark .docx {
+            background-color: #1e1e1d !important;
+            color: #f5f5f3 !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+        }
+        body.dark .docx p, body.dark .docx span, body.dark .docx td {
+            color: #e0deda !important;
+        }
+        .loading-banner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+            font-size: 14px;
+            color: #888;
+        }
+        .error-banner {
+            padding: 20px;
+            margin: 16px;
+            background: rgba(220, 53, 69, 0.1);
+            border: 1px solid rgba(220, 53, 69, 0.3);
+            border-radius: 8px;
+            color: #d32f2f;
+            font-size: 14px;
         }
     </style>
 </head>
 <body>
-    <div id="toolbar">
-        <button onclick="if(window.Android) window.Android.exitWithoutSaving()">Close</button>
+    <div id="output">
+        <div id="loading" class="loading-banner">Rendering Word document...</div>
     </div>
-    <div id="output"></div>
 
     <script>
         function loadDocx(base64, isDark) {
             if (isDark) {
                 document.body.classList.add('dark');
+            } else {
+                document.body.classList.remove('dark');
             }
-            
+
+            const container = document.getElementById("output");
+            const loadingEl = document.getElementById("loading");
+
             if (typeof docx === 'undefined' || typeof JSZip === 'undefined') {
+                const msg = "Document preview engine components could not be loaded.";
+                if (loadingEl) loadingEl.style.display = 'none';
+                container.innerHTML = '<div class="error-banner"><strong>Error:</strong> ' + msg + '</div>';
                 if (window.Android && window.Android.onDocumentError) {
-                    window.Android.onDocumentError("Required libraries (docx-preview or jszip) failed to load");
+                    window.Android.onDocumentError(msg);
                 }
                 return;
             }
-            
+
+            if (!base64 || base64.trim().length === 0) {
+                if (window.Android && window.Android.getDocxBase64) {
+                    try {
+                        base64 = window.Android.getDocxBase64();
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
+            }
+
+            if (!base64 || base64.trim().length === 0) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                container.innerHTML = '<div class="error-banner">Document data is empty or unavailable.</div>';
+                if (window.Android && window.Android.onDocumentError) {
+                    window.Android.onDocumentError("Document data is empty");
+                }
+                return;
+            }
+
             try {
+                // Decode base64 to binary array
                 const binary_string = window.atob(base64);
                 const len = binary_string.length;
                 const bytes = new Uint8Array(len);
                 for (let i = 0; i < len; i++) {
                     bytes[i] = binary_string.charCodeAt(i);
                 }
-                
                 const arrayBuffer = bytes.buffer;
-                
+
                 const options = {
                     className: "docx",
-                    inWrapper: false,
+                    inWrapper: true,
                     ignoreWidth: false,
                     ignoreHeight: false,
-                    ignoreFonts: isDark,
+                    ignoreFonts: false,
                     breakPages: true,
                     ignoreLastRenderedPageBreak: false,
                     experimental: true,
                     trimXmlDeclaration: true,
                     debug: false
                 };
-                
-                const container = document.getElementById("output");
-                if (isDark) {
-                    container.style.color = "#f5f5f3";
-                }
-                
+
+                container.innerHTML = "";
+
                 docx.renderAsync(arrayBuffer, container, null, options).then(function() {
                     if (window.Android && window.Android.onDocumentLoaded) {
                         window.Android.onDocumentLoaded(1);
                     }
                 }).catch(function(err) {
+                    console.error("renderAsync error:", err);
+                    container.innerHTML = '<div class="error-banner"><strong>DOCX Preview Notice:</strong> Could not render formatted layout (' + (err ? err.toString() : 'Unknown error') + ').</div>';
                     if (window.Android && window.Android.onDocumentError) {
-                        window.Android.onDocumentError(err.toString());
+                        window.Android.onDocumentError(err ? err.toString() : "Render failed");
                     }
-                    document.getElementById("output").innerHTML = "Error rendering DOCX: " + err.toString();
                 });
             } catch (err) {
+                console.error("loadDocx catch:", err);
+                if (loadingEl) loadingEl.style.display = 'none';
+                container.innerHTML = '<div class="error-banner"><strong>DOCX Parsing Error:</strong> ' + (err ? err.toString() : 'Invalid file format') + '</div>';
                 if (window.Android && window.Android.onDocumentError) {
-                    window.Android.onDocumentError(err.toString());
+                    window.Android.onDocumentError(err ? err.toString() : "Parse failed");
                 }
             }
         }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            if (window.Android && window.Android.getDocxBase64) {
+                try {
+                    const b64 = window.Android.getDocxBase64();
+                    if (b64 && b64.length > 0) {
+                        const isDark = document.body.classList.contains('dark') || false;
+                        loadDocx(b64, isDark);
+                    }
+                } catch (e) {
+                    console.log("Waiting for evaluateJavascript call");
+                }
+            }
+        });
     </script>
 </body>
 </html>

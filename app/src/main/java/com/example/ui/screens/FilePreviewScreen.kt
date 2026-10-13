@@ -45,6 +45,8 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.FormatLineSpacing
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -169,6 +171,8 @@ fun FilePreviewScreen(
     var scrollToPage by remember { mutableStateOf<Int?>(null) }
     var pendingLinkToOpen by remember { mutableStateOf<String?>(null) }
     var showJumpDialog by remember { mutableStateOf(false) }
+    var showJumpToLineDialog by remember { mutableStateOf(false) }
+    var scrollToLineNumber by remember { mutableStateOf<Int?>(null) }
 
     var isSearchInDocumentOpen by rememberSaveable { mutableStateOf(false) }
     var inViewerSearchQuery by rememberSaveable { mutableStateOf("") }
@@ -380,6 +384,47 @@ fun FilePreviewScreen(
                                     }
                                 }
 
+                                val isTextFile = activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv")
+                                if (isTextFile) {
+                                    DropdownMenuItem(
+                                        text = { Text("Go to Line...") },
+                                        onClick = {
+                                            showMenu = false
+                                            showJumpToLineDialog = true
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Outlined.FormatLineSpacing,
+                                                contentDescription = "Go to Line"
+                                            )
+                                        }
+                                    )
+                                }
+
+                                DropdownMenuItem(
+                                    text = { Text("Print / Export as PDF") },
+                                    onClick = {
+                                        showMenu = false
+                                        activeFile?.let { entity ->
+                                            val ext = entity.extension.lowercase()
+                                            if (ext in setOf("png", "jpg", "jpeg", "webp", "gif")) {
+                                                com.example.utils.FilePrintHelper.printImage(context, java.io.File(entity.path), entity.name)
+                                            } else {
+                                                val content = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
+                                                    ?: runCatching { java.io.File(entity.path).readText() }.getOrNull()
+                                                    ?: ""
+                                                com.example.utils.FilePrintHelper.printTextOrMarkdown(context, content, entity.name)
+                                            }
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Print,
+                                            contentDescription = "Print or Export as PDF"
+                                        )
+                                    }
+                                )
+
                                 DropdownMenuItem(
                                     text = { Text("Properties") },
                                     onClick = {
@@ -541,6 +586,23 @@ fun FilePreviewScreen(
                                         }
                                     }
 
+                                    // Print Image
+                                    IconButton(
+                                        onClick = {
+                                            activeFile?.let {
+                                                com.example.utils.FilePrintHelper.printImage(context, java.io.File(it.path), it.name)
+                                            }
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Print,
+                                            contentDescription = "Print photo",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
                                     // Share Image
                                     IconButton(
                                         onClick = { activeFile?.let { shareFile(context, File(it.path), it.extension) } },
@@ -564,6 +626,37 @@ fun FilePreviewScreen(
                                             contentDescription = "Find in document",
                                             modifier = Modifier.size(18.dp),
                                             tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Jump to line in Text/Code
+                                    IconButton(
+                                        onClick = { showJumpToLineDialog = true },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.FormatLineSpacing,
+                                            contentDescription = "Jump to line",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Print / Export as PDF
+                                    IconButton(
+                                        onClick = {
+                                            val textToPrint = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
+                                                ?: runCatching { activeFile?.let { java.io.File(it.path).readText() } }.getOrNull()
+                                                ?: ""
+                                            com.example.utils.FilePrintHelper.printTextOrMarkdown(context, textToPrint, activeFile?.name ?: "Document")
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Print,
+                                            contentDescription = "Print or export as PDF",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
 
@@ -873,6 +966,8 @@ fun FilePreviewScreen(
                                     fontSizeSetting = settings.fontSize,
                                     wrapSetting = settings.wordWrap,
                                     showLineNumbers = settings.showLineNumbers,
+                                    scrollToLine = scrollToLineNumber,
+                                    onScrollToLineHandled = { scrollToLineNumber = null },
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
@@ -991,33 +1086,58 @@ fun FilePreviewScreen(
         }
     }
 
-    // Properties Bottom Dialog popup
+    // Glassmorphism Modal Bottom Sheet for File Properties
     if (showPropertiesDialog && activeFile != null) {
-        activeFile.let { fileEntity ->
-            val sizeStr = formatFileSize(fileEntity.size)
-            val updatedStr = formatElapsedTime(fileEntity.lastOpened)
-            AlertDialog(
-                onDismissRequest = { showPropertiesDialog = false },
-                title = { Text(text = "File Properties", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Divider()
-                        PropertyItem(label = "Filename", value = fileEntity.name)
-                        PropertyItem(label = "Extension", value = fileEntity.extension.uppercase())
-                        PropertyItem(label = "Size", value = sizeStr)
-                        PropertyItem(label = "Cache path", value = fileEntity.path)
-                        PropertyItem(label = "Last opened", value = updatedStr)
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showPropertiesDialog = false }) {
-                        Text("Dismiss", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    }
-                },
-                shape = RoundedCornerShape(16.dp),
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+        com.example.ui.component.FilePropertiesBottomSheet(
+            fileEntity = activeFile,
+            onDismissRequest = { showPropertiesDialog = false }
+        )
+    }
+
+    if (showJumpToLineDialog) {
+        var lineInput by remember { mutableStateOf("") }
+        val textLinesCount = remember(fileState) {
+            val content = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
+            content?.count { it == '\n' }?.plus(1) ?: 1000
         }
+        AlertDialog(
+            onDismissRequest = { showJumpToLineDialog = false },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val lNum = lineInput.toIntOrNull()
+                        if (lNum != null && lNum > 0) {
+                            scrollToLineNumber = lNum
+                        } else {
+                            android.widget.Toast.makeText(context, "Invalid line number", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        showJumpToLineDialog = false
+                    }
+                ) {
+                    Text("Go")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showJumpToLineDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+            title = { Text("Go to Line") },
+            text = {
+                Column {
+                    Text("Enter line number (1 to $textLinesCount):")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = lineInput,
+                        onValueChange = { lineInput = it.filter { char -> char.isDigit() } },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        )
     }
 
     if (showJumpDialog) {
@@ -1451,7 +1571,9 @@ fun CodePreview(
     fontSizeSetting: String,
     wrapSetting: Boolean,
     showLineNumbers: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    scrollToLine: Int? = null,
+    onScrollToLineHandled: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -1565,11 +1687,22 @@ fun CodePreview(
                     }
                 """.trimIndent() else ""
                 
-                val jsLineNumbers = if (showLineNumbers) """
+                val jsLineNumbers = """
                     const codeBlock = document.querySelector('code');
-                    const lines = codeBlock.innerHTML.split('\n');
-                    codeBlock.innerHTML = lines.map(line => '<span class="hljs-line">' + line + '</span>').join('\n');
-                """.trimIndent() else ""
+                    if (codeBlock) {
+                        const lines = codeBlock.innerHTML.split('\n');
+                        codeBlock.innerHTML = lines.map((line, idx) => '<span id="line-' + (idx + 1) + '" class="hljs-line">' + line + '</span>').join('\n');
+                    }
+                    window.scrollToLine = function(lineNum) {
+                        const el = document.getElementById('line-' + lineNum);
+                        if (el) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            el.style.backgroundColor = 'rgba(229, 169, 60, 0.4)';
+                            el.style.borderRadius = '4px';
+                            setTimeout(() => { el.style.backgroundColor = ''; }, 2500);
+                        }
+                    };
+                """.trimIndent()
 
                 """
                 <!DOCTYPE html>
@@ -1605,10 +1738,20 @@ fun CodePreview(
                 """.trimIndent()
             }
 
+            var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
+
+            LaunchedEffect(scrollToLine) {
+                if (scrollToLine != null) {
+                    webViewRef?.evaluateJavascript("if (typeof window.scrollToLine === 'function') { window.scrollToLine($scrollToLine); }", null)
+                    onScrollToLineHandled()
+                }
+            }
+
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     android.webkit.WebView(ctx).apply {
+                        webViewRef = this
                         settings.javaScriptEnabled = true
                         settings.allowFileAccess = false
                         settings.allowContentAccess = false
@@ -1618,6 +1761,7 @@ fun CodePreview(
                     }
                 },
                 update = { webView ->
+                    webViewRef = webView
                     webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
                 }
             )
@@ -2275,15 +2419,19 @@ fun PdfPreview(
                 modifier = Modifier.fillMaxSize(),
                 update = { pdfView ->
                     pdfView.minZoom = 1.0f
-                    pdfView.midZoom = 3.5f
-                    pdfView.maxZoom = 10.0f
+                    val bookmarkPrefs = pdfView.context.getSharedPreferences("pdf_bookmarks", android.content.Context.MODE_PRIVATE)
+                    val bookmarkKey = "bookmark_${fileEntity.path.hashCode()}"
+                    val savedPage = bookmarkPrefs.getInt(bookmarkKey, 0)
+
                     if ((!isReady && originalFile.exists()) || loadTrigger > 0) {
+                        val initialPage = scrollToPage ?: savedPage
                         val configurator = pdfView.fromFile(originalFile)
                             .enableSwipe(true)
                             .swipeHorizontal(false)
                             .enableDoubletap(true)
-                            .defaultPage(scrollToPage ?: 0)
+                            .defaultPage(initialPage)
                             .onPageChange { page, pageCount ->
+                                bookmarkPrefs.edit().putInt(bookmarkKey, page).apply()
                                 onPageChanged(page + 1, pageCount)
                             }
                             .enableAnnotationRendering(true)
@@ -2301,6 +2449,9 @@ fun PdfPreview(
                                 loadTrigger = 0
                                 pdfErrorMessage = null
                                 applySmartPdfNightMode(pdfView, isNightMode)
+                                if (savedPage > 0 && scrollToPage == null) {
+                                    android.widget.Toast.makeText(pdfView.context, "Resumed at page ${savedPage + 1}", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                                 if (scrollToPage != null) {
                                     onScrollToPageHandled()
                                 }
@@ -3187,6 +3338,7 @@ fun DocxPreviewWebView(
 ) {
     var isWebViewLoading by remember(base64Docx) { mutableStateOf(true) }
     var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    var pureKotlinFallback by remember { mutableStateOf<com.example.core.format.DocxExtractor.ExtractedDocx?>(null) }
     
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -3199,88 +3351,148 @@ fun DocxPreviewWebView(
     }
 
     Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
-        AndroidView(
-            factory = { ctx ->
-                android.webkit.WebView(ctx).apply {
-                    webViewRef = this
-                    settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        allowFileAccess = false
-                        allowContentAccess = false
-                        builtInZoomControls = true
-                        displayZoomControls = false
-                        setSupportZoom(true)
-                        useWideViewPort = true
-                        loadWithOverviewMode = true
-                    }
-                    setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
-                    
-                    addJavascriptInterface(object : Any() {
-                        @android.webkit.JavascriptInterface
-                        fun onDocumentLoaded(totalPages: Int) {
-                            post { 
-                                isWebViewLoading = false
-                                onPageChanged(1, totalPages)
-                            }
-                        }
-                        @android.webkit.JavascriptInterface
-                        fun onPageChanged(currentPage: Int, totalPages: Int) {
-                            post {
-                                onPageChanged(currentPage, totalPages)
-                            }
-                        }
-                        @android.webkit.JavascriptInterface
-                        fun onDocumentError(error: String) {
-                            post { 
-                                isWebViewLoading = false
-                                android.widget.Toast.makeText(context, "Error: $error", android.widget.Toast.LENGTH_LONG).show()
-                            }
-                        }
-                        @android.webkit.JavascriptInterface
-                        fun exitWithoutSaving() {
-                            post {
-                                viewModel.closeCurrentFile()
-                            }
-                        }
-                    }, "Android")
-                    
-                    webViewClient = object : android.webkit.WebViewClient() {
-                        override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
-                            view?.evaluateJavascript("loadDocx('$base64Docx', $isNightMode);", null)
-                        }
-                        override fun onReceivedError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, error: android.webkit.WebResourceError?) {
-                            super.onReceivedError(view, request, error)
-                            android.util.Log.e("WebViewDocx", "Error: ${error?.description}")
-                        }
-                        override fun onReceivedHttpError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, errorResponse: android.webkit.WebResourceResponse?) {
-                            super.onReceivedHttpError(view, request, errorResponse)
-                            android.util.Log.e("WebViewDocx", "HTTP Error: ${errorResponse?.statusCode}")
-                        }
-                    }
-                    webChromeClient = object : android.webkit.WebChromeClient() {
-                        override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
-                            android.util.Log.d("WebViewDocx", "${consoleMessage?.message()} -- From line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
-                            return super.onConsoleMessage(consoleMessage)
-                        }
-                    }
-                    loadUrl("file:///android_asset/editor/docx_editor.html")
-                }
-            },
-            update = { webView ->
-                // No-op
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-
-        if (isWebViewLoading) {
-            Box(
+        if (pureKotlinFallback != null) {
+            // High-fidelity Pure Kotlin Offline Text Viewer Fallback
+            val extracted = pureKotlinFallback!!
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
-                contentAlignment = Alignment.Center
+                    .padding(16.dp)
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
             ) {
-                com.example.ui.component.PremiumLoadingIndicator(text = "Loading Editor...")
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    modifier = Modifier.padding(bottom = 12.dp)
+                ) {
+                    Text(
+                        text = "Clean Document View • ${extracted.wordCount} words • ${extracted.paragraphCount} paragraphs",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+
+                if (extracted.paragraphs.isEmpty()) {
+                    Text(
+                        text = "No text content found in this DOCX file.",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                } else {
+                    for (paragraph in extracted.paragraphs) {
+                        Text(
+                            text = paragraph,
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                    }
+                }
+            }
+        } else {
+            AndroidView(
+                factory = { ctx ->
+                    android.webkit.WebView(ctx).apply {
+                        webViewRef = this
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            allowFileAccess = true
+                            allowContentAccess = true
+                            @Suppress("DEPRECATION")
+                            allowFileAccessFromFileURLs = true
+                            @Suppress("DEPRECATION")
+                            allowUniversalAccessFromFileURLs = true
+                            builtInZoomControls = true
+                            displayZoomControls = false
+                            setSupportZoom(true)
+                            useWideViewPort = true
+                            loadWithOverviewMode = true
+                        }
+                        setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+                        
+                        addJavascriptInterface(object : Any() {
+                            @android.webkit.JavascriptInterface
+                            fun getDocxBase64(): String = base64Docx
+
+                            @android.webkit.JavascriptInterface
+                            fun onDocumentLoaded(totalPages: Int) {
+                                post { 
+                                    isWebViewLoading = false
+                                    onPageChanged(1, totalPages)
+                                }
+                            }
+                            @android.webkit.JavascriptInterface
+                            fun onPageChanged(currentPage: Int, totalPages: Int) {
+                                post { 
+                                    onPageChanged(currentPage, totalPages)
+                                }
+                            }
+                            @android.webkit.JavascriptInterface
+                            fun onDocumentError(error: String) {
+                                post { 
+                                    isWebViewLoading = false
+                                    android.util.Log.w("WebViewDocx", "Switching to pure Kotlin DOCX reader: $error")
+                                    val ext = com.example.core.format.DocxExtractor.extractText(java.io.File(fileEntity.path))
+                                    if (ext.paragraphs.isNotEmpty()) {
+                                        pureKotlinFallback = ext
+                                    } else {
+                                        android.widget.Toast.makeText(context, "DOCX Notice: $error", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                            @android.webkit.JavascriptInterface
+                            fun exitWithoutSaving() {
+                                post { 
+                                    viewModel.closeCurrentFile()
+                                }
+                            }
+                        }, "Android")
+                        
+                        webViewClient = object : android.webkit.WebViewClient() {
+                            override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                view?.evaluateJavascript("loadDocx(window.Android.getDocxBase64(), $isNightMode);", null)
+                            }
+                            override fun onReceivedError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, error: android.webkit.WebResourceError?) {
+                                super.onReceivedError(view, request, error)
+                                android.util.Log.e("WebViewDocx", "Error: ${error?.description}")
+                                val ext = com.example.core.format.DocxExtractor.extractText(java.io.File(fileEntity.path))
+                                if (ext.paragraphs.isNotEmpty()) {
+                                    post { pureKotlinFallback = ext; isWebViewLoading = false }
+                                }
+                            }
+                            override fun onReceivedHttpError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, errorResponse: android.webkit.WebResourceResponse?) {
+                                super.onReceivedHttpError(view, request, errorResponse)
+                                android.util.Log.e("WebViewDocx", "HTTP Error: ${errorResponse?.statusCode}")
+                            }
+                        }
+                        webChromeClient = object : android.webkit.WebChromeClient() {
+                            override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                                android.util.Log.d("WebViewDocx", "${consoleMessage?.message()} -- From line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
+                                return super.onConsoleMessage(consoleMessage)
+                            }
+                        }
+                        loadUrl("file:///android_asset/editor/docx_editor.html")
+                    }
+                },
+                update = { webView ->
+                    // No-op
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            if (isWebViewLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    com.example.ui.component.PremiumLoadingIndicator(text = "Rendering Document...")
+                }
             }
         }
     }

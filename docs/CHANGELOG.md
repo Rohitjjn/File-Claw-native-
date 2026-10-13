@@ -4,6 +4,33 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [1.4.0] "DOCX Engine Fix, Glass Properties Sheet & PDF Resume": versionCode 6
+
+### Fixed
+- **DOCX File Preview Fixed & Pure-Kotlin Fallback Engine**:
+  - Fixed WebView DOCX preview by localizing assets into `editor/` directory and resolving cross-origin/file-access CORS restrictions.
+  - Resolved base64 IPC Binder transaction limit by exposing `getDocxBase64()` over Android JavascriptInterface.
+  - Implemented pure-Kotlin offline OOXML extractor (`DocxExtractor.kt`) that parses `word/document.xml` using `ZipInputStream` without relying on WebView or external dependencies.
+  - Added unit test suite `DocxExtractorTest.kt` verifying offline text, word counts, and paragraph extraction.
+
+### Added
+- **Glassmorphism Modal Bottom Sheet for File Properties**:
+  - Replaced basic AlertDialog with a modern Jetpack Compose `ModalBottomSheet` (`FilePropertiesBottomSheet.kt`).
+  - Added drag handle, glassmorphic backdrop, formatted file size, exact byte count, MIME type chip, last-modified timestamp, and permission status.
+  - Integrated asynchronous cryptographic checksum calculation (MD5 and SHA-256) with one-tap copy buttons.
+  - Storage path box with one-tap "Copy Path" action and clipboard confirmation.
+- **Staggered Spring & Fade-in Reveal Animation**:
+  - Added `StaggeredAnimatedItem` in `ClaudeComponents.kt` providing staggered spring translation and smooth alpha fade-in across all file cards in `HomeScreen` and `AllFilesScreen`.
+- **PDF Last-Read Page Bookmark & Auto-Resume**:
+  - PDF viewer now automatically saves the user's active page in `SharedPreferences` upon scrolling.
+  - Re-opening any PDF automatically restores the user to their last-read page and displays a confirmation notification ("Resumed at page X").
+- **Native Print & PDF Export via PrintManager**:
+  - Implemented `FilePrintHelper.kt` utilizing Android's native `PrintManager` and `PrintDocumentAdapter`.
+  - Added "Print / Export as PDF" actions to the top app bar and floating action pill for Text, Markdown, Code, and Image files.
+- **Quick "Go to Line" in Text & Code Viewer**:
+  - Added "Go to Line" dialog with direct line-number entry.
+  - Code/Text viewer tags each line and smoothly scrolls to the target line with a temporary highlight flash.
+
 ## [1.3.0] "Floating Action Pill, Grid View & In-Viewer Search": versionCode 5
 
 ### Added

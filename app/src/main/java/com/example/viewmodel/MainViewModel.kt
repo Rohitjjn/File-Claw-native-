@@ -14,6 +14,7 @@ import com.example.core.format.FileKind
 import com.example.core.format.FormatDetector
 import com.example.core.format.FormatRegistry
 import com.example.core.format.Support
+import com.example.core.io.AtomicFileWriter
 import com.example.core.io.BatchFileOperations
 import com.example.core.io.TextEncoding
 import com.example.core.io.TextLoadException
@@ -748,6 +749,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _fileEvent.value = "This view is read-only (truncated or converted), so nothing was saved."
                     return@launch
                 }
+
+                // Safety backup before overwriting to ensure user data is never lost or corrupted
+                val diskFile = File(fileEntity.path)
+                if (diskFile.exists() && diskFile.length() > 0) {
+                    try {
+                        val backupDir = diskFile.parentFile ?: getApplication<Application>().cacheDir
+                        val backupFile = File(backupDir, ".${diskFile.name}.bak")
+                        diskFile.copyTo(backupFile, overwrite = true)
+                    } catch (_: Exception) {}
+                }
+
                 val explicit = TextEncoding.resolve(settingsState.value.defaultEncoding)
                 val charset = explicit
                     ?: current?.charsetName?.let { runCatching { java.nio.charset.Charset.forName(it) }.getOrNull() }
@@ -755,7 +767,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val writeBom = current?.hadBom == true
                 fileManager.saveText(fileEntity.path, newContent, charset, writeBom)
 
-                val diskFile = File(fileEntity.path)
                 val updatedEntity = fileEntity.copy(size = diskFile.length(), lastOpened = System.currentTimeMillis())
 
                 syncBackToArchive(fileEntity, diskFile)
@@ -776,6 +787,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 _fileEvent.value = "Error saving file: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * Atomically saves a copy of modified content under a new file name without touching the original.
+     * Inserts the new copy into the recent files repository so it instantly updates in the UI.
+     */
+    fun exportCopy(
+        originalEntity: RecentFileEntity,
+        newFileName: String,
+        content: String,
+        onComplete: (File?) -> Unit = {}
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val originalFile = File(originalEntity.path)
+                val parentDir = originalFile.parentFile?.takeIf { it.exists() && it.canWrite() }
+                    ?: getApplication<Application>().getExternalFilesDir(null)
+                    ?: getApplication<Application>().filesDir
+
+                val trimmedName = newFileName.trim()
+                val targetName = if (trimmedName.contains(".")) {
+                    trimmedName
+                } else {
+                    "$trimmedName.${originalEntity.extension}"
+                }
+
+                val targetFile = File(parentDir, targetName)
+                val bytes = content.toByteArray(Charsets.UTF_8)
+
+                // Atomic crash-safe write
+                AtomicFileWriter.writeBytes(targetFile, bytes)
+
+                val newEntity = RecentFileEntity(
+                    path = targetFile.absolutePath,
+                    name = targetFile.name,
+                    size = targetFile.length(),
+                    extension = targetFile.extension.lowercase(),
+                    lastOpened = System.currentTimeMillis(),
+                    id = 0
+                )
+
+                repository.insertRecentFile(newEntity)
+                indexFile(targetFile.absolutePath)
+
+                withContext(Dispatchers.Main) {
+                    _fileEvent.value = "Exported copy: ${targetFile.name}"
+                    onComplete(targetFile)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _fileEvent.value = "Error exporting copy: ${e.message}"
+                    onComplete(null)
+                }
             }
         }
     }

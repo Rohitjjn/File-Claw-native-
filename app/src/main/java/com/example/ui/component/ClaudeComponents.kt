@@ -13,6 +13,8 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -332,3 +334,45 @@ fun FileExtensionBadge(extension: String, modifier: Modifier = Modifier) {
     }
 }
 
+@Composable
+fun StaggeredAnimatedItem(
+    index: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    var isVisible by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val delayMillis = ((index % 12) * 35).toLong()
+        kotlinx.coroutines.delay(delayMillis)
+        isVisible = true
+    }
+
+    val alpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(
+            durationMillis = 260,
+            easing = androidx.compose.animation.core.FastOutSlowInEasing
+        ),
+        label = "stagger_alpha"
+    )
+
+    val translationY by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isVisible) 0f else 28f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+        ),
+        label = "stagger_trans_y"
+    )
+
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                this.alpha = alpha
+                this.translationY = translationY
+            }
+    ) {
+        content()
+    }
+}
