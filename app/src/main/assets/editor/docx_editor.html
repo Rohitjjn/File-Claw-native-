@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes">
     <script src="jszip.min.js"></script>
     <script src="docx-preview.min.js"></script>
     <style>
@@ -25,36 +25,96 @@
             display: flex;
             flex-direction: column;
             min-height: 100vh;
+            overflow-x: auto;
+            -webkit-text-size-adjust: 100%;
         }
-        #output {
+        #viewport-wrapper {
             flex: 1;
-            overflow-y: auto;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
             padding: 16px;
             box-sizing: border-box;
+            transform-origin: top center;
+            transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+        }
+        #output {
+            width: 100%;
+            max-width: 900px;
         }
         .docx-wrapper {
             background: transparent !important;
             padding: 0 !important;
         }
-        .docx {
-            margin: 0 auto !important;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+        .docx, section.docx {
+            margin: 0 auto 24px auto !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important;
             border-radius: 8px !important;
+            box-sizing: border-box !important;
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
-        body.dark .docx {
-            background-color: #1e1e1d !important;
-            color: #f5f5f3 !important;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+        /* Comprehensive Dark Mode for DOCX */
+        body.dark {
+            background-color: #121212 !important;
+            color: #e2e2e6 !important;
         }
-        body.dark .docx p, body.dark .docx span, body.dark .docx td {
-            color: #e0deda !important;
+        body.dark #viewport-wrapper {
+            background-color: #121212 !important;
+        }
+        body.dark #output {
+            background-color: #121212 !important;
+        }
+        body.dark .docx-wrapper {
+            background: transparent !important;
+            background-color: transparent !important;
+        }
+        body.dark .docx, 
+        body.dark section.docx, 
+        body.dark .docx-wrapper > section {
+            background-color: #1e1e1e !important;
+            color: #e2e2e6 !important;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.65) !important;
+            border: 1px solid #333336 !important;
+        }
+        body.dark .docx * {
+            color: #e2e2e6 !important;
+            border-color: #383838 !important;
+        }
+        body.dark .docx div,
+        body.dark .docx p,
+        body.dark .docx span {
+            background-color: transparent !important;
+        }
+        body.dark .docx table,
+        body.dark .docx td,
+        body.dark .docx th {
+            background-color: transparent !important;
+            border-color: #444448 !important;
+            color: #e2e2e6 !important;
+        }
+        body.dark .docx a {
+            color: #88c0d0 !important;
+        }
+        /* Search Highlights */
+        mark.docx-highlight {
+            background-color: #ffe082 !important;
+            color: #000000 !important;
+            border-radius: 3px;
+            padding: 1px 3px;
+            box-shadow: 0 0 2px rgba(0,0,0,0.3);
+        }
+        mark.docx-highlight-active {
+            background-color: #ff9800 !important;
+            color: #ffffff !important;
+            outline: 2px solid #e65100;
         }
         .loading-banner {
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 32px;
-            font-size: 14px;
+            padding: 48px;
+            font-size: 15px;
+            font-weight: 500;
             color: #888;
         }
         .error-banner {
@@ -69,17 +129,121 @@
     </style>
 </head>
 <body>
-    <div id="output">
-        <div id="loading" class="loading-banner">Rendering Word document...</div>
+    <div id="viewport-wrapper">
+        <div id="output">
+            <div id="loading" class="loading-banner">Rendering Word document...</div>
+        </div>
     </div>
 
     <script>
-        function loadDocx(base64, isDark) {
+        let currentZoom = 1.0;
+        let searchMatches = [];
+        let currentMatchIdx = -1;
+
+        function setZoom(factor) {
+            currentZoom = Math.min(Math.max(factor, 0.25), 5.0);
+            const container = document.getElementById("output");
+            if (container) {
+                container.style.zoom = currentZoom;
+                container.style.transformOrigin = "top center";
+            }
+            const wrapper = document.getElementById("viewport-wrapper");
+            if (wrapper) {
+                wrapper.style.minWidth = (currentZoom > 1.0 ? (currentZoom * 100) + "%" : "100%");
+            }
+        }
+
+        function setDarkMode(isDark) {
             if (isDark) {
                 document.body.classList.add('dark');
+                document.documentElement.classList.add('dark');
             } else {
                 document.body.classList.remove('dark');
+                document.documentElement.classList.remove('dark');
             }
+        }
+
+        function clearSearch() {
+            document.querySelectorAll('mark.docx-highlight').forEach(el => {
+                const parent = el.parentNode;
+                if (parent) {
+                    parent.replaceChild(document.createTextNode(el.textContent), el);
+                    parent.normalize();
+                }
+            });
+            searchMatches = [];
+            currentMatchIdx = -1;
+        }
+
+        function searchWord(keyword) {
+            clearSearch();
+            if (!keyword || keyword.trim().length === 0) return 0;
+            const query = keyword.trim().toLowerCase();
+            const container = document.getElementById("output");
+            if (!container) return 0;
+
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            const textNodes = [];
+            while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+            for (const node of textNodes) {
+                const text = node.textContent;
+                const lower = text.toLowerCase();
+                let index = lower.indexOf(query);
+                if (index >= 0) {
+                    const frag = document.createDocumentFragment();
+                    let last = 0;
+                    while (index >= 0) {
+                        frag.appendChild(document.createTextNode(text.substring(last, index)));
+                        const mark = document.createElement('mark');
+                        mark.className = 'docx-highlight';
+                        mark.textContent = text.substring(index, index + query.length);
+                        frag.appendChild(mark);
+                        searchMatches.push(mark);
+                        last = index + query.length;
+                        index = lower.indexOf(query, last);
+                    }
+                    frag.appendChild(document.createTextNode(text.substring(last)));
+                    if (node.parentNode) {
+                        node.parentNode.replaceChild(frag, node);
+                    }
+                }
+            }
+
+            if (searchMatches.length > 0) {
+                currentMatchIdx = 0;
+                highlightMatch(0);
+            }
+            return searchMatches.length;
+        }
+
+        function highlightMatch(idx) {
+            searchMatches.forEach((m, i) => {
+                if (i === idx) {
+                    m.className = 'docx-highlight docx-highlight-active';
+                    m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                    m.className = 'docx-highlight';
+                }
+            });
+        }
+
+        function nextSearchMatch() {
+            if (searchMatches.length === 0) return 0;
+            currentMatchIdx = (currentMatchIdx + 1) % searchMatches.length;
+            highlightMatch(currentMatchIdx);
+            return currentMatchIdx + 1;
+        }
+
+        function prevSearchMatch() {
+            if (searchMatches.length === 0) return 0;
+            currentMatchIdx = (currentMatchIdx - 1 + searchMatches.length) % searchMatches.length;
+            highlightMatch(currentMatchIdx);
+            return currentMatchIdx + 1;
+        }
+
+        function loadDocx(base64, isDark) {
+            setDarkMode(isDark);
 
             const container = document.getElementById("output");
             const loadingEl = document.getElementById("loading");
@@ -114,7 +278,6 @@
             }
 
             try {
-                // Decode base64 to binary array
                 const binary_string = window.atob(base64);
                 const len = binary_string.length;
                 const bytes = new Uint8Array(len);
@@ -139,8 +302,16 @@
                 container.innerHTML = "";
 
                 docx.renderAsync(arrayBuffer, container, null, options).then(function() {
+                    const pages = container.querySelectorAll('.docx');
+                    const totalPages = pages.length > 0 ? pages.length : 1;
+                    if (currentZoom !== 1.0) {
+                        setZoom(currentZoom);
+                    }
+                    if (document.body.classList.contains('dark')) {
+                        setDarkMode(true);
+                    }
                     if (window.Android && window.Android.onDocumentLoaded) {
-                        window.Android.onDocumentLoaded(1);
+                        window.Android.onDocumentLoaded(totalPages);
                     }
                 }).catch(function(err) {
                     console.error("renderAsync error:", err);

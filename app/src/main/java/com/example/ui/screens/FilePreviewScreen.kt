@@ -47,6 +47,18 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.FormatLineSpacing
+import androidx.compose.material.icons.outlined.ZoomIn
+import androidx.compose.material.icons.outlined.ZoomOut
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.automirrored.outlined.Toc
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import com.example.ui.component.DocumentOutlineBottomSheet
+import com.example.ui.component.AppearanceBottomSheet
+import com.example.ui.component.FilePropertiesBottomSheet
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -173,6 +185,11 @@ fun FilePreviewScreen(
     var showJumpDialog by remember { mutableStateOf(false) }
     var showJumpToLineDialog by remember { mutableStateOf(false) }
     var scrollToLineNumber by remember { mutableStateOf<Int?>(null) }
+    var showOutlineBottomSheet by remember { mutableStateOf(false) }
+    var showAppearanceBottomSheet by remember { mutableStateOf(false) }
+    var docxZoomFactor by remember { mutableFloatStateOf(1.0f) }
+    var searchTriggerNext by remember { mutableIntStateOf(0) }
+    var searchTriggerPrev by remember { mutableIntStateOf(0) }
 
     var isSearchInDocumentOpen by rememberSaveable { mutableStateOf(false) }
     var inViewerSearchQuery by rememberSaveable { mutableStateOf("") }
@@ -260,12 +277,38 @@ fun FilePreviewScreen(
         handleBack()
     }
 
+    val activity = context as? android.app.Activity
+    DisposableEffect(isBarsVisible) {
+        activity?.window?.let { window ->
+            val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (!isBarsVisible) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    window.attributes.layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+                insetsController.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose {
+            activity?.window?.let { window ->
+                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             androidx.compose.animation.AnimatedVisibility(
                 visible = isBarsVisible,
                 enter = androidx.compose.animation.slideInVertically(initialOffsetY = { -it }) + androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it }) + androidx.compose.animation.fadeOut()
+                exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it }) + androidx.compose.animation.fadeOut(),
+                modifier = Modifier.statusBarsPadding()
             ) {
                 val titleText = fileState.fileOrNull?.name ?: "Preview"
                 
@@ -279,7 +322,8 @@ fun FilePreviewScreen(
                     actions = {
                         val canSearchInDoc = fileState is MainViewModel.FileContentState.PdfSuccess ||
                             fileState is MainViewModel.FileContentState.TextSuccess ||
-                            (activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"))
+                            fileState is MainViewModel.FileContentState.DocxSuccess ||
+                            (activeFile?.extension?.lowercase() in setOf("txt", "md", "docx", "doc", "pdf", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"))
                         if (canSearchInDoc) {
                             IconButton(onClick = { isSearchInDocumentOpen = !isSearchInDocumentOpen }) {
                                 Icon(
@@ -288,6 +332,27 @@ fun FilePreviewScreen(
                                     tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                 )
                             }
+                        }
+
+                        val extLower = activeFile?.extension?.lowercase() ?: ""
+                        val hasOutline = extLower in setOf("md", "markdown", "docx", "doc", "txt", "pdf")
+                        if (hasOutline) {
+                            IconButton(onClick = { showOutlineBottomSheet = true }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Outlined.Toc,
+                                    contentDescription = "Document Outline",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        // Focus Mode / Immersive Toggle
+                        IconButton(onClick = { isBarsVisible = !isBarsVisible }) {
+                            Icon(
+                                imageVector = if (isBarsVisible) Icons.Outlined.Fullscreen else Icons.Outlined.FullscreenExit,
+                                contentDescription = "Toggle Focus Mode",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
                         }
 
                         val isTextState = fileState is MainViewModel.FileContentState.TextSuccess ||
@@ -337,7 +402,7 @@ fun FilePreviewScreen(
                                 )
 
                                 val isPdf = activeFile?.extension?.lowercase() == "pdf"
-                                val isDocx = activeFile?.extension?.lowercase() == "docx"
+                                val isDocx = activeFile?.extension?.lowercase() in setOf("docx", "doc")
                                 if (isPdf || isDocx) {
                                     DropdownMenuItem(
                                         text = { Text("Go to Page ($currentPdfPage / $totalPdfPages)") },
@@ -384,8 +449,38 @@ fun FilePreviewScreen(
                                     }
                                 }
 
+                                if (hasOutline) {
+                                    DropdownMenuItem(
+                                        text = { Text("Document Outline") },
+                                        onClick = {
+                                            showMenu = false
+                                            showOutlineBottomSheet = true
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Outlined.Toc,
+                                                contentDescription = "Document Outline"
+                                            )
+                                        }
+                                    )
+                                }
+
                                 val isTextFile = activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv")
                                 if (isTextFile) {
+                                    DropdownMenuItem(
+                                        text = { Text("Viewer Appearance") },
+                                        onClick = {
+                                            showMenu = false
+                                            showAppearanceBottomSheet = true
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Palette,
+                                                contentDescription = "Viewer Appearance"
+                                            )
+                                        }
+                                    )
+
                                     DropdownMenuItem(
                                         text = { Text("Go to Line...") },
                                         onClick = {
@@ -407,13 +502,26 @@ fun FilePreviewScreen(
                                         showMenu = false
                                         activeFile?.let { entity ->
                                             val ext = entity.extension.lowercase()
-                                            if (ext in setOf("png", "jpg", "jpeg", "webp", "gif")) {
-                                                com.example.utils.FilePrintHelper.printImage(context, java.io.File(entity.path), entity.name)
-                                            } else {
-                                                val content = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
-                                                    ?: runCatching { java.io.File(entity.path).readText() }.getOrNull()
-                                                    ?: ""
-                                                com.example.utils.FilePrintHelper.printTextOrMarkdown(context, content, entity.name)
+                                            when {
+                                                ext == "pdf" -> {
+                                                    com.example.utils.FilePrintHelper.printPdf(context, java.io.File(entity.path), entity.name)
+                                                }
+                                                ext in setOf("docx", "doc") -> {
+                                                    com.example.utils.FilePrintHelper.printDocx(context, java.io.File(entity.path), entity.name)
+                                                }
+                                                ext == "md" -> {
+                                                    val mdContent = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
+                                                        ?: runCatching { java.io.File(entity.path).readText() }.getOrNull() ?: ""
+                                                    com.example.utils.FilePrintHelper.printMarkdown(context, mdContent, entity.name)
+                                                }
+                                                ext in setOf("png", "jpg", "jpeg", "webp", "gif") -> {
+                                                    com.example.utils.FilePrintHelper.printImage(context, java.io.File(entity.path), entity.name)
+                                                }
+                                                else -> {
+                                                    val content = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
+                                                        ?: runCatching { java.io.File(entity.path).readText() }.getOrNull() ?: ""
+                                                    com.example.utils.FilePrintHelper.printTextOrMarkdown(context, content, entity.name)
+                                                }
                                             }
                                         }
                                     },
@@ -464,11 +572,12 @@ fun FilePreviewScreen(
         },
         bottomBar = {
             val isPdf = fileState is MainViewModel.FileContentState.PdfSuccess
+            val isDocx = fileState is MainViewModel.FileContentState.DocxSuccess || (activeFile?.extension?.lowercase() in setOf("docx", "doc"))
             val isImage = fileState is MainViewModel.FileContentState.ImageSuccess
             val isText = fileState is MainViewModel.FileContentState.TextSuccess ||
                 (activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"))
 
-            val showFloatingBar = isPdf || isImage || isText
+            val showFloatingBar = isPdf || isDocx || isImage || isText
 
             if (showFloatingBar) {
                 androidx.compose.animation.AnimatedVisibility(
@@ -548,6 +657,23 @@ fun FilePreviewScreen(
                                         )
                                     }
 
+                                    // Print / Save as PDF
+                                    IconButton(
+                                        onClick = {
+                                            activeFile?.let {
+                                                com.example.utils.FilePrintHelper.printPdf(context, java.io.File(it.path), it.name)
+                                            }
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Print,
+                                            contentDescription = "Print or Save as PDF",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
                                     // Share File
                                     IconButton(
                                         onClick = { activeFile?.let { shareFile(context, File(it.path), it.extension) } },
@@ -556,6 +682,107 @@ fun FilePreviewScreen(
                                         Icon(
                                             Icons.Outlined.Share,
                                             contentDescription = "Share PDF",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                } else if (isDocx) {
+                                    // DOCX Zoom Out Button
+                                    IconButton(
+                                        onClick = {
+                                            docxZoomFactor = (docxZoomFactor - 0.25f).coerceAtLeast(0.25f)
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.ZoomOut,
+                                            contentDescription = "Zoom Out",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Zoom percentage chip
+                                    Surface(
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.clickable { docxZoomFactor = 1.0f }
+                                    ) {
+                                        Text(
+                                            text = "${(docxZoomFactor * 100).toInt()}%",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+
+                                    // DOCX Zoom In Button
+                                    IconButton(
+                                        onClick = {
+                                            docxZoomFactor = (docxZoomFactor + 0.25f).coerceAtMost(5.0f)
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.ZoomIn,
+                                            contentDescription = "Zoom In",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Find in DOCX
+                                    IconButton(
+                                        onClick = { isSearchInDocumentOpen = !isSearchInDocumentOpen },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Search,
+                                            contentDescription = "Find in DOCX",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // DOCX Night Mode toggle
+                                    IconButton(
+                                        onClick = { isPdfNightMode = !isPdfNightMode },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isPdfNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                            contentDescription = "Toggle night mode",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = if (isPdfNightMode) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Print DOCX
+                                    IconButton(
+                                        onClick = {
+                                            activeFile?.let {
+                                                com.example.utils.FilePrintHelper.printDocx(context, java.io.File(it.path), it.name)
+                                            }
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Print,
+                                            contentDescription = "Print or export as PDF",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Share DOCX
+                                    IconButton(
+                                        onClick = { activeFile?.let { shareFile(context, File(it.path), it.extension) } },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Share,
+                                            contentDescription = "Share document",
                                             modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.onSurface
                                         )
@@ -645,10 +872,15 @@ fun FilePreviewScreen(
                                     // Print / Export as PDF
                                     IconButton(
                                         onClick = {
+                                            val ext = activeFile?.extension?.lowercase() ?: ""
                                             val textToPrint = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
                                                 ?: runCatching { activeFile?.let { java.io.File(it.path).readText() } }.getOrNull()
                                                 ?: ""
-                                            com.example.utils.FilePrintHelper.printTextOrMarkdown(context, textToPrint, activeFile?.name ?: "Document")
+                                            if (ext == "md") {
+                                                com.example.utils.FilePrintHelper.printMarkdown(context, textToPrint, activeFile?.name ?: "Document")
+                                            } else {
+                                                com.example.utils.FilePrintHelper.printTextOrMarkdown(context, textToPrint, activeFile?.name ?: "Document")
+                                            }
                                         },
                                         modifier = Modifier.size(36.dp)
                                     ) {
@@ -735,6 +967,11 @@ fun FilePreviewScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onDoubleTap = { isBarsVisible = !isBarsVisible }
+                    )
+                }
                 .let {
                     if (isBarsVisible) {
                         it.padding(innerPadding)
@@ -743,6 +980,53 @@ fun FilePreviewScreen(
                     }
                 }
         ) {
+            // Subtle Floating Back & Exit Pill when !isBarsVisible (Focus mode)
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !isBarsVisible,
+                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { -it },
+                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { -it },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(16.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                    shadowElevation = 6.dp
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        IconButton(
+                            onClick = handleBack,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconButton(
+                            onClick = { isBarsVisible = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.FullscreenExit,
+                                contentDescription = "Exit Focus Mode",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+
             // Floating In-Viewer Search Bar Overlay
             androidx.compose.animation.AnimatedVisibility(
                 visible = isSearchInDocumentOpen,
@@ -750,6 +1034,7 @@ fun FilePreviewScreen(
                 exit = androidx.compose.animation.slideOutVertically { -it } + androidx.compose.animation.fadeOut(),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
+                    .statusBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .fillMaxWidth()
             ) {
@@ -810,8 +1095,8 @@ fun FilePreviewScreen(
                                     if (pdfSearchResults.isNotEmpty()) {
                                         currentMatchIndex = (currentMatchIndex - 1 + pdfSearchResults.size) % pdfSearchResults.size
                                         scrollToPage = pdfSearchResults[currentMatchIndex].pageNumber - 1
-                                    } else if (textMatches.isNotEmpty()) {
-                                        currentMatchIndex = (currentMatchIndex - 1 + textMatches.size) % textMatches.size
+                                    } else {
+                                        searchTriggerPrev++
                                     }
                                 },
                                 enabled = totalMatchesCount > 0,
@@ -826,8 +1111,8 @@ fun FilePreviewScreen(
                                     if (pdfSearchResults.isNotEmpty()) {
                                         currentMatchIndex = (currentMatchIndex + 1) % pdfSearchResults.size
                                         scrollToPage = pdfSearchResults[currentMatchIndex].pageNumber - 1
-                                    } else if (textMatches.isNotEmpty()) {
-                                        currentMatchIndex = (currentMatchIndex + 1) % textMatches.size
+                                    } else {
+                                        searchTriggerNext++
                                     }
                                 },
                                 enabled = totalMatchesCount > 0,
@@ -2496,22 +2781,24 @@ fun PdfPreview(
 
 /**
  * Smart hue-preserving dark mode for PDFView:
- * Inverts white paper to dark charcoal (#1e1e1e) and black text to off-white (#e1e1e1),
- * while preserving natural skin tones and photographic colors so photos don't look like negative ghosts.
+ * High-fidelity Google Drive / Acrobat style paper inversion:
+ * Maps white paper (#FFFFFF) to clean dark charcoal (#202020) and black text to crisp soft off-white (#E8E8E8),
+ * avoiding color distortion or unnatural color shifts on images and diagrams.
  */
 private fun applySmartPdfNightMode(pdfView: com.github.barteksc.pdfviewer.PDFView, isNight: Boolean) {
     try {
         pdfView.setNightMode(false)
+        pdfView.setBackgroundColor(if (isNight) 0xFF181818.toInt() else 0xFFF0F0F0.toInt())
         val paintField = com.github.barteksc.pdfviewer.PDFView::class.java.getDeclaredField("paint")
         paintField.isAccessible = true
         val paint = paintField.get(pdfView) as? android.graphics.Paint
         if (paint != null) {
             paint.colorFilter = if (isNight) {
                 val matrix = floatArrayOf(
-                     0.25f, -0.70f, -0.315f, 0f, 225f,
-                    -0.35f,  0.05f, -0.465f, 0f, 225f,
-                    -0.45f, -0.45f,  0.135f, 0f, 225f,
-                     0.00f,  0.00f,  0.000f, 1f,   0f
+                    -0.784f,  0.000f,  0.000f, 0f, 232f,
+                     0.000f, -0.784f,  0.000f, 0f, 232f,
+                     0.000f,  0.000f, -0.784f, 0f, 232f,
+                     0.000f,  0.000f,  0.000f, 1f,   0f
                 )
                 android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(matrix))
             } else null
