@@ -370,8 +370,7 @@ class MainActivity : ComponentActivity() {
                                 onBackClick = {
                                     mainViewModel.updateSearchQuery("")
                                     navController.popBackStack()
-                                },
-                                onNavigateToPreview = navigateToPreviewWithEditOnOpen
+                                }
                             )
                         }
 

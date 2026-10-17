@@ -1,5 +1,10 @@
 package com.example.ui.screens
-import androidx.compose.ui.text.drawText
+
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -14,6 +19,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
@@ -34,8 +41,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Image
-import com.example.core.text.PdfTextSearcher
-import com.example.core.text.PdfSearchResult
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderSpecial
@@ -59,9 +64,6 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.example.ui.component.DocumentOutlineBottomSheet
 import com.example.ui.component.AppearanceBottomSheet
 import com.example.ui.component.FilePropertiesBottomSheet
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -80,6 +82,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.core.io.TextLoader
+import com.example.core.io.TextWindowReader
+import com.example.core.text.TextFileSearchEngine
+import com.example.core.text.TextFileSearchMatch
 import com.example.data.RecentFileEntity
 import com.example.services.FileManager
 import com.example.ui.component.ClaudeAppBar
@@ -95,38 +101,38 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.LightMode
-
-import android.graphics.Bitmap
-import android.graphics.pdf.PdfRenderer
-import android.os.ParcelFileDescriptor
-import android.media.MediaPlayer
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.FormatIndentIncrease
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
+import com.example.ui.component.DocumentOutlineParser
+import com.example.ui.component.ViewerSyntaxTheme
+import com.example.ui.component.ViewerAppearancePrefs
+import com.example.core.format.DocxZoomPolicy
+import com.example.core.format.PdfRenderBudgetPolicy
+import com.example.core.format.PinchGestureGate
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculateCentroidSize
-import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import android.media.MediaPlayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.material.icons.filled.PlayArrow
@@ -134,15 +140,222 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Slider
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.material.icons.outlined.RotateRight
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+
+/** Where the in-document viewer should scroll next (outline tap / go-to-line). */
+data class ViewerScrollRequest(
+    val lineNumber: Int,
+    val headingIndex: Int? = null
+)
+
+private const val MAX_TEXT_PRINT_CHARS = 2_000_000
+
+private suspend fun readBoundedText(file: File, charsetName: String): Result<String> =
+    withContext(Dispatchers.IO) {
+        runCatching {
+            val loaded = TextLoader.load(file, charsetName, maxChars = MAX_TEXT_PRINT_CHARS)
+            check(!loaded.truncated) { "This file exceeds the bounded $MAX_TEXT_PRINT_CHARS-character limit for this operation." }
+            loaded.text
+        }
+    }
+
+private fun copyTextToClipboard(context: android.content.Context, title: String, text: String) {
+    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(title, text))
+    android.widget.Toast.makeText(context, "Text copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+}
+
+private fun showTextOperationError(context: android.content.Context, error: Throwable) {
+    android.widget.Toast.makeText(
+        context,
+        error.message ?: "Could not prepare the complete file",
+        android.widget.Toast.LENGTH_LONG
+    ).show()
+}
+
+/**
+ * Chrome-style find bar that replaces the normal app bar while in-document search is
+ * active (Loop 10). One compact header row: close control, focused single-line query
+ * field, live `current / total` match badge with prev/next arrows and a clear control.
+ * The filename and overflow menu stay hidden until search is closed.
+ */
+@Composable
+private fun ViewerFindBarHeader(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+    onClear: () -> Unit,
+    onKeyboardSearch: () -> Unit,
+    focusRequester: FocusRequester,
+    isPdfSearch: Boolean,
+    isLargeTextSearchable: Boolean,
+    isPdfSearchLoading: Boolean,
+    isFullTextLoading: Boolean,
+    pdfSearchError: String?,
+    largeTextSearchError: String?,
+    totalMatchesCount: Int,
+    searchResultsTruncated: Boolean,
+    currentMatchIndex: Int,
+    pdfPageInfo: String,
+    navigableMatchCount: Int,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
+) {
+    val glass = com.example.ui.theme.LocalGlass.current
+    Surface(
+        color = glass.fillStrong,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(horizontal = 4.dp, vertical = 4.dp)
+                    .height(48.dp)
+            ) {
+                IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Close search",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (query.isEmpty()) {
+                        Text(
+                            "Find in document...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                            maxLines = 1
+                        )
+                    }
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = query,
+                        onValueChange = onQueryChange,
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { onKeyboardSearch() }),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
+                    )
+                }
+                AnimatedVisibility(
+                    visible = query.isNotEmpty(),
+                    enter = fadeIn(tween(160)),
+                    exit = fadeOut(tween(140))
+                ) {
+                    IconButton(onClick = onClear, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Clear query",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+                SearchMatchBadgeRow(
+                    isPdfSearch = isPdfSearch,
+                    isLargeTextSearchable = isLargeTextSearchable,
+                    isPdfSearchLoading = isPdfSearchLoading,
+                    isFullTextLoading = isFullTextLoading,
+                    pdfSearchError = pdfSearchError,
+                    largeTextSearchError = largeTextSearchError,
+                    totalMatchesCount = totalMatchesCount,
+                    searchResultsTruncated = searchResultsTruncated,
+                    currentMatchIndex = currentMatchIndex,
+                    pdfPageInfo = pdfPageInfo,
+                    navigableMatchCount = navigableMatchCount,
+                    onPrevious = onPrevious,
+                    onNext = onNext
+                )
+            }
+            androidx.compose.material3.HorizontalDivider(color = glass.strokeEnd)
+        }
+    }
+}
+
+/** Themed match counter + prev/next controls for the in-document search overlay (v1.3.0). */
+@Composable
+private fun SearchMatchBadgeRow(
+    isPdfSearch: Boolean,
+    isLargeTextSearchable: Boolean,
+    isPdfSearchLoading: Boolean,
+    isFullTextLoading: Boolean,
+    pdfSearchError: String?,
+    largeTextSearchError: String?,
+    totalMatchesCount: Int,
+    searchResultsTruncated: Boolean,
+    currentMatchIndex: Int,
+    pdfPageInfo: String,
+    navigableMatchCount: Int,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit
+) {
+    val hasError = (pdfSearchError != null && isPdfSearch) ||
+        (largeTextSearchError != null && isLargeTextSearchable)
+    val matchLabel = when {
+        isPdfSearchLoading -> "Searching…"
+        isFullTextLoading -> "Searching full file…"
+        hasError -> "Search unavailable"
+        totalMatchesCount > 0 && searchResultsTruncated -> "${currentMatchIndex + 1}/$navigableMatchCount of $totalMatchesCount$pdfPageInfo"
+        totalMatchesCount > 0 -> "${currentMatchIndex + 1}/$totalMatchesCount$pdfPageInfo"
+        else -> "0 / 0"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = when {
+                hasError -> MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
+                totalMatchesCount > 0 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+            }
+        ) {
+            Text(
+                text = matchLabel,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = when {
+                    hasError -> MaterialTheme.colorScheme.error
+                    totalMatchesCount > 0 -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                },
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+            )
+        }
+        IconButton(
+            onClick = onPrevious,
+            enabled = totalMatchesCount > 0 && !isPdfSearchLoading,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous match", modifier = Modifier.size(20.dp))
+        }
+        IconButton(
+            onClick = onNext,
+            enabled = totalMatchesCount > 0 && !isPdfSearchLoading,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next match", modifier = Modifier.size(20.dp))
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -157,6 +370,7 @@ fun FilePreviewScreen(
     val settings by viewModel.settingsState.collectAsState()
     
     val activeFile = remember(fileState) { fileState.fileOrNull }
+    val isDarkTheme = MaterialTheme.colorScheme.background == com.example.ui.theme.ClaudeOnyx
 
     var isBarsVisible by remember { mutableStateOf(true) }
 
@@ -172,72 +386,143 @@ fun FilePreviewScreen(
     var htmlScriptsEnabled by remember(activeFile) { mutableStateOf(false) }
 
     val canBeRenderedInWeb = remember(activeFile) {
-        activeFile?.extension?.lowercase() in setOf("html", "htm", "js", "ts", "css", "xml", "txt", "json", "md", "pdf")
+        activeFile?.extension?.lowercase() in setOf("html", "htm", "js", "ts", "css", "xml", "txt", "json", "md")
     }
     
     var currentPdfPage by remember { mutableStateOf(1) }
     var totalPdfPages by remember { mutableStateOf(0) }
     var showPropertiesDialog by remember { mutableStateOf(false) }
 
-    var isPdfNightMode by remember { mutableStateOf(false) }
+    // Loop 14: PDF view rotation in 90-degree steps (toolbar Rotate button). Pure
+    // viewer state — the PDF.js document session is never reloaded, so password
+    // protected files are asked once per open session. PDFs always display in
+    // light mode now, so the night-mode state is DOCX-only and keeps its
+    // system-theme seed for documents that still support dark mode.
+    var pdfViewRotation by remember(activeFile?.path) { mutableIntStateOf(0) }
+
+    var isDocxNightMode by remember(activeFile?.path) { mutableStateOf(isDarkTheme) }
     var scrollToPage by remember { mutableStateOf<Int?>(null) }
+    // Loop 14: bumped on every explicit jump (scrubber release, Go-to-Page dialog) so
+    // re-navigating to the SAME page number still re-fires the WebView navigation
+    // effect (a repeated identical Int would not).
+    var pageJumpToken by remember { mutableIntStateOf(0) }
     var pendingLinkToOpen by remember { mutableStateOf<String?>(null) }
     var showJumpDialog by remember { mutableStateOf(false) }
     var showJumpToLineDialog by remember { mutableStateOf(false) }
-    var scrollToLineNumber by remember { mutableStateOf<Int?>(null) }
+    var showDocxZoomDialog by remember { mutableStateOf(false) }
     var showOutlineBottomSheet by remember { mutableStateOf(false) }
     var showAppearanceBottomSheet by remember { mutableStateOf(false) }
-    var docxZoomFactor by remember { mutableFloatStateOf(1.0f) }
+    val docxZoomSeedContext = LocalContext.current
+    var docxZoomFactor by remember(activeFile?.path) {
+        mutableFloatStateOf(
+            DocxZoomPolicy.fromPercent(ViewerAppearancePrefs.getDocxZoomPercent(docxZoomSeedContext))
+        )
+    }
+    var docxZoomInput by remember(activeFile?.path) { mutableStateOf(DocxZoomPolicy.defaultPercent().toString()) }
+    // Loop 12 (Bug A): true between the first pinch frame and the gesture settle. The
+    // DOCX zoom pipeline switches to the compositor-only preview path while it is set
+    // and applies one authoritative CSS zoom when it flips back to false.
+    var docxPinchActive by remember { mutableStateOf(false) }
     var searchTriggerNext by remember { mutableIntStateOf(0) }
     var searchTriggerPrev by remember { mutableIntStateOf(0) }
 
+    // --- Inline edit mode state (MD/TXT): the preview screen itself becomes the editor ---
+    val isEditMode by viewModel.isEditMode.collectAsState()
+    var editTextValue by remember { mutableStateOf(TextFieldValue("")) }
+    var editOriginalContent by remember { mutableStateOf("") }
+    val editUndoStack = remember { TextUndoStack(50) }
+    val editRedoStack = remember { TextUndoStack(50) }
+    var showEditHistoryDialog by remember { mutableStateOf(false) }
+    var showDiscardEditsDialog by remember { mutableStateOf(false) }
+    var showSaveConfirmDialog by remember { mutableStateOf(false) }
+    var showEditSaveAsDialog by remember { mutableStateOf(false) }
+    val hasUnsavedEdits = isEditMode && editTextValue.text != editOriginalContent
+
+    // --- Viewer appearance state (MD/TXT): theme, font size and browser-style zoom ---
+    var viewerSyntaxTheme by remember { mutableStateOf(ViewerSyntaxTheme.AUTO) }
+    var viewerFontSizeSp by remember { mutableIntStateOf(16) }
+    var viewerZoomPercent by remember { mutableIntStateOf(100) }
+    var pendingScrollRequest by remember { mutableStateOf<ViewerScrollRequest?>(null) }
+
     var isSearchInDocumentOpen by rememberSaveable { mutableStateOf(false) }
     var inViewerSearchQuery by rememberSaveable { mutableStateOf("") }
-    var currentMatchIndex by remember { mutableStateOf(0) }
-    var totalMatchesCount by remember { mutableStateOf(0) }
-    var pdfSearchResults by remember { mutableStateOf<List<PdfSearchResult>>(emptyList()) }
+    var currentMatchIndex by remember { mutableIntStateOf(0) }
+    var totalMatchesCount by remember { mutableIntStateOf(0) }
+    var searchResultsTruncated by remember { mutableStateOf(false) }
+    var isPdfSearchLoading by remember { mutableStateOf(false) }
+    var pdfSearchError by remember { mutableStateOf<String?>(null) }
+    var pdfSearchSnapshot by remember { mutableStateOf(PdfSearchSnapshot()) }
+    var docxPreviewWebView by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    var docxPreviewReady by remember(activeFile?.path) { mutableStateOf(false) }
+    var fullPreviewText by remember(activeFile?.path) { mutableStateOf<String?>(null) }
+    var largeTextSearchMatches by remember(activeFile?.path) { mutableStateOf<List<TextFileSearchMatch>>(emptyList()) }
+    var largeTextSearchCompletedQuery by remember(activeFile?.path) { mutableStateOf("") }
+    var isLargeTextSearchLoading by remember(activeFile?.path) { mutableStateOf(false) }
+    var largeTextSearchError by remember(activeFile?.path) { mutableStateOf<String?>(null) }
+    // True when the DOCX renderer fell back to the pure-Kotlin text extractor: the
+    // WebView zoom pipeline does not exist there, so dead zoom controls must be hidden.
+    var isDocxRenderFallback by remember(activeFile?.path) { mutableStateOf(false) }
 
-    // PDF search effect
-    LaunchedEffect(inViewerSearchQuery, activeFile?.path, fileState) {
-        if (fileState is MainViewModel.FileContentState.PdfSuccess && inViewerSearchQuery.length >= 2 && activeFile != null) {
-            val file = java.io.File(activeFile.path)
-            val res = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                PdfTextSearcher.searchInPdf(file, inViewerSearchQuery)
-            }
-            pdfSearchResults = res
-            totalMatchesCount = res.size
-            currentMatchIndex = 0
-            if (res.isNotEmpty()) {
-                scrollToPage = res[0].pageNumber - 1
-            }
-        } else if (fileState is MainViewModel.FileContentState.PdfSuccess) {
-            pdfSearchResults = emptyList()
-            totalMatchesCount = 0
-            currentMatchIndex = 0
-        }
-    }
-
-    // Text search effect
-    val textContent = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content ?: ""
-    val textMatches = remember(textContent, inViewerSearchQuery) {
-        if (inViewerSearchQuery.length >= 2 && textContent.isNotEmpty()) {
-            val list = mutableListOf<Int>()
-            var idx = textContent.indexOf(inViewerSearchQuery, ignoreCase = true)
-            while (idx >= 0 && list.size < 500) {
-                list.add(idx)
-                idx = textContent.indexOf(inViewerSearchQuery, idx + inViewerSearchQuery.length.coerceAtLeast(1), ignoreCase = true)
-            }
-            list
-        } else emptyList()
-    }
-    LaunchedEffect(textMatches) {
-        if (fileState is MainViewModel.FileContentState.TextSuccess) {
-            totalMatchesCount = textMatches.size
-            currentMatchIndex = 0
-        }
+    LaunchedEffect(activeFile?.path) {
+        isBarsVisible = true
+        inViewerSearchQuery = ""
+        isSearchInDocumentOpen = false
+        currentMatchIndex = 0
+        totalMatchesCount = 0
+        searchResultsTruncated = false
+        isPdfSearchLoading = false
+        pdfSearchError = null
+        pdfSearchSnapshot = PdfSearchSnapshot()
+        docxPreviewReady = false
+        docxPreviewWebView = null
+        largeTextSearchMatches = emptyList()
+        largeTextSearchCompletedQuery = ""
+        isLargeTextSearchLoading = false
+        largeTextSearchError = null
+        fullPreviewText = null
+        searchTriggerNext = 0
+        searchTriggerPrev = 0
+        isDocxRenderFallback = false
     }
 
     val context = LocalContext.current
+    val printScope = rememberCoroutineScope()
+
+    // Seed the inline editor with the currently displayed content every time edit mode starts.
+    LaunchedEffect(isEditMode) {
+        if (isEditMode) {
+            val seedContent = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content.orEmpty()
+            editTextValue = TextFieldValue(seedContent)
+            editOriginalContent = seedContent
+            editUndoStack.clear()
+            editRedoStack.clear()
+        }
+    }
+
+    // Load persisted viewer appearance preferences once per screen instance.
+    LaunchedEffect(Unit) {
+        viewerSyntaxTheme = ViewerAppearancePrefs.getTheme(context)
+        viewerFontSizeSp = ViewerAppearancePrefs.getFontSize(context)
+        viewerZoomPercent = ViewerAppearancePrefs.getZoomPercent(context)
+    }
+
+    // Persist the DOCX zoom preference (debounced so pinch gestures never spam disk).
+    val docxZoomPersistContext = LocalContext.current
+    LaunchedEffect(docxZoomFactor) {
+        kotlinx.coroutines.delay(400)
+        ViewerAppearancePrefs.setDocxZoomPercent(docxZoomPersistContext, DocxZoomPolicy.toPercent(docxZoomFactor))
+    }
+
+    // Auto-focus the in-document search field (and raise the keyboard) when the overlay opens.
+    val searchFieldFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    LaunchedEffect(isSearchInDocumentOpen, isBarsVisible) {
+        if (isSearchInDocumentOpen && isBarsVisible) {
+            delay(220)
+            searchFieldFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     // Restore previously opened file state on recreate
     // Attempted once per screen instance (process-death recovery). Without the flag, "Remove from history"
@@ -264,6 +549,156 @@ fun FilePreviewScreen(
         }
     }
 
+    val isLargeTextSearchable = activeFile?.extension?.lowercase() in setOf("txt", "md") &&
+        (fileState as? MainViewModel.FileContentState.TextSuccess)?.truncated == true
+
+    LaunchedEffect(activeFile?.path, fileState) {
+        val textState = fileState as? MainViewModel.FileContentState.TextSuccess
+        val extension = activeFile?.extension?.lowercase()
+        fullPreviewText = if (textState != null && extension in setOf("txt", "md")) textState.content else null
+    }
+
+    LaunchedEffect(activeFile?.path, inViewerSearchQuery, isLargeTextSearchable, fileState) {
+        val textState = fileState as? MainViewModel.FileContentState.TextSuccess
+        if (!isLargeTextSearchable || textState == null) {
+            largeTextSearchMatches = emptyList()
+            largeTextSearchCompletedQuery = ""
+            isLargeTextSearchLoading = false
+            largeTextSearchError = null
+            return@LaunchedEffect
+        }
+
+        val query = inViewerSearchQuery.trim()
+        if (query.isEmpty()) {
+            largeTextSearchMatches = emptyList()
+            largeTextSearchCompletedQuery = ""
+            isLargeTextSearchLoading = false
+            largeTextSearchError = null
+            fullPreviewText = textState.content
+            return@LaunchedEffect
+        }
+
+        largeTextSearchMatches = emptyList()
+        largeTextSearchCompletedQuery = ""
+        largeTextSearchError = null
+        isLargeTextSearchLoading = true
+        fullPreviewText = textState.content
+        kotlinx.coroutines.delay(180)
+        val searchContext = kotlin.coroutines.coroutineContext
+        try {
+            val charset = java.nio.charset.Charset.forName(textState.charsetName)
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                TextFileSearchEngine.search(
+                    java.io.File(textState.file.path),
+                    query,
+                    charset = charset,
+                    shouldContinue = { searchContext.isActive }
+                )
+            }
+            largeTextSearchMatches = result.matches
+            largeTextSearchCompletedQuery = query
+            totalMatchesCount = result.matchCount
+            searchResultsTruncated = result.truncated
+            currentMatchIndex = 0
+            isLargeTextSearchLoading = false
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            largeTextSearchError = error.message ?: "Could not search the complete file"
+            isLargeTextSearchLoading = false
+            totalMatchesCount = 0
+        }
+    }
+
+    LaunchedEffect(activeFile?.path, inViewerSearchQuery, largeTextSearchCompletedQuery, largeTextSearchMatches, currentMatchIndex) {
+        if (!isLargeTextSearchable || inViewerSearchQuery.isBlank() ||
+            largeTextSearchCompletedQuery != inViewerSearchQuery.trim() || largeTextSearchMatches.isEmpty()
+        ) return@LaunchedEffect
+
+        val textState = fileState as? MainViewModel.FileContentState.TextSuccess ?: return@LaunchedEffect
+        val match = largeTextSearchMatches.getOrNull(currentMatchIndex) ?: return@LaunchedEffect
+        try {
+            val charset = java.nio.charset.Charset.forName(textState.charsetName)
+            val window = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                TextWindowReader.read(
+                    java.io.File(textState.file.path),
+                    match.byteOffset,
+                    maxBytes = 250_000,
+                    charset = charset
+                )
+            }
+            fullPreviewText = window.text
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            largeTextSearchError = error.message ?: "Could not open the selected search result"
+        }
+    }
+
+    val isFullTextLoading = isLargeTextSearchable && inViewerSearchQuery.isNotBlank() && isLargeTextSearchLoading
+
+    // --- In-document find pipeline (Loop 10): one shared owner for header + keyboard ---
+    // Navigation lives in the screen scope so the header find bar and the IME Search
+    // action provably call the same logic (the old lambdas were scoped inside the
+    // floating overlay, which Bug 1 removes).
+    val goToNextMatch = {
+        if (fileState is MainViewModel.FileContentState.PdfSuccess) {
+            val next = InViewerSearchNavigation.nextIndex(currentMatchIndex, pdfSearchSnapshot.matches.size)
+            if (next != null) {
+                currentMatchIndex = next
+                scrollToPage = pdfSearchSnapshot.matches[next].pageNumber - 1
+            }
+        } else if (isLargeTextSearchable) {
+            val next = InViewerSearchNavigation.nextIndex(currentMatchIndex, largeTextSearchMatches.size)
+            if (next != null) currentMatchIndex = next
+        } else {
+            searchTriggerNext++
+        }
+        Unit
+    }
+    val goToPrevMatch = {
+        if (fileState is MainViewModel.FileContentState.PdfSuccess) {
+            val prev = InViewerSearchNavigation.prevIndex(currentMatchIndex, pdfSearchSnapshot.matches.size)
+            if (prev != null) {
+                currentMatchIndex = prev
+                scrollToPage = pdfSearchSnapshot.matches[prev].pageNumber - 1
+            }
+        } else if (isLargeTextSearchable) {
+            val prev = InViewerSearchNavigation.prevIndex(currentMatchIndex, largeTextSearchMatches.size)
+            if (prev != null) currentMatchIndex = prev
+        } else {
+            searchTriggerPrev++
+        }
+        Unit
+    }
+    // Closing find mode hides the keyboard, restores the normal app bar and clears the
+    // query so every engine's existing empty-query path removes stale highlights.
+    val closeInViewerSearch = {
+        keyboardController?.hide()
+        isSearchInDocumentOpen = false
+        inViewerSearchQuery = ""
+        pdfSearchSnapshot = PdfSearchSnapshot()
+        isPdfSearchLoading = false
+        pdfSearchError = null
+        largeTextSearchMatches = emptyList()
+        largeTextSearchCompletedQuery = ""
+        largeTextSearchError = null
+        searchResultsTruncated = false
+        totalMatchesCount = 0
+        currentMatchIndex = 0
+        Unit
+    }
+    val toggleInViewerSearch = {
+        if (isSearchInDocumentOpen) {
+            closeInViewerSearch()
+        } else {
+            // The find bar lives in the header: reveal the bars when opening from focus mode.
+            isBarsVisible = true
+            isSearchInDocumentOpen = true
+        }
+        Unit
+    }
+
     val handleBack = {
         val parentPath = activeFile?.parentZipPath
         if (parentPath != null) {
@@ -274,29 +709,90 @@ fun FilePreviewScreen(
     }
 
     androidx.activity.compose.BackHandler {
-        handleBack()
+        if (isSearchInDocumentOpen) {
+            // Deliberate Chrome-style behaviour: back closes find mode first.
+            closeInViewerSearch()
+        } else if (isEditMode) {
+            if (hasUnsavedEdits) showDiscardEditsDialog = true else viewModel.exitEditMode()
+        } else {
+            handleBack()
+        }
     }
 
     val activity = context as? android.app.Activity
-    DisposableEffect(isBarsVisible) {
+    val originalWindowBars = remember(activity) {
         activity?.window?.let { window ->
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            Triple(window.statusBarColor, window.navigationBarColor, controller.isAppearanceLightStatusBars to controller.isAppearanceLightNavigationBars)
+        }
+    }
+    val originalSystemBarsBehavior = remember(activity) {
+        activity?.window?.let { WindowCompat.getInsetsController(it, it.decorView).systemBarsBehavior }
+    }
+    val originalDecorBackground = remember(activity) { activity?.window?.decorView?.background }
+    val originalCutoutMode = remember(activity) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            activity?.window?.attributes?.layoutInDisplayCutoutMode
+        } else null
+    }
+    SideEffect {
+        val window = activity?.window
+        if (window != null) {
+            // The activity is edge-to-edge; keep the preview behind the system insets in focus mode.
+            WindowCompat.setDecorFitsSystemWindows(window, false)
             val insetsController = WindowCompat.getInsetsController(window, window.decorView)
             insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            // Loop 14: PDF always renders in light mode regardless of the in-app theme,
+            // so the status-bar canvas follows the system theme for PDFs again.
+            val isDarkCanvas = when (activeFile?.extension?.lowercase()) {
+                "pdf" -> isDarkTheme
+                "docx", "doc" -> isDocxNightMode
+                else -> isDarkTheme
+            }
+            val canvasColor = when (activeFile?.extension?.lowercase()) {
+                "pdf" -> android.graphics.Color.rgb(240, 240, 240)
+                "docx", "doc" -> if (isDocxNightMode) android.graphics.Color.rgb(21, 21, 20) else android.graphics.Color.rgb(250, 249, 245)
+                else -> if (isDarkTheme) android.graphics.Color.rgb(24, 23, 21) else android.graphics.Color.rgb(250, 249, 245)
+            }
+            window.decorView.setBackgroundColor(canvasColor)
+            insetsController.isAppearanceLightStatusBars = !isDarkCanvas
+            insetsController.isAppearanceLightNavigationBars = !isDarkCanvas
             if (!isBarsVisible) {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                    window.attributes.layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    window.attributes = window.attributes.apply {
+                        layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    }
                 }
                 window.statusBarColor = android.graphics.Color.TRANSPARENT
                 window.navigationBarColor = android.graphics.Color.TRANSPARENT
                 insetsController.hide(WindowInsetsCompat.Type.systemBars())
             } else {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P && originalCutoutMode != null) {
+                    window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = originalCutoutMode }
+                }
                 insetsController.show(WindowInsetsCompat.Type.systemBars())
             }
         }
+    }
+    DisposableEffect(activity) {
         onDispose {
-            activity?.window?.let { window ->
+            val window = activity?.window
+            if (window != null) {
                 val insetsController = WindowCompat.getInsetsController(window, window.decorView)
                 insetsController.show(WindowInsetsCompat.Type.systemBars())
+                originalWindowBars?.let { (status, navigation, appearance) ->
+                    window.statusBarColor = status
+                    window.navigationBarColor = navigation
+                    insetsController.isAppearanceLightStatusBars = appearance.first
+                    insetsController.isAppearanceLightNavigationBars = appearance.second
+                }
+                if (originalSystemBarsBehavior != null) {
+                    insetsController.systemBarsBehavior = originalSystemBarsBehavior
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P && originalCutoutMode != null) {
+                    window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = originalCutoutMode }
+                }
+                window.decorView.background = originalDecorBackground
             }
         }
     }
@@ -306,10 +802,76 @@ fun FilePreviewScreen(
         topBar = {
             androidx.compose.animation.AnimatedVisibility(
                 visible = isBarsVisible,
-                enter = androidx.compose.animation.slideInVertically(initialOffsetY = { -it }) + androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it }) + androidx.compose.animation.fadeOut(),
+                enter = androidx.compose.animation.slideInVertically(
+                    animationSpec = tween(260, easing = FastOutSlowInEasing),
+                    initialOffsetY = { -it }
+                ) + androidx.compose.animation.fadeIn(tween(220)),
+                exit = androidx.compose.animation.slideOutVertically(
+                    animationSpec = tween(260, easing = FastOutSlowInEasing),
+                    targetOffsetY = { -it }
+                ) + androidx.compose.animation.fadeOut(tween(220)),
                 modifier = Modifier.statusBarsPadding()
             ) {
+                if (isSearchInDocumentOpen) {
+                    // Bug 1 (Loop 10): while find mode is active the search field owns the
+                    // header row itself (Chrome-style), replacing the filename app bar —
+                    // no second floating search surface below the header.
+                    ViewerFindBarHeader(
+                        query = inViewerSearchQuery,
+                        onQueryChange = { value ->
+                            inViewerSearchQuery = value
+                            currentMatchIndex = 0
+                            totalMatchesCount = 0
+                            searchResultsTruncated = false
+                            pdfSearchError = null
+                            largeTextSearchMatches = emptyList()
+                            largeTextSearchCompletedQuery = ""
+                            largeTextSearchError = null
+                            if (fileState is MainViewModel.FileContentState.PdfSuccess) {
+                                isPdfSearchLoading = value.isNotBlank()
+                                pdfSearchSnapshot = PdfSearchSnapshot()
+                            }
+                        },
+                        onClose = { closeInViewerSearch() },
+                        onClear = {
+                            inViewerSearchQuery = ""
+                            currentMatchIndex = 0
+                            totalMatchesCount = 0
+                            searchResultsTruncated = false
+                            pdfSearchSnapshot = PdfSearchSnapshot()
+                            isPdfSearchLoading = false
+                            pdfSearchError = null
+                            largeTextSearchMatches = emptyList()
+                            largeTextSearchCompletedQuery = ""
+                            largeTextSearchError = null
+                        },
+                        onKeyboardSearch = { goToNextMatch() },
+                        focusRequester = searchFieldFocusRequester,
+                        isPdfSearch = fileState is MainViewModel.FileContentState.PdfSuccess,
+                        isLargeTextSearchable = isLargeTextSearchable,
+                        isPdfSearchLoading = isPdfSearchLoading,
+                        isFullTextLoading = isFullTextLoading,
+                        pdfSearchError = pdfSearchError,
+                        largeTextSearchError = largeTextSearchError,
+                        totalMatchesCount = totalMatchesCount,
+                        searchResultsTruncated = searchResultsTruncated,
+                        currentMatchIndex = currentMatchIndex,
+                        pdfPageInfo = pdfSearchSnapshot.matches.getOrNull(currentMatchIndex)?.pageNumber?.let { " (p.$it)" }.orEmpty(),
+                        navigableMatchCount = run {
+                            val extension = activeFile?.extension?.lowercase()
+                            when {
+                                fileState is MainViewModel.FileContentState.PdfSuccess -> pdfSearchSnapshot.matches.size
+                                isLargeTextSearchable -> largeTextSearchMatches.size
+                                extension in setOf("docx", "doc") -> minOf(totalMatchesCount, 5_000)
+                                extension in setOf("txt", "md") -> minOf(totalMatchesCount, 1_000)
+                                else -> totalMatchesCount
+                            }
+                        },
+                        onPrevious = { goToPrevMatch() },
+                        onNext = { goToNextMatch() }
+                    )
+                    return@AnimatedVisibility
+                }
                 val titleText = fileState.fileOrNull?.name ?: "Preview"
                 
                 var showMenu by remember { mutableStateOf(false) }
@@ -317,65 +879,16 @@ fun FilePreviewScreen(
 
                 ClaudeAppBar(
                     title = titleText,
-                    onNavIconClick = handleBack,
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavIconClick = if (isEditMode) {
+                        {
+                            // X icon: discard changes with confirmation when dirty.
+                            if (hasUnsavedEdits) showDiscardEditsDialog = true else viewModel.exitEditMode()
+                        }
+                    } else {
+                        handleBack
+                    },
+                    navIcon = if (isEditMode) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
                     actions = {
-                        val canSearchInDoc = fileState is MainViewModel.FileContentState.PdfSuccess ||
-                            fileState is MainViewModel.FileContentState.TextSuccess ||
-                            fileState is MainViewModel.FileContentState.DocxSuccess ||
-                            (activeFile?.extension?.lowercase() in setOf("txt", "md", "docx", "doc", "pdf", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"))
-                        if (canSearchInDoc) {
-                            IconButton(onClick = { isSearchInDocumentOpen = !isSearchInDocumentOpen }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Search,
-                                    contentDescription = "Find in document",
-                                    tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-
-                        val extLower = activeFile?.extension?.lowercase() ?: ""
-                        val hasOutline = extLower in setOf("md", "markdown", "docx", "doc", "txt", "pdf")
-                        if (hasOutline) {
-                            IconButton(onClick = { showOutlineBottomSheet = true }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Outlined.Toc,
-                                    contentDescription = "Document Outline",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-
-                        // Focus Mode / Immersive Toggle
-                        IconButton(onClick = { isBarsVisible = !isBarsVisible }) {
-                            Icon(
-                                imageVector = if (isBarsVisible) Icons.Outlined.Fullscreen else Icons.Outlined.FullscreenExit,
-                                contentDescription = "Toggle Focus Mode",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        val isTextState = fileState is MainViewModel.FileContentState.TextSuccess ||
-                            (activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"))
-                        if (isTextState) {
-                            IconButton(onClick = {
-                                val textToCopy = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
-                                    ?: runCatching { activeFile?.let { java.io.File(it.path).readText() } }.getOrNull()
-                                if (!textToCopy.isNullOrEmpty()) {
-                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                    val clip = android.content.ClipData.newPlainText(activeFile?.name ?: "File Content", textToCopy)
-                                    clipboard?.setPrimaryClip(clip)
-                                    android.widget.Toast.makeText(context, "Text copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.ContentCopy,
-                                    contentDescription = "Copy all text",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-
                         Box {
                             IconButton(onClick = { showMenu = true }) {
                                 Icon(Icons.Default.MoreVert, contentDescription = "More Options")
@@ -389,8 +902,10 @@ fun FilePreviewScreen(
                                     text = { Text("Share file") },
                                     onClick = {
                                         showMenu = false
-                                        activeFile?.let { fileEntity ->
-                                            shareFile(context, File(fileEntity.path), fileEntity.extension)
+                                        if (!isEditMode) {
+                                            activeFile?.let { fileEntity ->
+                                                shareFile(context, File(fileEntity.path), fileEntity.extension)
+                                            }
                                         }
                                     },
                                     leadingIcon = {
@@ -400,6 +915,36 @@ fun FilePreviewScreen(
                                         )
                                     }
                                 )
+
+                                if (isEditMode) {
+                                    DropdownMenuItem(
+                                        text = { Text("Save changes", fontWeight = FontWeight.Bold) },
+                                        onClick = {
+                                            showMenu = false
+                                            if (hasUnsavedEdits) showSaveConfirmDialog = true else viewModel.exitEditMode()
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Save,
+                                                contentDescription = "Save changes",
+                                                tint = if (hasUnsavedEdits) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                            )
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Export modified copy…") },
+                                        onClick = {
+                                            showMenu = false
+                                            showEditSaveAsDialog = true
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Outlined.DriveFileMove,
+                                                contentDescription = "Export modified copy"
+                                            )
+                                        }
+                                    )
+                                }
 
                                 val isPdf = activeFile?.extension?.lowercase() == "pdf"
                                 val isDocx = activeFile?.extension?.lowercase() in setOf("docx", "doc")
@@ -417,19 +962,24 @@ fun FilePreviewScreen(
                                             )
                                         }
                                     )
-                                    DropdownMenuItem(
-                                        text = { Text(if (isPdfNightMode) "Light Mode" else "Dark Mode") },
-                                        onClick = {
-                                            showMenu = false
-                                            isPdfNightMode = !isPdfNightMode
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = if (isPdfNightMode) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
-                                                contentDescription = "Toggle Dark Mode"
-                                             )
-                                        }
-                                    )
+                                    // Loop 14: the PDF night/light toggle was removed entirely —
+                                    // PDFs always render in light mode. Dark mode remains for
+                                    // DOCX/TXT/Markdown and other file types.
+                                    if (!isPdf) {
+                                        DropdownMenuItem(
+                                            text = { Text(if (isDocxNightMode) "Light Mode" else "Dark Mode") },
+                                            onClick = {
+                                                showMenu = false
+                                                isDocxNightMode = !isDocxNightMode
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = if (isDocxNightMode) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                                                    contentDescription = "Toggle Dark Mode"
+                                                 )
+                                            }
+                                        )
+                                    }
                                     if (isPdf) {
                                         DropdownMenuItem(
                                             text = { Text("Open in System Viewer") },
@@ -449,6 +999,7 @@ fun FilePreviewScreen(
                                     }
                                 }
 
+                                val hasOutline = activeFile?.extension?.lowercase() in setOf("md", "markdown", "txt") && !isEditMode
                                 if (hasOutline) {
                                     DropdownMenuItem(
                                         text = { Text("Document Outline") },
@@ -507,17 +1058,44 @@ fun FilePreviewScreen(
                                                     com.example.utils.FilePrintHelper.printPdf(context, java.io.File(entity.path), entity.name)
                                                 }
                                                 ext in setOf("docx", "doc") -> {
-                                                    com.example.utils.FilePrintHelper.printDocx(context, java.io.File(entity.path), entity.name)
+                                                    val renderedWebView = docxPreviewWebView
+                                                    if (docxPreviewReady && renderedWebView != null) {
+                                                        com.example.utils.FilePrintHelper.printWebView(context, renderedWebView, entity.name)
+                                                    } else {
+                                                        com.example.utils.FilePrintHelper.printDocx(context, java.io.File(entity.path), entity.name)
+                                                    }
                                                 }
-                                                ext == "md" -> {
-                                                    val mdContent = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
-                                                        ?: runCatching { java.io.File(entity.path).readText() }.getOrNull() ?: ""
-                                                    com.example.utils.FilePrintHelper.printMarkdown(context, mdContent, entity.name)
+                                                ext == "md" || ext == "txt" -> {
+                                                    val textState = fileState as? MainViewModel.FileContentState.TextSuccess
+                                                    printScope.launch {
+                                                        val result = if (textState != null && !textState.truncated) {
+                                                            Result.success(textState.content)
+                                                        } else {
+                                                            readBoundedText(
+                                                                java.io.File(entity.path),
+                                                                textState?.charsetName ?: "UTF-8"
+                                                            )
+                                                        }
+                                                        result.onSuccess { fullContent ->
+                                                            if (ext == "md") {
+                                                                com.example.utils.FilePrintHelper.printMarkdown(context, fullContent, entity.name)
+                                                            } else {
+                                                                com.example.utils.FilePrintHelper.printTextOrMarkdown(context, fullContent, entity.name)
+                                                            }
+                                                        }.onFailure { error ->
+                                                            android.widget.Toast.makeText(
+                                                                context,
+                                                                error.message ?: "Could not prepare this file for printing",
+                                                                android.widget.Toast.LENGTH_LONG
+                                                            ).show()
+                                                        }
+                                                    }
                                                 }
                                                 ext in setOf("png", "jpg", "jpeg", "webp", "gif") -> {
                                                     com.example.utils.FilePrintHelper.printImage(context, java.io.File(entity.path), entity.name)
                                                 }
                                                 else -> {
+                                                    // The four document formats have bounded/dedicated branches above; preserve legacy fallback for other types.
                                                     val content = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
                                                         ?: runCatching { java.io.File(entity.path).readText() }.getOrNull() ?: ""
                                                     com.example.utils.FilePrintHelper.printTextOrMarkdown(context, content, entity.name)
@@ -572,7 +1150,9 @@ fun FilePreviewScreen(
         },
         bottomBar = {
             val isPdf = fileState is MainViewModel.FileContentState.PdfSuccess
-            val isDocx = fileState is MainViewModel.FileContentState.DocxSuccess || (activeFile?.extension?.lowercase() in setOf("docx", "doc"))
+            // Gate on the real state: legacy .doc files open in the hex viewer and must not
+            // show DOCX zoom controls.
+            val isDocx = fileState is MainViewModel.FileContentState.DocxSuccess
             val isImage = fileState is MainViewModel.FileContentState.ImageSuccess
             val isText = fileState is MainViewModel.FileContentState.TextSuccess ||
                 (activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"))
@@ -582,13 +1162,32 @@ fun FilePreviewScreen(
             if (showFloatingBar) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = isBarsVisible,
-                    enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
-                    exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut()
+                    enter = androidx.compose.animation.slideInVertically(
+                        animationSpec = tween(260, easing = FastOutSlowInEasing),
+                        initialOffsetY = { it }
+                    ) + androidx.compose.animation.fadeIn(tween(220)),
+                    exit = androidx.compose.animation.slideOutVertically(
+                        animationSpec = tween(260, easing = FastOutSlowInEasing),
+                        targetOffsetY = { it }
+                    ) + androidx.compose.animation.fadeOut(tween(220))
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .navigationBarsPadding()
+                            .then(
+                                // Bug 2 (Loop 10): while inline editing, lift the tray above
+                                // the keyboard. safeDrawing.bottom is the UNION of navigation
+                                // bar and IME insets, so the padding is correct in both states
+                                // and never double-counts the gesture-nav area. Reading mode
+                                // keeps the plain navigation-bar padding, unchanged.
+                                if (isEditMode) {
+                                    Modifier.windowInsetsPadding(
+                                        WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
+                                    )
+                                } else {
+                                    Modifier.navigationBarsPadding()
+                                }
+                            )
                             .padding(bottom = 12.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -631,9 +1230,34 @@ fun FilePreviewScreen(
                                         }
                                     }
 
-                                    // Find in PDF
+                                    // Screen orientation control: rotate the device UI between
+                                    // portrait and landscape. Never rotate the PDF page contents.
                                     IconButton(
-                                        onClick = { isSearchInDocumentOpen = !isSearchInDocumentOpen },
+                                        onClick = {
+                                            val activity = context.findHostActivity()
+                                            if (activity != null) {
+                                                activity.requestedOrientation =
+                                                    if (activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                                                        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                                    } else {
+                                                        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                                    }
+                                            }
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.RotateRight,
+                                            contentDescription = "Switch portrait/landscape screen orientation",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    // Find in PDF (Loop 14: moved into the Night/Light toggle's
+                                    // former slot; the PDF-only night mode was removed entirely)
+                                    IconButton(
+                                        onClick = { toggleInViewerSearch() },
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
@@ -641,19 +1265,6 @@ fun FilePreviewScreen(
                                             contentDescription = "Find in document",
                                             modifier = Modifier.size(18.dp),
                                             tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    // Night / Light Mode toggle pill
-                                    IconButton(
-                                        onClick = { isPdfNightMode = !isPdfNightMode },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isPdfNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                            contentDescription = "Toggle night mode",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = if (isPdfNightMode) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurface
                                         )
                                     }
 
@@ -687,6 +1298,10 @@ fun FilePreviewScreen(
                                         )
                                     }
                                 } else if (isDocx) {
+                                    // Loop 10: the zoom pipeline only exists in the WebView
+                                    // renderer; hide the dead zoom controls when the pure-Kotlin
+                                    // fallback renderer took over (its text preview has no zoom).
+                                    if (!isDocxRenderFallback) {
                                     // DOCX Zoom Out Button
                                     IconButton(
                                         onClick = {
@@ -706,7 +1321,10 @@ fun FilePreviewScreen(
                                     Surface(
                                         shape = RoundedCornerShape(16.dp),
                                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                        modifier = Modifier.clickable { docxZoomFactor = 1.0f }
+                                        modifier = Modifier.clickable {
+                                            docxZoomInput = (docxZoomFactor * 100).toInt().toString()
+                                            showDocxZoomDialog = true
+                                        }
                                     ) {
                                         Text(
                                             text = "${(docxZoomFactor * 100).toInt()}%",
@@ -731,10 +1349,11 @@ fun FilePreviewScreen(
                                             tint = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
+                                    }
 
                                     // Find in DOCX
                                     IconButton(
-                                        onClick = { isSearchInDocumentOpen = !isSearchInDocumentOpen },
+                                        onClick = { toggleInViewerSearch() },
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
@@ -747,14 +1366,14 @@ fun FilePreviewScreen(
 
                                     // DOCX Night Mode toggle
                                     IconButton(
-                                        onClick = { isPdfNightMode = !isPdfNightMode },
+                                        onClick = { isDocxNightMode = !isDocxNightMode },
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
-                                            imageVector = if (isPdfNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                            imageVector = if (isDocxNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
                                             contentDescription = "Toggle night mode",
                                             modifier = Modifier.size(18.dp),
-                                            tint = if (isPdfNightMode) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurface
+                                            tint = if (isDocxNightMode) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurface
                                         )
                                     }
 
@@ -762,7 +1381,12 @@ fun FilePreviewScreen(
                                     IconButton(
                                         onClick = {
                                             activeFile?.let {
-                                                com.example.utils.FilePrintHelper.printDocx(context, java.io.File(it.path), it.name)
+                                                val renderedWebView = docxPreviewWebView
+                                                if (docxPreviewReady && renderedWebView != null) {
+                                                    com.example.utils.FilePrintHelper.printWebView(context, renderedWebView, it.name)
+                                                } else {
+                                                    com.example.utils.FilePrintHelper.printDocx(context, java.io.File(it.path), it.name)
+                                                }
                                             }
                                         },
                                         modifier = Modifier.size(36.dp)
@@ -843,9 +1467,155 @@ fun FilePreviewScreen(
                                         )
                                     }
                                 } else if (isText) {
+                                    if (isEditMode) {
+                                        // Inline editing tray — replaces the reading tray in place,
+                                        // keeping the exact same floating pill so the screen never jumps.
+                                        // Undo
+                                        IconButton(
+                                            onClick = {
+                                                if (editUndoStack.isNotEmpty) {
+                                                    val prevState = editUndoStack.pop()
+                                                    if (prevState != null) {
+                                                        editRedoStack.push(editTextValue)
+                                                        editTextValue = prevState
+                                                    }
+                                                }
+                                            },
+                                            enabled = editUndoStack.isNotEmpty,
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Undo,
+                                                contentDescription = "Undo",
+                                                modifier = Modifier.size(18.dp),
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        // Redo
+                                        IconButton(
+                                            onClick = {
+                                                if (editRedoStack.isNotEmpty) {
+                                                    val nextState = editRedoStack.pop()
+                                                    if (nextState != null) {
+                                                        editUndoStack.push(editTextValue)
+                                                        editTextValue = nextState
+                                                    }
+                                                }
+                                            },
+                                            enabled = editRedoStack.isNotEmpty,
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Redo,
+                                                contentDescription = "Redo",
+                                                modifier = Modifier.size(18.dp),
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        // Tab indent
+                                        IconButton(
+                                            onClick = {
+                                                applyTabIndent(editTextValue.text, editTextValue.selection, settings.tabSize)?.let { result ->
+                                                    editUndoStack.push(editTextValue)
+                                                    editRedoStack.clear()
+                                                    editTextValue = TextFieldValue(result.text, result.newSelection)
+                                                }
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.FormatIndentIncrease,
+                                                contentDescription = "Insert tab indent",
+                                                modifier = Modifier.size(18.dp),
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        // Markdown bold
+                                        IconButton(
+                                            onClick = {
+                                                editUndoStack.push(editTextValue)
+                                                editRedoStack.clear()
+                                                applyMarkdownWrap(editTextValue.text, editTextValue.selection, "**").let { result ->
+                                                    editTextValue = TextFieldValue(result.text, result.newSelection)
+                                                }
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.FormatBold,
+                                                contentDescription = "Bold (markdown)",
+                                                modifier = Modifier.size(18.dp),
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        // Markdown italic
+                                        IconButton(
+                                            onClick = {
+                                                editUndoStack.push(editTextValue)
+                                                editRedoStack.clear()
+                                                applyMarkdownWrap(editTextValue.text, editTextValue.selection, "*").let { result ->
+                                                    editTextValue = TextFieldValue(result.text, result.newSelection)
+                                                }
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.FormatItalic,
+                                                contentDescription = "Italic (markdown)",
+                                                modifier = Modifier.size(18.dp),
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        // Undo history viewer
+                                        IconButton(
+                                            onClick = { showEditHistoryDialog = true },
+                                            enabled = editUndoStack.isNotEmpty,
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.History,
+                                                contentDescription = "Edit history",
+                                                modifier = Modifier.size(18.dp),
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+
+                                        // Save pill with confirmation
+                                        Surface(
+                                            shape = RoundedCornerShape(18.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.clickable {
+                                                if (hasUnsavedEdits) showSaveConfirmDialog = true else viewModel.exitEditMode()
+                                            }
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Save,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    "Save",
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    } else {
                                     // Find in Text
                                     IconButton(
-                                        onClick = { isSearchInDocumentOpen = !isSearchInDocumentOpen },
+                                        onClick = { toggleInViewerSearch() },
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
@@ -873,13 +1643,32 @@ fun FilePreviewScreen(
                                     IconButton(
                                         onClick = {
                                             val ext = activeFile?.extension?.lowercase() ?: ""
-                                            val textToPrint = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
-                                                ?: runCatching { activeFile?.let { java.io.File(it.path).readText() } }.getOrNull()
-                                                ?: ""
-                                            if (ext == "md") {
-                                                com.example.utils.FilePrintHelper.printMarkdown(context, textToPrint, activeFile?.name ?: "Document")
-                                            } else {
-                                                com.example.utils.FilePrintHelper.printTextOrMarkdown(context, textToPrint, activeFile?.name ?: "Document")
+                                            val entity = activeFile
+                                            val textState = fileState as? MainViewModel.FileContentState.TextSuccess
+                                            if (entity != null) {
+                                                printScope.launch {
+                                                    val result = if (textState != null && !textState.truncated) {
+                                                        Result.success(textState.content)
+                                                    } else {
+                                                        readBoundedText(
+                                                            java.io.File(entity.path),
+                                                            textState?.charsetName ?: "UTF-8"
+                                                        )
+                                                    }
+                                                    result.onSuccess { textToPrint ->
+                                                        if (ext == "md") {
+                                                            com.example.utils.FilePrintHelper.printMarkdown(context, textToPrint, entity.name)
+                                                        } else {
+                                                            com.example.utils.FilePrintHelper.printTextOrMarkdown(context, textToPrint, entity.name)
+                                                        }
+                                                    }.onFailure { error ->
+                                                        android.widget.Toast.makeText(
+                                                            context,
+                                                            error.message ?: "Could not prepare this file for printing",
+                                                            android.widget.Toast.LENGTH_LONG
+                                                        ).show()
+                                                    }
+                                                }
                                             }
                                         },
                                         modifier = Modifier.size(36.dp)
@@ -895,13 +1684,16 @@ fun FilePreviewScreen(
                                     // Copy all text
                                     IconButton(
                                         onClick = {
-                                            val textToCopy = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
-                                                ?: runCatching { activeFile?.let { java.io.File(it.path).readText() } }.getOrNull()
-                                            if (!textToCopy.isNullOrEmpty()) {
-                                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                                                val clip = android.content.ClipData.newPlainText(activeFile?.name ?: "File Content", textToCopy)
-                                                clipboard?.setPrimaryClip(clip)
-                                                android.widget.Toast.makeText(context, "Text copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                                            val textState = fileState as? MainViewModel.FileContentState.TextSuccess
+                                            val entity = activeFile
+                                            if (textState != null && !textState.truncated) {
+                                                copyTextToClipboard(context, entity?.name ?: "File Content", textState.content)
+                                            } else if (textState != null && entity != null) {
+                                                printScope.launch {
+                                                    readBoundedText(java.io.File(entity.path), textState.charsetName)
+                                                        .onSuccess { copyTextToClipboard(context, entity.name, it) }
+                                                        .onFailure { showTextOperationError(context, it) }
+                                                }
                                             }
                                         },
                                         modifier = Modifier.size(36.dp)
@@ -919,7 +1711,17 @@ fun FilePreviewScreen(
                                         Surface(
                                             shape = RoundedCornerShape(18.dp),
                                             color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.clickable { onNavigateToEditor() }
+                                            modifier = Modifier.clickable {
+                                                // Inline edit: keep this same screen and morph it into
+                                                // an editor instead of opening a separate editor route.
+                                                if (!viewModel.enterEditMode()) {
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "This file can't be edited here",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
                                         ) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
@@ -954,6 +1756,7 @@ fun FilePreviewScreen(
                                             tint = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
+                                    }
                                 }
                             }
                         }
@@ -964,27 +1767,29 @@ fun FilePreviewScreen(
         containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier.testTag("file_preview_screen")
     ) { innerPadding ->
+        val usesReaderGestures = activeFile?.extension?.lowercase() in setOf("pdf", "doc", "docx", "txt", "md")
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onDoubleTap = { isBarsVisible = !isBarsVisible }
-                    )
-                }
-                .let {
-                    if (isBarsVisible) {
-                        it.padding(innerPadding)
-                    } else {
-                        it
-                    }
-                }
+                .then(
+                    if (!usesReaderGestures) {
+                        Modifier.pointerInput(activeFile?.path) {
+                            detectTapGestures(onDoubleTap = { isBarsVisible = !isBarsVisible })
+                        }
+                    } else Modifier
+                )
+                .background(MaterialTheme.colorScheme.background)
+                // Always respect the animated scaffold insets: the padding shrinks frame-by-frame
+                // while the bars slide away, so focus mode no longer snaps the content full-bleed.
+                .padding(innerPadding)
         ) {
             // Subtle Floating Back & Exit Pill when !isBarsVisible (Focus mode)
             androidx.compose.animation.AnimatedVisibility(
                 visible = !isBarsVisible,
-                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { -it },
-                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { -it },
+                enter = androidx.compose.animation.fadeIn(tween(220)) +
+                    androidx.compose.animation.slideInVertically(tween(260, easing = FastOutSlowInEasing)) { -it },
+                exit = androidx.compose.animation.fadeOut(tween(220)) +
+                    androidx.compose.animation.slideOutVertically(tween(260, easing = FastOutSlowInEasing)) { -it },
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .statusBarsPadding()
@@ -1027,115 +1832,6 @@ fun FilePreviewScreen(
                 }
             }
 
-            // Floating In-Viewer Search Bar Overlay
-            androidx.compose.animation.AnimatedVisibility(
-                visible = isSearchInDocumentOpen,
-                enter = androidx.compose.animation.slideInVertically { -it } + androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.slideOutVertically { -it } + androidx.compose.animation.fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .fillMaxWidth()
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
-                    shadowElevation = 8.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                            .height(44.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                            if (inViewerSearchQuery.isEmpty()) {
-                                Text(
-                                    "Find in document...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
-                                )
-                            }
-                            androidx.compose.foundation.text.BasicTextField(
-                                value = inViewerSearchQuery,
-                                onValueChange = { inViewerSearchQuery = it },
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        if (inViewerSearchQuery.isNotEmpty()) {
-                            val matchLabel = if (totalMatchesCount > 0) {
-                                val pageInfo = if (pdfSearchResults.isNotEmpty()) " (p.${pdfSearchResults.getOrNull(currentMatchIndex)?.pageNumber ?: 1})" else ""
-                                "${currentMatchIndex + 1}/$totalMatchesCount$pageInfo"
-                            } else "0 matches"
-
-                            Text(
-                                text = matchLabel,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                modifier = Modifier.padding(horizontal = 4.dp)
-                            )
-
-                            // Previous Match
-                            IconButton(
-                                onClick = {
-                                    if (pdfSearchResults.isNotEmpty()) {
-                                        currentMatchIndex = (currentMatchIndex - 1 + pdfSearchResults.size) % pdfSearchResults.size
-                                        scrollToPage = pdfSearchResults[currentMatchIndex].pageNumber - 1
-                                    } else {
-                                        searchTriggerPrev++
-                                    }
-                                },
-                                enabled = totalMatchesCount > 0,
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous match", modifier = Modifier.size(18.dp))
-                            }
-
-                            // Next Match
-                            IconButton(
-                                onClick = {
-                                    if (pdfSearchResults.isNotEmpty()) {
-                                        currentMatchIndex = (currentMatchIndex + 1) % pdfSearchResults.size
-                                        scrollToPage = pdfSearchResults[currentMatchIndex].pageNumber - 1
-                                    } else {
-                                        searchTriggerNext++
-                                    }
-                                },
-                                enabled = totalMatchesCount > 0,
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next match", modifier = Modifier.size(18.dp))
-                            }
-                        }
-
-                        IconButton(
-                            onClick = {
-                                isSearchInDocumentOpen = false
-                                inViewerSearchQuery = ""
-                                pdfSearchResults = emptyList()
-                                totalMatchesCount = 0
-                            },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = "Close search", modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-            }
             when (val state = fileState) {
                 is MainViewModel.FileContentState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1206,12 +1902,16 @@ fun FilePreviewScreen(
                 }
                 is MainViewModel.FileContentState.TextSuccess -> {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        val notice = state.readOnlyReason
-                            ?: if (state.truncated) {
-                                "Showing the first ${state.content.length} characters of a ${formatFileSize(state.totalBytes)} file. " +
-                                    "Read-only, so the rest of the file can't be overwritten."
-                            } else null
-                        if (notice != null) NoticeBanner(notice)
+                        val completeContent = fullPreviewText ?: state.content
+                        val supportsFullFileSearch = state.file.extension.lowercase() in setOf("txt", "md")
+                        val notice = state.readOnlyReason ?: when {
+                            state.truncated && supportsFullFileSearch && isFullTextLoading -> "Searching the complete ${formatFileSize(state.totalBytes)} file…"
+                            state.truncated && supportsFullFileSearch && largeTextSearchError != null -> "Full-file search failed: ${largeTextSearchError.orEmpty()}"
+                            state.truncated && supportsFullFileSearch -> "Preview is bounded to protect memory; in-document search scans the complete ${formatFileSize(state.totalBytes)} file and opens matches in bounded excerpts (first 10,000 results are navigable)."
+                            state.truncated -> "Preview is limited to the first ${state.content.length} characters to protect memory."
+                            else -> null
+                        }
+                        if (notice != null && isBarsVisible) NoticeBanner(notice)
                         if (isHtmlFile && isWebRenderActive && !htmlScriptsEnabled) {
                             Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
                                 Row(
@@ -1229,30 +1929,74 @@ fun FilePreviewScreen(
                             }
                         }
                         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            if (isWebRenderActive) {
-                                WebViewPreview(
+                            if (isEditMode) {
+                                // Inline editing workspace: sits on the exact same surface as the
+                                // preview canvas (no line-number gutter) so the screen keeps looking
+                                // like the preview — the user simply starts typing in place.
+                                InlineEditWorkspace(
+                                    value = editTextValue,
+                                    onValueChange = { newValue ->
+                                        val textChanged = newValue.text != editTextValue.text
+                                        if (textChanged) {
+                                            editUndoStack.push(editTextValue)
+                                            editRedoStack.clear()
+                                        }
+                                        editTextValue = newValue
+                                    },
+                                    settings = settings,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else when (state.file.extension.lowercase()) {
+                                "md" -> MarkdownPreview(
+                                    markdownText = completeContent,
+                                    fileEntity = state.file,
+                                    fontSizeSetting = settings.fontSize,
+                                    isNightMode = isDarkTheme,
+                                    searchQuery = inViewerSearchQuery,
+                                    searchTriggerNext = searchTriggerNext,
+                                    searchTriggerPrev = searchTriggerPrev,
+                                    onSearchResultCount = { count, index, truncated ->
+                                        if (!isLargeTextSearchable) {
+                                            totalMatchesCount = count
+                                            currentMatchIndex = if (count > 0) index.coerceAtLeast(0) else 0
+                                            searchResultsTruncated = truncated
+                                        }
+                                    },
+                                    onSingleTap = { isBarsVisible = !isBarsVisible },
+                                    syntaxTheme = viewerSyntaxTheme,
+                                    viewerFontSizeSp = viewerFontSizeSp,
+                                    zoomPercent = viewerZoomPercent,
+                                    scrollRequest = pendingScrollRequest,
+                                    onScrollRequestHandled = { pendingScrollRequest = null },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                "txt" -> PlainTextPreview(
+                                    content = completeContent,
+                                    isDarkMode = isDarkTheme,
+                                    fontSizeSetting = settings.fontSize,
+                                    searchQuery = inViewerSearchQuery,
+                                    searchTriggerNext = searchTriggerNext,
+                                    searchTriggerPrev = searchTriggerPrev,
+                                    onSearchResultCount = { count, index, truncated ->
+                                        if (!isLargeTextSearchable) {
+                                            totalMatchesCount = count
+                                            currentMatchIndex = if (count > 0) index.coerceAtLeast(0) else 0
+                                            searchResultsTruncated = truncated
+                                        }
+                                    },
+                                    onSingleTap = { isBarsVisible = !isBarsVisible },
+                                    syntaxTheme = viewerSyntaxTheme,
+                                    viewerFontSizeSp = viewerFontSizeSp,
+                                    zoomPercent = viewerZoomPercent,
+                                    scrollRequest = pendingScrollRequest,
+                                    onScrollRequestHandled = { pendingScrollRequest = null },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                else -> WebViewPreview(
                                     fileEntity = state.file,
                                     allowScripts = htmlScriptsEnabled,
                                     searchQuery = inViewerSearchQuery,
                                     onSingleTap = { isBarsVisible = !isBarsVisible },
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else if (state.file.extension.lowercase() == "md") {
-                                MarkdownPreview(
-                                    markdownText = state.content,
-                                    fileEntity = state.file,
-                                    fontSizeSetting = settings.fontSize,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                CodePreview(
-                                    codeText = state.content,
-                                    fileEntity = state.file,
-                                    fontSizeSetting = settings.fontSize,
-                                    wrapSetting = settings.wordWrap,
-                                    showLineNumbers = settings.showLineNumbers,
-                                    scrollToLine = scrollToLineNumber,
-                                    onScrollToLineHandled = { scrollToLineNumber = null },
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
@@ -1295,24 +2039,44 @@ fun FilePreviewScreen(
                 is MainViewModel.FileContentState.PdfSuccess -> {
                     PdfPreview(
                         fileEntity = state.file,
-                        isNightMode = isPdfNightMode,
+                        viewRotation = pdfViewRotation,
+                        searchQuery = inViewerSearchQuery,
+                        selectedMatchIndex = currentMatchIndex,
                         scrollToPage = scrollToPage,
+                        scrollToken = pageJumpToken,
                         onScrollToPageHandled = { scrollToPage = null },
-                        onLinkClicked = { _ -> },
+                        scrubberPage = currentPdfPage,
+                        scrubberPageCount = totalPdfPages,
+                        onScrubJump = { page ->
+                            scrollToPage = page - 1
+                            pageJumpToken++
+                        },
+                        onSearchSnapshot = { snapshot, searching ->
+                            pdfSearchSnapshot = snapshot
+                            totalMatchesCount = snapshot.count
+                            searchResultsTruncated = snapshot.truncated
+                            isPdfSearchLoading = searching
+                            pdfSearchError = null
+                            if (!searching) currentMatchIndex = 0
+                        },
+                        onSearchError = { message ->
+                            pdfSearchError = message
+                            isPdfSearchLoading = false
+                        },
                         modifier = Modifier.fillMaxSize(),
                         onSingleTap = { isBarsVisible = !isBarsVisible },
                         onPageChanged = { page, total ->
                             currentPdfPage = page
                             totalPdfPages = total
                         },
-                        onBackClick = onBackClick
+                        onBackClick = handleBack
                     )
                 }
                 is MainViewModel.FileContentState.DocxSuccess -> {
                     DocxPreviewWebView(
                         base64Docx = state.base64Data,
                         fileEntity = state.file,
-                        isNightMode = isPdfNightMode,
+                        isNightMode = isDocxNightMode,
                         viewModel = viewModel,
                         modifier = Modifier.fillMaxSize(),
                         onPageChanged = { page, total ->
@@ -1320,14 +2084,38 @@ fun FilePreviewScreen(
                             totalPdfPages = total
                         },
                         scrollToPage = scrollToPage,
-                        onScrollProgressHandled = { scrollToPage = null }
+                        onScrollProgressHandled = { scrollToPage = null },
+                        searchQuery = inViewerSearchQuery,
+                        searchTriggerNext = searchTriggerNext,
+                        searchTriggerPrev = searchTriggerPrev,
+                        onSearchResultCount = { count, index, truncated ->
+                            totalMatchesCount = count
+                            currentMatchIndex = if (count > 0) index.coerceAtLeast(0) else 0
+                            searchResultsTruncated = truncated
+                        },
+                        zoomFactor = docxZoomFactor,
+                        pinchActive = docxPinchActive,
+                        onWebViewCreated = { docxPreviewWebView = it },
+                        onDocumentReady = { docxPreviewReady = true },
+                        onSingleTap = { isBarsVisible = !isBarsVisible },
+                        onPinchZoom = { delta ->
+                            docxPinchActive = true
+                            docxZoomFactor = com.example.core.format.DocxZoomPolicy.applyPinch(docxZoomFactor, delta)
+                        },
+                        onPinchSettled = {
+                            docxPinchActive = false
+                        },
+                        onDoubleTap = {
+                            docxZoomFactor = com.example.core.format.DocxZoomPolicy.toggleDoubleTap(docxZoomFactor)
+                        },
+                        onRendererFallback = { isFallback -> isDocxRenderFallback = isFallback }
                     )
                 }
                 is MainViewModel.FileContentState.PptxSuccess -> {
                     PptxPreviewWebView(
                         base64Pptx = state.base64Data,
                         fileEntity = state.file,
-                        isNightMode = isPdfNightMode,
+                        isNightMode = isDocxNightMode,
                         viewModel = viewModel,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -1392,7 +2180,16 @@ fun FilePreviewScreen(
                     onClick = {
                         val lNum = lineInput.toIntOrNull()
                         if (lNum != null && lNum > 0) {
-                            scrollToLineNumber = lNum
+                            // MD files: jump by heading when the target line is a heading,
+                            // otherwise fall back to approximate line scrolling.
+                            val extLower = activeFile?.extension?.lowercase().orEmpty()
+                            val outlineContent = (fileState as? MainViewModel.FileContentState.TextSuccess)?.let { fullPreviewText ?: it.content }.orEmpty()
+                            val headingIndex = if (extLower in setOf("md", "markdown")) {
+                                DocumentOutlineParser.parseHeadings(outlineContent)
+                                    .indexOfFirst { it.lineNumber == lNum }
+                                    .takeIf { it >= 0 }
+                            } else null
+                            pendingScrollRequest = ViewerScrollRequest(lineNumber = lNum, headingIndex = headingIndex)
                         } else {
                             android.widget.Toast.makeText(context, "Invalid line number", android.widget.Toast.LENGTH_SHORT).show()
                         }
@@ -1435,6 +2232,7 @@ fun FilePreviewScreen(
                         val pNum = pageInput.toIntOrNull()
                         if (pNum != null && pNum in 1..totalPdfPages) {
                             scrollToPage = pNum - 1
+                            pageJumpToken++
                         } else {
                             android.widget.Toast.makeText(context, "Invalid page number", android.widget.Toast.LENGTH_SHORT).show()
                         }
@@ -1463,6 +2261,56 @@ fun FilePreviewScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+            }
+        )
+    }
+
+    if (showDocxZoomDialog) {
+        AlertDialog(
+            onDismissRequest = { showDocxZoomDialog = false },
+            title = { Text("Document zoom") },
+            text = {
+                Column {
+                    Text("${(docxZoomFactor * 100).toInt()}%", style = MaterialTheme.typography.titleLarge)
+                    OutlinedTextField(
+                        value = docxZoomInput,
+                        onValueChange = { value -> docxZoomInput = value.filter { it.isDigit() }.take(3) },
+                        singleLine = true,
+                        label = { Text("Exact zoom (%)") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Slider(
+                        value = docxZoomFactor,
+                        onValueChange = {
+                            docxZoomFactor = com.example.core.format.DocxZoomPolicy.coerce(it)
+                            docxZoomInput = (it * 100).toInt().toString()
+                        },
+                        // 0.05 stops so the 40% default is a reachable snap point.
+                        valueRange = 0.25f..5.0f,
+                        steps = 94
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("25%", style = MaterialTheme.typography.labelSmall)
+                        Text("500%", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    docxZoomInput.toIntOrNull()?.let { percent ->
+                        docxZoomFactor = percent.coerceIn(25, 500) / 100f
+                    }
+                    showDocxZoomDialog = false
+                }) { Text("Done") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    docxZoomFactor = 1.0f
+                    docxZoomInput = "100"
+                }) { Text("Reset 100%") }
             }
         )
     }
@@ -1496,6 +2344,182 @@ fun FilePreviewScreen(
             text = { Text("Do you want to open this link in your browser?\n\n$pendingLinkToOpen") }
         )
     }
+
+    // Document Outline bottom sheet (MD/TXT): lists every heading and jumps to it.
+    if (showOutlineBottomSheet && activeFile != null && !isEditMode) {
+        val outlineContent = (fileState as? MainViewModel.FileContentState.TextSuccess)
+            ?.let { fullPreviewText ?: it.content }.orEmpty()
+        val isMarkdownFile = activeFile.extension.lowercase() in setOf("md", "markdown")
+        DocumentOutlineBottomSheet(
+            documentContent = outlineContent,
+            documentTitle = activeFile.name,
+            onDismissRequest = { showOutlineBottomSheet = false },
+            onSelectHeading = { lineNumber ->
+                val headingIndex = if (isMarkdownFile) {
+                    DocumentOutlineParser.parseHeadings(outlineContent)
+                        .indexOfFirst { it.lineNumber == lineNumber }
+                        .takeIf { it >= 0 }
+                } else null
+                pendingScrollRequest = ViewerScrollRequest(lineNumber = lineNumber, headingIndex = headingIndex)
+            }
+        )
+    }
+
+    // Viewer Appearance bottom sheet (text files): theme, font size and browser-style zoom.
+    if (showAppearanceBottomSheet) {
+        AppearanceBottomSheet(
+            currentTheme = viewerSyntaxTheme,
+            currentFontSizeSp = viewerFontSizeSp,
+            onThemeChanged = { viewerSyntaxTheme = it },
+            onFontSizeChanged = { viewerFontSizeSp = it },
+            currentZoomPercent = viewerZoomPercent,
+            onZoomChanged = { viewerZoomPercent = it },
+            onDismissRequest = { showAppearanceBottomSheet = false }
+        )
+    }
+
+    // ---- Inline edit mode dialogs ------------------------------------------------
+
+    // X (top bar) confirmation: discard unsaved changes?
+    if (showDiscardEditsDialog) {
+        AlertDialog(
+            onDismissRequest = { showDiscardEditsDialog = false },
+            title = {
+                Text(
+                    "Discard changes?",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = { Text("Your edits to this file have not been saved yet. Discard them?") },
+            dismissButton = {
+                TextButton(onClick = { showDiscardEditsDialog = false }) {
+                    Text("Keep editing", color = MaterialTheme.colorScheme.onSurface)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardEditsDialog = false
+                        viewModel.exitEditMode()
+                    }
+                ) {
+                    Text("Discard", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    }
+
+    // Save confirmation: writes the draft through the charset-safe save pipeline.
+    if (showSaveConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveConfirmDialog = false },
+            title = {
+                Text(
+                    "Save changes?",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = { Text("Save your edits to \"${activeFile?.name ?: "this file"}\"? A .bak backup of the original is kept automatically.") },
+            dismissButton = {
+                TextButton(onClick = { showSaveConfirmDialog = false }) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showSaveConfirmDialog = false
+                        val entity = activeFile
+                        if (entity != null) {
+                            viewModel.saveTextFile(entity, editTextValue.text)
+                            editOriginalContent = editTextValue.text
+                            viewModel.exitEditMode()
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    }
+
+    // Undo history viewer for the inline editor.
+    if (showEditHistoryDialog) {
+        EditHistoryDialog(
+            entries = editUndoStack.snapshot(),
+            onDismissRequest = { showEditHistoryDialog = false },
+            onRestore = { restored ->
+                editUndoStack.push(editTextValue)
+                editRedoStack.clear()
+                editTextValue = restored
+            }
+        )
+    }
+
+    // Export the modified draft as a fresh copy without touching the original file.
+    if (showEditSaveAsDialog && activeFile != null) {
+        val defaultCopyName = remember(activeFile.name) {
+            val dotIdx = activeFile.name.lastIndexOf('.')
+            if (dotIdx > 0) {
+                activeFile.name.substring(0, dotIdx) + "_copy." + activeFile.extension
+            } else {
+                activeFile.name + "_copy"
+            }
+        }
+        var copyNameInput by remember { mutableStateOf(defaultCopyName) }
+        AlertDialog(
+            onDismissRequest = { showEditSaveAsDialog = false },
+            title = {
+                Text(
+                    text = "Export Modified Copy",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Atomically save your edits into a new copy without overwriting the original file:",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = copyNameInput,
+                        onValueChange = { copyNameInput = it },
+                        singleLine = true,
+                        label = { Text("File Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditSaveAsDialog = false }) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurface)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (copyNameInput.isNotBlank()) {
+                            viewModel.exportCopy(activeFile, copyNameInput.trim(), editTextValue.text)
+                            showEditSaveAsDialog = false
+                        }
+                    }
+                ) {
+                    Text("Export Copy")
+                }
+            },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    }
 }
 
 @Composable
@@ -1514,13 +2538,22 @@ fun MarkdownPreview(
     markdownText: String,
     fileEntity: RecentFileEntity,
     fontSizeSetting: String,
+    isNightMode: Boolean,
+    searchQuery: String = "",
+    searchTriggerNext: Int = 0,
+    searchTriggerPrev: Int = 0,
+    onSearchResultCount: (Int, Int, Boolean) -> Unit = { _, _, _ -> },
+    onSingleTap: () -> Unit = {},
+    syntaxTheme: ViewerSyntaxTheme = ViewerSyntaxTheme.AUTO,
+    viewerFontSizeSp: Int = 16,
+    zoomPercent: Int = 100,
+    scrollRequest: ViewerScrollRequest? = null,
+    onScrollRequestHandled: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val isNightMode = androidx.compose.foundation.isSystemInDarkTheme()
-    var generatedHtml by remember(markdownText, isNightMode, fontSizeSetting) { mutableStateOf<String?>(null) }
-    var isWebViewLoading by remember(markdownText) { mutableStateOf(true) }
+    var generatedHtml by remember(markdownText, isNightMode, viewerFontSizeSp, syntaxTheme) { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(markdownText, isNightMode, fontSizeSetting) {
+    LaunchedEffect(markdownText, isNightMode, viewerFontSizeSp, syntaxTheme) {
         val htmlContent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             val parser = org.intellij.markdown.parser.MarkdownParser(org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor())
             val parsedTree = parser.buildMarkdownTreeFromString(markdownText)
@@ -1529,21 +2562,21 @@ fun MarkdownPreview(
                 keepImages = true
             )
 
-            val fontSize = when (fontSizeSetting) {
-                "Small" -> "14px"
-                "Large" -> "20px"
-                else -> "16px"
-            }
+            // Viewer Appearance drives the base font size; falls back to the settings mapping.
+            val fontSize = "${viewerFontSizeSp.coerceIn(11, 22)}px"
 
             // Claude Theme Colors (EXACT from File Claw - MD Preview Theme Fix Prompt)
-            val bgColor = if (isNightMode) "#151514" else "#faf9f5" // canvas
-            val textPrimary = if (isNightMode) "#f5f5f3" else "#141413" // ink
-            val textBody = if (isNightMode) "#d1cfc7" else "#3d3d3a" // body
-            val textBodyStrong = if (isNightMode) "#faf9f5" else "#252523" // body_strong
-            val textSecondary = if (isNightMode) "#a39f93" else "#6c6a64" // muted
-            val textSecondarySoft = if (isNightMode) "#8e8779" else "#8e8b82" // muted_soft
-            val accent = if (isNightMode) "#e08567" else "#cc785c" // primary (coral)
-            val accentActive = if (isNightMode) "#f09a7d" else "#a9583e" // primary_active
+            // A chosen syntax theme overrides the base canvas/ink/accent tokens; AUTO keeps
+            // the light/dark palette derived from the app theme.
+            val useThemeOverride = !syntaxTheme.isAuto
+            val bgColor = if (useThemeOverride) syntaxTheme.hexBg else if (isNightMode) "#151514" else "#faf9f5" // canvas
+            val textPrimary = if (useThemeOverride) syntaxTheme.hexText else if (isNightMode) "#f5f5f3" else "#141413" // ink
+            val textBody = if (useThemeOverride) syntaxTheme.hexText else if (isNightMode) "#d1cfc7" else "#3d3d3a" // body
+            val textBodyStrong = if (useThemeOverride) syntaxTheme.hexText else if (isNightMode) "#faf9f5" else "#252523" // body_strong
+            val textSecondary = if (useThemeOverride) syntaxTheme.hexText else if (isNightMode) "#a39f93" else "#6c6a64" // muted
+            val textSecondarySoft = if (useThemeOverride) syntaxTheme.hexText else if (isNightMode) "#8e8779" else "#8e8b82" // muted_soft
+            val accent = if (useThemeOverride) syntaxTheme.hexAccent else if (isNightMode) "#e08567" else "#cc785c" // primary (coral)
+            val accentActive = if (useThemeOverride) syntaxTheme.hexAccent else if (isNightMode) "#f09a7d" else "#a9583e" // primary_active
             val border = if (isNightMode) "#2d2b28" else "#e6dfd8" // hairline
             val borderSoft = if (isNightMode) "#211f1d" else "#ebe6df" // hairline_soft
             val cardBg = if (isNightMode) "#2a2723" else "#efe9de" // surface_card
@@ -1721,66 +2754,15 @@ fun MarkdownPreview(
                         max-width: 100%;
                         border-radius: 8px;
                     }
+                    .search-highlight { background: rgba(204, 120, 92, 0.32); color: inherit; border-radius: 2px; }
+                    .search-highlight-active { background: #cc785c; color: #ffffff; outline: 2px solid rgba(232, 165, 90, 0.9); }
+                    .line-anchor-flash { background: rgba(204, 120, 92, 0.32); color: inherit; border-radius: 2px; outline: 2px solid #cc785c; transition: background 0.4s ease; }
+                    @media print { .code-header, .copy-btn { display: none !important; } .code-block-container { break-inside: avoid; } }
                 </style>
-                <script>
-                    function copyCode(btn, codeId) {
-                        var codeText = document.getElementById(codeId).innerText;
-                        if(window.Android) {
-                            window.Android.copyToClipboard(codeText);
-                            var originalText = btn.innerText;
-                            btn.innerText = 'Copied!';
-                            setTimeout(function() {
-                                btn.innerText = originalText;
-                            }, 2000);
-                        }
-                    }
-                    
-                    document.addEventListener("DOMContentLoaded", function() {
-                        var pres = document.querySelectorAll('pre');
-                        pres.forEach(function(pre, index) {
-                            if (pre.parentNode.className === 'code-content') return;
-                            
-                            var code = pre.querySelector('code');
-                            var lang = 'Code';
-                            if (code && code.className) {
-                                var match = code.className.match(/language-(\w+)/);
-                                if (match) lang = match[1];
-                            }
-                            
-                            var codeId = 'code-' + index;
-                            if (code) { code.id = codeId; } else { pre.id = codeId; }
-                            
-                            var container = document.createElement('div');
-                            container.className = 'code-block-container';
-                            
-                            var header = document.createElement('div');
-                            header.className = 'code-header';
-                            
-                            var langSpan = document.createElement('span');
-                            langSpan.className = 'code-lang';
-                            langSpan.innerText = lang;
-                            
-                            var copyBtn = document.createElement('button');
-                            copyBtn.className = 'copy-btn';
-                            copyBtn.innerText = 'Copy';
-                            copyBtn.onclick = function() { copyCode(this, codeId); };
-                            
-                            header.appendChild(langSpan);
-                            header.appendChild(copyBtn);
-                            
-                            var content = document.createElement('div');
-                            content.className = 'code-content';
-                            
-                            pre.parentNode.insertBefore(container, pre);
-                            container.appendChild(header);
-                            container.appendChild(content);
-                            content.appendChild(pre);
-                        });
-                    });
-                </script>
+                $DocumentPreviewScript
             </head>
             <body>
-                $rawHtml
+                <main id="document-content">$rawHtml</main>
             </body>
             </html>
             """.trimIndent()
@@ -1788,64 +2770,252 @@ fun MarkdownPreview(
         generatedHtml = htmlContent
     }
 
-    Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
-        if (generatedHtml != null) {
-            androidx.compose.ui.viewinterop.AndroidView(
-                factory = { context ->
-                    android.webkit.WebView(context).apply {
-                        settings.apply {
-                            javaScriptEnabled = true
-                            allowFileAccess = false
-                            allowContentAccess = false
-                            domStorageEnabled = true
-                            loadWithOverviewMode = true
-                            useWideViewPort = true
-                            builtInZoomControls = true
-                            displayZoomControls = false
-                            setSupportZoom(true)
-                        }
-                        setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
-                        setInitialScale(0)
-                        addJavascriptInterface(WebAppInterface(context), "Android")
-                        
-                        webViewClient = object : android.webkit.WebViewClient() {
-                            override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
-                                isWebViewLoading = false
-                            }
-                        }
-                        
-                        loadDataWithBaseURL(null, generatedHtml!!, "text/html", "UTF-8", null)
-                    }
-                },
-                update = { webView ->
-                    // No-op
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+    SearchableDocumentWebView(
+        html = generatedHtml,
+        backgroundColor = if (syntaxTheme.isAuto) {
+            if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt()
+        } else {
+            runCatching {
+                android.graphics.Color.parseColor(syntaxTheme.hexBg)
+            }.getOrDefault(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+        },
+        searchQuery = searchQuery,
+        searchTriggerNext = searchTriggerNext,
+        searchTriggerPrev = searchTriggerPrev,
+        onSearchResultCount = onSearchResultCount,
+        onSingleTap = onSingleTap,
+        zoomPercent = zoomPercent,
+        scrollRequest = scrollRequest,
+        onScrollRequestHandled = onScrollRequestHandled,
+        loadingMessage = "Preparing Document...",
+        modifier = modifier
+    )
+}
 
-        if (generatedHtml == null || isWebViewLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
-                contentAlignment = Alignment.Center
-            ) {
-                com.example.ui.component.PremiumLoadingIndicator(text = "Preparing Document...")
+@Composable
+private fun PlainTextPreview(
+    content: String,
+    isDarkMode: Boolean,
+    fontSizeSetting: String,
+    searchQuery: String,
+    searchTriggerNext: Int,
+    searchTriggerPrev: Int,
+    onSearchResultCount: (Int, Int, Boolean) -> Unit,
+    onSingleTap: () -> Unit,
+    syntaxTheme: ViewerSyntaxTheme = ViewerSyntaxTheme.AUTO,
+    viewerFontSizeSp: Int = 16,
+    zoomPercent: Int = 100,
+    scrollRequest: ViewerScrollRequest? = null,
+    onScrollRequestHandled: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    var generatedHtml by remember(content, isDarkMode, viewerFontSizeSp, syntaxTheme) { mutableStateOf<String?>(null) }
+    LaunchedEffect(content, isDarkMode, viewerFontSizeSp, syntaxTheme) {
+        // Viewer Appearance drives the base font size; falls back to the settings mapping.
+        val fontSizePx = viewerFontSizeSp.coerceIn(11, 22)
+        generatedHtml = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val themeBg = if (syntaxTheme.isAuto) null else syntaxTheme.hexBg
+            val themeFg = if (syntaxTheme.isAuto) null else syntaxTheme.hexText
+            buildPlainTextPreviewHtml(content, isDarkMode, fontSizePx, themeBg, themeFg)
+        }
+    }
+    SearchableDocumentWebView(
+        html = generatedHtml,
+        backgroundColor = if (syntaxTheme.isAuto) {
+            if (isDarkMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt()
+        } else {
+            runCatching {
+                android.graphics.Color.parseColor(syntaxTheme.hexBg)
+            }.getOrDefault(if (isDarkMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+        },
+        searchQuery = searchQuery,
+        searchTriggerNext = searchTriggerNext,
+        searchTriggerPrev = searchTriggerPrev,
+        onSearchResultCount = onSearchResultCount,
+        onSingleTap = onSingleTap,
+        zoomPercent = zoomPercent,
+        scrollRequest = scrollRequest,
+        onScrollRequestHandled = onScrollRequestHandled,
+        loadingMessage = "Preparing Text...",
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun SearchableDocumentWebView(
+    html: String?,
+    backgroundColor: Int,
+    searchQuery: String,
+    searchTriggerNext: Int,
+    searchTriggerPrev: Int,
+    onSearchResultCount: (Int, Int, Boolean) -> Unit,
+    onSingleTap: () -> Unit,
+    loadingMessage: String,
+    zoomPercent: Int = 100,
+    scrollRequest: ViewerScrollRequest? = null,
+    onScrollRequestHandled: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val latestSearchResultCallback = androidx.compose.runtime.rememberUpdatedState(onSearchResultCount)
+    val latestSingleTapCallback = androidx.compose.runtime.rememberUpdatedState(onSingleTap)
+    var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    var isPageReady by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
+    // Ledger of what the generated document's search engine has already been told.
+    // Loop 12 (Bug B): this used to be two ints plus an implicit "always search first"
+    // rule, so every arrow press re-ran searchWord(), reset the renderer's index to 0
+    // and advanced one step — the counter could never walk past 2 of N matches.
+    var issuedSearch by remember { mutableStateOf(InViewerSearchCommandPolicy.Issued()) }
+
+    androidx.compose.ui.viewinterop.AndroidView(
+        factory = { viewContext ->
+            android.webkit.WebView(viewContext).apply {
+                webViewRef = this
+                setBackgroundColor(backgroundColor)
+                settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = false
+                    allowFileAccess = false
+                    allowContentAccess = false
+                    builtInZoomControls = true
+                    displayZoomControls = false
+                    setSupportZoom(true)
+                    useWideViewPort = true
+                    loadWithOverviewMode = true
+                }
+                addJavascriptInterface(
+                    WebAppInterface(
+                        viewContext,
+                        onSearchResultsChanged = { count, index, truncated -> latestSearchResultCallback.value(count, index, truncated) },
+                        onTapRequested = { latestSingleTapCallback.value() }
+                    ),
+                    "Android"
+                )
+                webViewClient = object : android.webkit.WebViewClient() {
+                    override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                        super.onPageFinished(view, url)
+                        view?.post {
+                            isPageReady = true
+                            isLoading = false
+                        }
+                    }
+
+                    override fun shouldOverrideUrlLoading(
+                        view: android.webkit.WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): Boolean {
+                        val url = request?.url?.toString().orEmpty()
+                        return !(url.startsWith("about:") || url.startsWith("data:"))
+                    }
+                }
             }
+        },
+        update = { webView ->
+            if (html != null && webView.tag != html) {
+                webView.tag = html
+                isPageReady = false
+                isLoading = true
+                webView.setBackgroundColor(backgroundColor)
+                webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+            }
+        },
+        // Loop 12 (Bug E): regenerated HTML used to leak the previous WebView (and its
+        // renderer process) until finalizer GC. Destroy it deterministically when the
+        // node leaves composition (file switch / screen exit).
+        onRelease = { webView ->
+            webView.tag = null
+            webView.destroy()
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+
+    // Loop 12 (Bug B): the query step and the navigation step are now planned by
+    // InViewerSearchCommandPolicy. Arrow presses issue ONLY next/prev deltas, so the
+    // renderer walks the full navigable match list (0/1/2/7/100+ all reachable in both
+    // directions with wrap-around). A changed query still searches exactly once, first.
+    LaunchedEffect(webViewRef, isPageReady, searchQuery, searchTriggerNext, searchTriggerPrev) {
+        val webView = webViewRef
+        if (webView != null && isPageReady) {
+            val plan = InViewerSearchCommandPolicy.plan(issuedSearch, searchQuery, searchTriggerNext, searchTriggerPrev)
+            if (!plan.isEmpty) {
+                if (plan.search && issuedSearch.query != null) {
+                    // Debounce: typing re-highlights the whole DOM once the user pauses,
+                    // instead of once per keystroke (big documents used to stutter).
+                    kotlinx.coroutines.delay(150)
+                    if (!kotlin.coroutines.coroutineContext.isActive) return@LaunchedEffect
+                }
+                val script = buildString {
+                    if (plan.search) {
+                        append("searchWord(${org.json.JSONObject.quote(searchQuery)});")
+                    }
+                    repeat(plan.nextSteps) { append("nextSearchMatch();") }
+                    repeat(plan.prevSteps) { append("prevSearchMatch();") }
+                }
+                webView.evaluateJavascript(script, null)
+            }
+            // Always advance the ledger — including the no-op case, so a trigger counter
+            // reset (file change) is absorbed instead of replayed as steps later.
+            issuedSearch = plan.issued
+        }
+    }
+
+    // Browser-style zoom (25% - 500%) applied live, mirroring the DOCX setZoom pipeline.
+    LaunchedEffect(webViewRef, isPageReady, zoomPercent) {
+        val webView = webViewRef
+        if (webView != null && isPageReady) {
+            webView.evaluateJavascript("setViewerZoom($zoomPercent);", null)
+        }
+    }
+
+    // Outline / go-to-line jumps. Prefer exact heading anchoring when available.
+    LaunchedEffect(webViewRef, isPageReady, scrollRequest) {
+        val webView = webViewRef
+        if (webView != null && isPageReady && scrollRequest != null) {
+            val script = if (scrollRequest.headingIndex != null) {
+                "var __ok = scrollToHeadingIndex(${scrollRequest.headingIndex}); if (!__ok) { scrollToLine(${scrollRequest.lineNumber}); }"
+            } else {
+                "scrollToLine(${scrollRequest.lineNumber});"
+            }
+            webView.evaluateJavascript(script, null)
+            onScrollRequestHandled()
+        }
+    }
+
+    if (html == null || isLoading) {
+        Box(
+            modifier = modifier.fillMaxSize().background(Color(backgroundColor)),
+            contentAlignment = Alignment.Center
+        ) {
+            com.example.ui.component.PremiumLoadingIndicator(text = loadingMessage)
         }
     }
 }
 
-class WebAppInterface(private val context: android.content.Context) {
+class WebAppInterface(
+    private val context: android.content.Context,
+    private val onSearchResultsChanged: (Int, Int, Boolean) -> Unit = { _, _, _ -> },
+    private val onTapRequested: () -> Unit = {}
+) {
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     @android.webkit.JavascriptInterface
     fun copyToClipboard(text: String) {
         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("Code", text)
-        clipboard.setPrimaryClip(clip)
-        android.os.Handler(android.os.Looper.getMainLooper()).post {
-            android.widget.Toast.makeText(context, "Copied!", android.widget.Toast.LENGTH_SHORT).show()
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Code", text))
+        mainHandler.post {
+            android.widget.Toast.makeText(context, "Code block copied", android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onSearchResultCount(count: Int, currentIndex: Int, truncated: Boolean) {
+        mainHandler.post { onSearchResultsChanged(count, currentIndex, truncated) }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onDocumentTap() {
+        mainHandler.post { onTapRequested() }
     }
 }
 
@@ -2589,77 +3759,336 @@ fun ImagePreview(
 }
 
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun isBundledPdfReaderUri(uri: android.net.Uri): Boolean {
+    val path = uri.path.orEmpty()
+    return uri.scheme == "https" &&
+        uri.host == "appassets.androidplatform.net" &&
+        uri.port in setOf(-1, 443) &&
+        uri.userInfo == null &&
+        (path.startsWith("/assets/pdfjs/") || path == "/search-pdf/document.pdf")
+}
+
 @Composable
 fun PdfPreview(
     fileEntity: RecentFileEntity,
-    isNightMode: Boolean,
+    // Loop 14: PDF view rotation in degrees clockwise (0/90/180/270). Pure viewer
+    // state pushed into the already-loaded PDF.js document — the WebView is never
+    // recreated for a rotate, so the authenticated session and the password state
+    // survive. PDFs render in light mode only (the Loop 14 dark-mode removal).
+    viewRotation: Int = 0,
+    searchQuery: String = "",
+    selectedMatchIndex: Int = 0,
     scrollToPage: Int?,
+    // Loop 14: bumped per explicit jump so repeated identical page numbers still fire.
+    scrollToken: Int = 0,
     onScrollToPageHandled: () -> Unit,
-    onLinkClicked: (String) -> Unit,
+    // Loop 14: right-edge page scrubber inputs. Values come from the visible-page
+    // observer in the caller; jumps are delegated back through onScrubJump.
+    scrubberPage: Int = 1,
+    scrubberPageCount: Int = 0,
+    onScrubJump: (Int) -> Unit = {},
+    onSearchSnapshot: (PdfSearchSnapshot, Boolean) -> Unit = { _, _ -> },
+    onSearchError: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     onSingleTap: () -> Unit = {},
     onPageChanged: (Int, Int) -> Unit = { _, _ -> },
     onBackClick: () -> Unit = {}
 ) {
-    val originalFile = remember(fileEntity) { java.io.File(fileEntity.path) }
-    var isReady by remember { mutableStateOf(false) }
-    var requirePassword by remember { mutableStateOf(false) }
-    var pdfPassword by remember { mutableStateOf("") }
-    var submittedPassword by remember { mutableStateOf<String?>(null) }
-    var loadTrigger by remember { mutableStateOf(0) }
-    var passwordError by remember { mutableStateOf(false) }
-    var pdfErrorMessage by remember { mutableStateOf<String?>(null) }
-
-    if (requirePassword) {
-        AlertDialog(
-            onDismissRequest = { onBackClick() },
-            title = { Text("Password Required") },
-            text = {
-                Column {
-                    Text("This PDF is password protected.", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = pdfPassword,
-                        onValueChange = { pdfPassword = it; passwordError = false },
-                        singleLine = true,
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                        isError = passwordError,
-                        label = { Text("Password") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (passwordError) {
-                        Text("Incorrect password", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+    val context = LocalContext.current
+    val pdfFile = remember(fileEntity.path) { File(fileEntity.path) }
+    val bookmarkKey = remember(fileEntity.path) { "bookmark_${fileEntity.path.hashCode()}" }
+    val bookmarkPrefs = remember(context) { context.getSharedPreferences("pdf_bookmarks", android.content.Context.MODE_PRIVATE) }
+    val savedPage = remember(fileEntity.path) { bookmarkPrefs.getInt(bookmarkKey, 0) }
+    val assetLoader = remember(context, fileEntity.path) {
+        val defaultAssetsHandler = androidx.webkit.WebViewAssetLoader.AssetsPathHandler(context)
+        androidx.webkit.WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", object : androidx.webkit.WebViewAssetLoader.PathHandler {
+                override fun handle(path: String): android.webkit.WebResourceResponse? {
+                    if (path.endsWith(".mjs", ignoreCase = true)) {
+                        return runCatching {
+                            android.webkit.WebResourceResponse(
+                                "application/javascript",
+                                "UTF-8",
+                                context.assets.open(path)
+                            )
+                        }.getOrNull()
                     }
+                    return defaultAssetsHandler.handle(path)
                 }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    submittedPassword = pdfPassword
-                    requirePassword = false
-                    loadTrigger++ // retry loading
-                }) {
-                    Text("Open")
+            })
+            .addPathHandler("/search-pdf/", object : androidx.webkit.WebViewAssetLoader.PathHandler {
+                override fun handle(path: String): android.webkit.WebResourceResponse? {
+                    if (path != "document.pdf" || !pdfFile.isFile) return null
+                    return runCatching {
+                        android.webkit.WebResourceResponse(
+                            "application/pdf",
+                            "binary",
+                            200,
+                            "OK",
+                            mapOf("Content-Length" to pdfFile.length().toString(), "Accept-Ranges" to "none"),
+                            java.io.FileInputStream(pdfFile)
+                        )
+                    }.getOrNull()
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { onBackClick() }) {
-                    Text("Cancel")
-                }
-            }
+            })
+            .build()
+    }
+
+    var webViewRef by remember(fileEntity.path) { mutableStateOf<android.webkit.WebView?>(null) }
+    var isJavascriptReady by remember(fileEntity.path) { mutableStateOf(false) }
+    var isPdfReady by remember(fileEntity.path) { mutableStateOf(false) }
+    var requirePassword by remember(fileEntity.path) { mutableStateOf(false) }
+    var passwordError by remember(fileEntity.path) { mutableStateOf(false) }
+    var pdfPassword by remember(fileEntity.path) { mutableStateOf("") }
+    var pdfErrorMessage by remember(fileEntity.path) { mutableStateOf<String?>(null) }
+    // Loop 12 (Bug C): bumped to force a fresh WebView after a renderer crash. The
+    // crashed instance can never be reused, so recovery replaces the whole view.
+    var pdfReloadKey by remember(fileEntity.path) { mutableIntStateOf(0) }
+
+    // Settles pinch-zoom gestures: after the user lifts their fingers the visible pages
+    // re-rasterize at the new resolution (Google Drive reader behavior).
+    val zoomSettleHandler = remember(fileEntity.path) {
+        android.os.Handler(android.os.Looper.getMainLooper())
+    }
+    DisposableEffect(fileEntity.path) {
+        onDispose { zoomSettleHandler.removeCallbacksAndMessages(null) }
+    }
+
+    val latestSearchSnapshot = androidx.compose.runtime.rememberUpdatedState(onSearchSnapshot)
+    val latestSearchError = androidx.compose.runtime.rememberUpdatedState(onSearchError)
+    val latestPageChanged = androidx.compose.runtime.rememberUpdatedState(onPageChanged)
+    val latestSingleTap = androidx.compose.runtime.rememberUpdatedState(onSingleTap)
+
+    LaunchedEffect(webViewRef, isJavascriptReady, isPdfReady, searchQuery) {
+        val webView = webViewRef
+        if (webView != null && isJavascriptReady) {
+            val query = org.json.JSONObject.quote(searchQuery)
+            if (isPdfReady) webView.evaluateJavascript("searchPdf($query);", null)
+        }
+    }
+    // Loop 14: rotation is viewer state pushed into the loaded PDF.js document.
+    // This is deliberately NOT part of the WebView key: rotating must never
+    // recreate the WebView, refetch the document or re-run the password flow —
+    // the authenticated PDFDocumentProxy stays alive and pages re-render from it.
+    LaunchedEffect(webViewRef, isPdfReady, viewRotation) {
+        if (webViewRef != null && isPdfReady) {
+            val normalized = com.example.core.format.PdfRotationPolicy.normalize(viewRotation)
+            webViewRef?.evaluateJavascript("if (window.setPageRotation) setPageRotation($normalized);", null)
+        }
+    }
+    LaunchedEffect(webViewRef, isJavascriptReady, selectedMatchIndex) {
+        if (isJavascriptReady) {
+            webViewRef?.evaluateJavascript("showPdfSearchMatch($selectedMatchIndex);", null)
+        }
+    }
+    LaunchedEffect(webViewRef, isPdfReady, scrollToPage, scrollToken) {
+        if (isPdfReady && scrollToPage != null) {
+            webViewRef?.evaluateJavascript("gotoPdfPage(${scrollToPage + 1});", null)
+            onScrollToPageHandled()
+        }
+    }
+    LaunchedEffect(webViewRef, isPdfReady, savedPage) {
+        if (isPdfReady && savedPage > 0 && scrollToPage == null) {
+            webViewRef?.evaluateJavascript("gotoPdfPage(${savedPage + 1});", null)
+        }
+    }
+
+    // Loop 12 (Bug C): derive the TOTAL resident-canvas budget from heap signals
+    // (isLowRamDevice / memoryClass — a heap cap, NOT physical RAM) and hand it to
+    // the bundled reader, which divides it across the pages it keeps rendered. The
+    // Loop 10 per-page number ignored that 3-5 canvases are resident at once inside
+    // the prefetch window — the main reason heavy PDFs struggled.
+    val pdfQualityBudgetBytes = remember(fileEntity.path) {
+        val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+        PdfRenderBudgetPolicy.totalCanvasBytes(
+            isLowRamDevice = activityManager?.isLowRamDevice == true,
+            memoryClassMb = activityManager?.memoryClass
         )
     }
-    
+    LaunchedEffect(webViewRef, isJavascriptReady, pdfQualityBudgetBytes) {
+        if (webViewRef != null && isJavascriptReady) {
+            webViewRef?.evaluateJavascript(
+                "if (window.setPdfQualityBudget) setPdfQualityBudget($pdfQualityBudgetBytes);",
+                null
+            )
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(if (isNightMode) Color(0xFF181715) else Color(0xFFF4F4F9))
+            .background(Color(0xFFF0F0F0)) // Loop 14: PDF is always light mode
     ) {
+        if (pdfErrorMessage == null) {
+            androidx.compose.runtime.key(fileEntity.path, pdfReloadKey) {
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { viewContext ->
+                        android.webkit.WebView(viewContext).apply {
+                            webViewRef = this
+                            setBackgroundColor(0xFFF0F0F0.toInt())
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = false
+                                allowFileAccess = false
+                                allowContentAccess = false
+                                builtInZoomControls = true
+                                displayZoomControls = false
+                                setSupportZoom(true)
+                                useWideViewPort = true
+                                loadWithOverviewMode = true
+                                cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
+                            }
+                            addJavascriptInterface(
+                                PdfWebAppInterface(
+                                    context = viewContext,
+                                    onReady = { isJavascriptReady = true },
+                                    onDocumentLoaded = { pageCount ->
+                                        isPdfReady = true
+                                        requirePassword = false
+                                        passwordError = false
+                                        pdfErrorMessage = null
+                                        latestPageChanged.value(1, pageCount)
+                                    },
+                                    onPageChanged = { page, pageCount ->
+                                        bookmarkPrefs.edit().putInt(bookmarkKey, (page - 1).coerceAtLeast(0)).apply()
+                                        latestPageChanged.value(page, pageCount)
+                                    },
+                                    onSearchSnapshot = { snapshot, searching -> latestSearchSnapshot.value(snapshot, searching) },
+                                    onSearchError = { message -> latestSearchError.value(message) },
+                                    onPasswordRequired = { reason ->
+                                        passwordError = reason == 2
+                                        requirePassword = true
+                                    },
+                                    onError = { message ->
+                                        pdfErrorMessage = message
+                                        isPdfReady = false
+                                    },
+                                    onSingleTap = { latestSingleTap.value() }
+                                ),
+                                "Android"
+                            )
+                            webViewClient = object : androidx.webkit.WebViewClientCompat() {
+                                override fun shouldOverrideUrlLoading(
+                                    view: android.webkit.WebView,
+                                    request: android.webkit.WebResourceRequest
+                                ): Boolean = !isBundledPdfReaderUri(request.url)
+
+                                @Suppress("DEPRECATION")
+                                override fun shouldOverrideUrlLoading(
+                                    view: android.webkit.WebView,
+                                    url: String
+                                ): Boolean = !isBundledPdfReaderUri(android.net.Uri.parse(url))
+
+                                override fun onScaleChanged(
+                                    view: android.webkit.WebView,
+                                    oldScale: Float,
+                                    newScale: Float
+                                ) {
+                                    // During the pinch the WebView only magnifies the rasterized
+                                    // bitmap; once the gesture settles we re-render the visible
+                                    // pages at the new resolution for a crisp zoom (v1.3.0).
+                                    super.onScaleChanged(view, oldScale, newScale)
+                                    if (kotlin.math.abs(newScale - oldScale) < 0.01f) return
+                                    zoomSettleHandler.removeCallbacksAndMessages(null)
+                                    zoomSettleHandler.postDelayed({
+                                        view.evaluateJavascript(
+                                            "if (window.setPdfRenderScale) setPdfRenderScale($newScale);",
+                                            null
+                                        )
+                                    }, 260)
+                                }
+
+                                // Loop 12 (Bug C): a dead renderer used to leave a permanently
+                                // blank viewer and could take the app down with it. Report a
+                                // handled failure and let the user rebuild the WebView.
+                                override fun onRenderProcessGone(
+                                    view: android.webkit.WebView,
+                                    detail: android.webkit.RenderProcessGoneDetail
+                                ): Boolean {
+                                    android.util.Log.e(
+                                        "PdfJsReader",
+                                        "PDF renderer process gone (crashed=${detail.didCrash()})"
+                                    )
+                                    zoomSettleHandler.removeCallbacksAndMessages(null)
+                                    pdfErrorMessage = "The PDF renderer stopped unexpectedly."
+                                    isPdfReady = false
+                                    isJavascriptReady = false
+                                    return true
+                                }
+
+                                override fun shouldInterceptRequest(
+                                    view: android.webkit.WebView,
+                                    request: android.webkit.WebResourceRequest
+                                ): android.webkit.WebResourceResponse? {
+                                    return assetLoader.shouldInterceptRequest(request.url)
+                                }
+
+                                override fun shouldInterceptRequest(
+                                    view: android.webkit.WebView,
+                                    url: String
+                                ): android.webkit.WebResourceResponse? {
+                                    return assetLoader.shouldInterceptRequest(android.net.Uri.parse(url))
+                                }
+                            }
+                            webChromeClient = object : android.webkit.WebChromeClient() {
+                                override fun onConsoleMessage(message: android.webkit.ConsoleMessage?): Boolean {
+                                    android.util.Log.d(
+                                        "PdfJsReader",
+                                        "${message?.message()} -- line ${message?.lineNumber()} ${message?.sourceId()}"
+                                    )
+                                    return true
+                                }
+                            }
+                        }
+                    },
+                    update = { webView ->
+                        webViewRef = webView
+                        webView.setBackgroundColor(0xFFF0F0F0.toInt()) // Loop 14: always light
+                        if (webView.tag != fileEntity.path) {
+                            webView.tag = fileEntity.path
+                            isJavascriptReady = false
+                            isPdfReady = false
+                            webView.loadUrl("https://appassets.androidplatform.net/assets/pdfjs/search.html")
+                        }
+                    },
+                    // Loop 12 (Bug E): destroy the WebView when its node leaves
+                    // composition so a closed viewer does not retain its render process.
+                    onRelease = { webView ->
+                        webViewRef = null
+                        webView.destroy()
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        if (!isPdfReady && pdfErrorMessage == null) {
+            // Loop 14: skeleton loading — neutral page-shaped placeholders with a soft
+            // shimmer replace the spinner-only screen during document open/metadata/
+            // password initialization. The password dialog overlays this skeleton; the
+            // error state below replaces it entirely.
+            PdfOpeningSkeleton()
+        }
+
+        // Loop 14: right-edge page scrubber. Only rendered once the document is ready
+        // and there is more than one page; the visible-page observer keeps it in sync
+        // (page events flow up through onPageChanged), jumps flow down through the
+        // shared gotoPdfPage pipeline (no eager rendering of the pages passed over).
+        if (isPdfReady && pdfErrorMessage == null && scrubberPageCount > 1) {
+            PdfPageScrubber(
+                currentPage = scrubberPage.coerceIn(1, scrubberPageCount),
+                pageCount = scrubberPageCount,
+                onJumpRequest = onScrubJump,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 2.dp)
+            )
+        }
+
         if (pdfErrorMessage != null) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
+                modifier = Modifier.fillMaxSize().padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -2670,109 +4099,126 @@ fun PdfPreview(
                     modifier = Modifier.size(56.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Could not open PDF",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Text("Could not open PDF", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = pdfErrorMessage ?: "The PDF file appears corrupted or has an invalid structure.",
+                    text = pdfErrorMessage.orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = .7f),
+                    textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(24.dp))
-                Button(onClick = onBackClick) {
-                    Text("Go Back")
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = onBackClick) { Text("Go Back") }
+                    // Loop 12 (Bug C): rebuild the viewer from scratch — the only valid
+                    // recovery after a renderer crash or a failed document load.
+                    Button(onClick = {
+                        pdfErrorMessage = null
+                        isPdfReady = false
+                        isJavascriptReady = false
+                        requirePassword = false
+                        passwordError = false
+                        pdfReloadKey++
+                    }) { Text("Try Again") }
                 }
             }
-        } else {
-            androidx.compose.ui.viewinterop.AndroidView(
-                factory = { context ->
-                    com.github.barteksc.pdfviewer.PDFView(context, null).apply {
-                        layoutParams = android.view.ViewGroup.LayoutParams(
-                            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        }
+
+        if (requirePassword) {
+            AlertDialog(
+                onDismissRequest = onBackClick,
+                title = { Text("Password Required") },
+                text = {
+                    Column {
+                        Text("This PDF is password protected.", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = pdfPassword,
+                            onValueChange = { pdfPassword = it; passwordError = false },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            isError = passwordError,
+                            label = { Text("Password") },
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        minZoom = 1.0f
-                        midZoom = 3.5f
-                        maxZoom = 10.0f
+                        if (passwordError) Text("Incorrect password", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                     }
                 },
-                modifier = Modifier.fillMaxSize(),
-                update = { pdfView ->
-                    pdfView.minZoom = 1.0f
-                    val bookmarkPrefs = pdfView.context.getSharedPreferences("pdf_bookmarks", android.content.Context.MODE_PRIVATE)
-                    val bookmarkKey = "bookmark_${fileEntity.path.hashCode()}"
-                    val savedPage = bookmarkPrefs.getInt(bookmarkKey, 0)
-
-                    if ((!isReady && originalFile.exists()) || loadTrigger > 0) {
-                        val initialPage = scrollToPage ?: savedPage
-                        val configurator = pdfView.fromFile(originalFile)
-                            .enableSwipe(true)
-                            .swipeHorizontal(false)
-                            .enableDoubletap(true)
-                            .defaultPage(initialPage)
-                            .onPageChange { page, pageCount ->
-                                bookmarkPrefs.edit().putInt(bookmarkKey, page).apply()
-                                onPageChanged(page + 1, pageCount)
-                            }
-                            .enableAnnotationRendering(true)
-                            .password(submittedPassword)
-                            .scrollHandle(com.github.barteksc.pdfviewer.scroll.DefaultScrollHandle(pdfView.context))
-                            .enableAntialiasing(true)
-                            .spacing(0)
-                            .autoSpacing(false)
-                            .pageFitPolicy(com.github.barteksc.pdfviewer.util.FitPolicy.WIDTH)
-                            .nightMode(false)
-                            .onLoad {
-                                isReady = true
-                                requirePassword = false
-                                passwordError = false
-                                loadTrigger = 0
-                                pdfErrorMessage = null
-                                applySmartPdfNightMode(pdfView, isNightMode)
-                                if (savedPage > 0 && scrollToPage == null) {
-                                    android.widget.Toast.makeText(pdfView.context, "Resumed at page ${savedPage + 1}", android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                                if (scrollToPage != null) {
-                                    onScrollToPageHandled()
-                                }
-                            }
-                            .onError { t ->
-                                if (t is com.shockwave.pdfium.PdfPasswordException || t.message?.contains("Password required") == true) {
-                                    requirePassword = true
-                                    if (!submittedPassword.isNullOrEmpty()) {
-                                        passwordError = true
-                                    }
-                                } else {
-                                    pdfErrorMessage = t.localizedMessage ?: "This PDF file is corrupted or cannot be read."
-                                    t.printStackTrace()
-                                }
-                            }
-                            .onTap {
-                                onSingleTap()
-                                true
-                            }
-                            
-                        configurator.load()
-                        if (loadTrigger > 0) loadTrigger = 0
-                    } else if (isReady && scrollToPage != null) {
-                        pdfView.jumpTo(scrollToPage, true)
-                        onScrollToPageHandled()
-                    }
-                    
-                    if (isReady) {
-                        applySmartPdfNightMode(pdfView, isNightMode)
-                    }
-                }
+                confirmButton = {
+                    Button(onClick = {
+                        requirePassword = false
+                        webViewRef?.evaluateJavascript("submitPdfPassword(${org.json.JSONObject.quote(pdfPassword)});", null)
+                    }) { Text("Open") }
+                },
+                dismissButton = { TextButton(onClick = onBackClick) { Text("Cancel") } }
             )
-            
-            if (!isReady) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    com.example.ui.component.PremiumLoadingIndicator(text = "Loading PDF...")
+        }
+    }
+}
+
+/**
+ * Loop 14: neutral skeleton placeholders shown while the PDF opens (file read,
+ * worker boot, metadata/page-count/password initialization). Page-shaped cards
+ * with a soft shimmer — never a spinner-only screen — and they disappear the
+ * moment the real content, the password dialog or an error state takes over.
+ */
+@Composable
+private fun PdfOpeningSkeleton(modifier: Modifier = Modifier) {
+    val shimmer = rememberInfiniteTransition(label = "pdf-skeleton")
+    val alpha by shimmer.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pdf-skeleton-alpha"
+    )
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 22.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text(
+            text = "Preparing document…",
+            fontSize = 12.sp,
+            color = Color(0xFF6C6A64),
+            modifier = Modifier.padding(start = 2.dp)
+        )
+        repeat(3) { index ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    // Stable dimensions/aspect ratio: A4-ish portrait cards on the light
+                    // reader canvas, matching the real pages that replace them.
+                    .aspectRatio(0.72f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = alpha))
+                    .border(
+                        width = 1.dp,
+                        color = Color(0xFF191919).copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(0.45f)
+                            .height(14.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFFD8D4CC).copy(alpha = alpha))
+                    )
+                    repeat(4 - (index % 2)) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(if (it == 3) 0.6f else 1f)
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFFE4E0D8).copy(alpha = alpha))
+                        )
+                    }
                 }
             }
         }
@@ -2780,32 +4226,173 @@ fun PdfPreview(
 }
 
 /**
- * Smart hue-preserving dark mode for PDFView:
- * High-fidelity Google Drive / Acrobat style paper inversion:
- * Maps white paper (#FFFFFF) to clean dark charcoal (#202020) and black text to crisp soft off-white (#E8E8E8),
- * avoiding color distortion or unnatural color shifts on images and diagrams.
+ * Loop 14: right-edge draggable page scrubber. A slim rail with a grabbable
+ * thumb sits over the page-margin area (never over body text), shows
+ * `current / total` in a bubble while dragging, and maps the drag fraction to a
+ * valid 1-based page via [PdfRotationPolicy.pageFromFraction]. Navigation fires
+ * on release through [onJumpRequest] — the pages passed over are NOT eagerly
+ * rendered, the shared gotoPdfPage pipeline simply scrolls to the target.
  */
-private fun applySmartPdfNightMode(pdfView: com.github.barteksc.pdfviewer.PDFView, isNight: Boolean) {
-    try {
-        pdfView.setNightMode(false)
-        pdfView.setBackgroundColor(if (isNight) 0xFF181818.toInt() else 0xFFF0F0F0.toInt())
-        val paintField = com.github.barteksc.pdfviewer.PDFView::class.java.getDeclaredField("paint")
-        paintField.isAccessible = true
-        val paint = paintField.get(pdfView) as? android.graphics.Paint
-        if (paint != null) {
-            paint.colorFilter = if (isNight) {
-                val matrix = floatArrayOf(
-                    -0.784f,  0.000f,  0.000f, 0f, 232f,
-                     0.000f, -0.784f,  0.000f, 0f, 232f,
-                     0.000f,  0.000f, -0.784f, 0f, 232f,
-                     0.000f,  0.000f,  0.000f, 1f,   0f
+@Composable
+private fun PdfPageScrubber(
+    currentPage: Int,
+    pageCount: Int,
+    onJumpRequest: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isDragging by remember { mutableStateOf(false) }
+    var dragFraction by remember { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    val pageTotal = pageCount.coerceAtLeast(1)
+    val fraction = if (isDragging) dragFraction else
+        com.example.core.format.PdfRotationPolicy.fractionForPage(currentPage, pageTotal)
+    val displayPage = if (isDragging) {
+        com.example.core.format.PdfRotationPolicy.pageFromFraction(dragFraction, pageTotal)
+    } else currentPage.coerceIn(1, pageTotal)
+
+    // Match the older native PDF scroll handle: a small page-number tab attached
+    // to the right edge, moving across the full usable viewer height. The touch
+    // target remains full-height so the user can grab it anywhere along the edge.
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(64.dp)
+            .semantics {
+                contentDescription = "PDF page scroller. Drag the right edge to navigate. Page $displayPage of $pageTotal."
+            },
+        contentAlignment = Alignment.TopEnd
+    ) {
+        val handleHeight = 54.dp
+        val usableHeight = (maxHeight - handleHeight).coerceAtLeast(0.dp)
+        val handleY = usableHeight * fraction.coerceIn(0f, 1f)
+
+        Surface(
+            shape = RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.70f)),
+            shadowElevation = if (isDragging) 6.dp else 2.dp,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = handleY)
+                .width(if (isDragging) 64.dp else 52.dp)
+                .height(handleHeight)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = if (isDragging) "$displayPage / $pageTotal" else displayPage.toString(),
+                    fontSize = if (isDragging) 14.sp else 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
                 )
-                android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(matrix))
-            } else null
-            pdfView.invalidate()
+            }
         }
-    } catch (e: Exception) {
-        pdfView.setNightMode(isNight)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(pageTotal, maxHeight) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            isDragging = true
+                            val available = (size.height - with(density) { handleHeight.toPx() }).coerceAtLeast(1f)
+                            dragFraction = ((offset.y - with(density) { handleHeight.toPx() / 2f }) / available)
+                                .coerceIn(0f, 1f)
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            val available = (size.height - with(density) { handleHeight.toPx() }).coerceAtLeast(1f)
+                            dragFraction = ((change.position.y - with(density) { handleHeight.toPx() / 2f }) / available)
+                                .coerceIn(0f, 1f)
+                        },
+                        onDragEnd = {
+                            val targetPage = com.example.core.format.PdfRotationPolicy
+                                .pageFromFraction(dragFraction, pageTotal)
+                            isDragging = false
+                            onJumpRequest(targetPage)
+                        },
+                        onDragCancel = { isDragging = false }
+                    )
+                }
+        )
+    }
+}
+
+private class PdfWebAppInterface(
+    context: android.content.Context,
+    private val onReady: () -> Unit,
+    private val onDocumentLoaded: (Int) -> Unit,
+    private val onPageChanged: (Int, Int) -> Unit,
+    private val onSearchSnapshot: (PdfSearchSnapshot, Boolean) -> Unit,
+    private val onSearchError: (String) -> Unit,
+    private val onPasswordRequired: (Int) -> Unit,
+    private val onError: (String) -> Unit,
+    private val onSingleTap: () -> Unit
+) {
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val appContext = context.applicationContext
+
+    @android.webkit.JavascriptInterface
+    fun onPdfSearchReady(@Suppress("UNUSED_PARAMETER") status: String) {
+        mainHandler.post { onReady() }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onPdfDocumentLoaded(pageCount: Int) {
+        mainHandler.post { onDocumentLoaded(pageCount) }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onPdfPageChanged(page: Int, pageCount: Int) {
+        mainHandler.post { onPageChanged(page, pageCount) }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onPdfSearchResults(payload: String) {
+        runCatching {
+            val json = org.json.JSONObject(payload)
+            val jsonMatches = json.optJSONArray("matches") ?: org.json.JSONArray()
+            val matches = buildList {
+                for (index in 0 until jsonMatches.length()) {
+                    val matchJson = jsonMatches.optJSONObject(index) ?: continue
+                    add(PdfPageSearchMatch(matchJson.optInt("pageNumber")))
+                }
+            }
+            val snapshot = PdfSearchSnapshot(
+                count = json.optInt("count"),
+                truncated = json.optBoolean("truncated"),
+                matches = matches
+            )
+            val searching = json.optBoolean("searching")
+            mainHandler.post { onSearchSnapshot(snapshot, searching) }
+        }.onFailure { error ->
+            android.util.Log.w("PdfJsReader", "Could not read search results", error)
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onPdfSearchError(payload: String) {
+        val message = runCatching { org.json.JSONObject(payload).optString("message") }
+            .getOrDefault("PDF text search failed")
+        mainHandler.post { onSearchError(message) }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onPdfPasswordRequired(reason: Int) {
+        mainHandler.post { onPasswordRequired(reason) }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onPdfError(message: String) {
+        mainHandler.post {
+            onError(message.ifBlank { "This PDF could not be opened." })
+            android.widget.Toast.makeText(appContext, "Could not open PDF", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onPdfSingleTap() {
+        mainHandler.post { onSingleTap() }
     }
 }
 
@@ -3090,24 +4677,6 @@ fun WebViewPreview(
     val isDark = MaterialTheme.colorScheme.background == com.example.ui.theme.ClaudeOnyx
     val bgColor = if (isDark) com.example.ui.theme.ClaudeOnyx else Color.White
 
-    var base64Data by remember { mutableStateOf<String?>(null) }
-    var loadError by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(fileEntity) {
-        if (fileEntity.extension.lowercase() == "pdf") {
-            withContext(Dispatchers.IO) {
-                try {
-                    val file = java.io.File(fileEntity.path)
-                    val bytes = file.readBytes()
-                    val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                    base64Data = base64
-                } catch (e: Exception) {
-                    loadError = e.message
-                }
-            }
-        }
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -3116,309 +4685,59 @@ fun WebViewPreview(
         val context = LocalContext.current
         val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
 
-        if (fileEntity.extension.lowercase() == "pdf" && base64Data == null && loadError == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                com.example.ui.component.PremiumLoadingIndicator(text = "Loading PDF...")
-            }
-        } else if (loadError != null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = "Error: $loadError", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
-            }
-        } else {
-            AndroidView(
-                factory = { ctx ->
-                    android.webkit.WebView(ctx).apply {
-                        // HTML files are untrusted: scripts start off (see allowScripts), no bridge object is
-                        // exposed to them, and navigation away from local files is blocked.
-                        val htmlPage = fileEntity.extension.lowercase().let { it == "html" || it == "htm" }
-                        settings.javaScriptEnabled = !htmlPage
-                        settings.domStorageEnabled = !htmlPage
-                        settings.setSupportZoom(true)
-                        settings.builtInZoomControls = true
-                        settings.displayZoomControls = false
-                        settings.useWideViewPort = true
-                        settings.loadWithOverviewMode = true
+        AndroidView(
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    // HTML files are untrusted: scripts start off (see allowScripts), no bridge object is
+                    // exposed to them, and navigation away from local files is blocked.
+                    val htmlPage = fileEntity.extension.lowercase().let { it == "html" || it == "htm" }
+                    settings.javaScriptEnabled = !htmlPage
+                    settings.domStorageEnabled = !htmlPage
+                    settings.setSupportZoom(true)
+                    settings.builtInZoomControls = true
+                    settings.displayZoomControls = false
+                    settings.useWideViewPort = true
+                    settings.loadWithOverviewMode = true
 
-                        // file:///android_asset is always readable; real file access is only for local HTML.
-                        settings.allowFileAccess = htmlPage
-                        settings.allowContentAccess = false
+                    // file:///android_asset is always readable; real file access is only for local HTML.
+                    settings.allowFileAccess = htmlPage
+                    settings.allowContentAccess = false
 
-                        if (!htmlPage) {
-                            addJavascriptInterface(object {
-                                @android.webkit.JavascriptInterface
-                                fun performSingleTap() {
-                                    mainHandler.post {
-                                        onSingleTap()
-                                    }
+                    if (!htmlPage) {
+                        addJavascriptInterface(object {
+                            @android.webkit.JavascriptInterface
+                            fun performSingleTap() {
+                                mainHandler.post {
+                                    onSingleTap()
                                 }
-                            }, "Android")
-                        }
+                            }
+                        }, "Android")
+                    }
 
-                        setBackgroundColor(if (isDark) 0xFF181715.toInt() else 0xFFFAF9F5.toInt())
-                        webViewClient = object : android.webkit.WebViewClient() {
-                            override fun shouldOverrideUrlLoading(
-                                view: android.webkit.WebView,
-                                request: android.webkit.WebResourceRequest
-                            ): Boolean = request.url.scheme != "file"
-                        }
-                        webChromeClient = android.webkit.WebChromeClient()
+                    setBackgroundColor(if (isDark) 0xFF181715.toInt() else 0xFFFAF9F5.toInt())
+                    webViewClient = object : android.webkit.WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: android.webkit.WebView,
+                            request: android.webkit.WebResourceRequest
+                        ): Boolean = request.url.scheme != "file"
                     }
-                },
-                update = { webView ->
-                    if (searchQuery.isNotEmpty()) {
-                        webView.findAllAsync(searchQuery)
-                    } else {
-                        webView.clearMatches()
-                    }
-                    val ext = fileEntity.extension.lowercase()
-                    if (ext == "html" || ext == "htm") {
-                        loadLocalFileOnce(webView, fileEntity.path, allowScripts)
-                    } else if (ext == "pdf") {
-                        try {
-                            val base64Pdf = base64Data ?: ""
-                            val htmlContent = """
-                                <!DOCTYPE html>
-                                <html>
-                                <head>
-                                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-                                    <script src="file:///android_asset/pdfjs/build/pdf.js"></script>
-                                    <style>
-                                        body {
-                                            margin: 0;
-                                            padding: 12px;
-                                            background-color: ${if (isDark) "#181715" else "#FAF9F5"};
-                                            display: flex;
-                                            flex-direction: column;
-                                            align-items: center;
-                                            font-family: -apple-system, sans-serif;
-                                            user-select: text !important;
-                                            -webkit-user-select: text !important;
-                                        }
-                                        .page-container {
-                                            position: relative;
-                                            margin-bottom: 20px;
-                                            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                                            background-color: white;
-                                            border-radius: 6px;
-                                            overflow: hidden;
-                                            max-width: 100%;
-                                            display: flex;
-                                            justify-content: center;
-                                        }
-                                        canvas {
-                                            display: block;
-                                            max-width: 100%;
-                                            height: auto !important;
-                                        }
-                                        .text-layer {
-                                            position: absolute;
-                                            left: 0;
-                                            top: 0;
-                                            right: 0;
-                                            bottom: 0;
-                                            overflow: hidden;
-                                            background: transparent;
-                                            pointer-events: auto;
-                                        }
-                                        .text-layer > span {
-                                            color: rgba(0,0,0,0);
-                                            position: absolute;
-                                            white-space: pre;
-                                            cursor: text;
-                                            transform-origin: 0% 0%;
-                                            pointer-events: auto;
-                                            user-select: text !important;
-                                            -webkit-user-select: text !important;
-                                        }
-                                        #loading {
-                                            margin-top: 40px;
-                                            color: ${if (isDark) "#CCCCCC" else "#333333"};
-                                            font-size: 15px;
-                                            font-weight: 500;
-                                        }
-                                    </style>
-                                </head>
-                                <body>
-                                    <div id="loading">Preparing PDF Browser Preview...</div>
-                                    <div id="viewer"></div>
-    
-                                    <script>
-                                        function transformMatrix(m1, m2) {
-                                            return [
-                                                m1[0] * m2[0] + m1[2] * m2[1],
-                                                m1[1] * m2[0] + m1[3] * m2[1],
-                                                m1[0] * m2[2] + m1[2] * m2[3],
-                                                m1[1] * m2[2] + m1[3] * m2[3],
-                                                m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
-                                                m1[1] * m2[4] + m1[3] * m2[5] + m1[5]
-                                            ];
-                                        }
-    
-                                        function base64ToUint8Array(base64) {
-                                            var raw = window.atob(base64);
-                                            var rawLength = raw.length;
-                                            var array = new Uint8Array(new ArrayBuffer(rawLength));
-                                            for(var i = 0; i < rawLength; i++) {
-                                                array[i] = raw.charCodeAt(i);
-                                            }
-                                            return array;
-                                        }
-    
-                                        document.addEventListener('click', function(e) {
-                                            var selection = window.getSelection().toString();
-                                            if (!selection) {
-                                                if (typeof Android !== 'undefined' && Android.performSingleTap) {
-                                                    Android.performSingleTap();
-                                                }
-                                            }
-                                        });
-    
-                                        var pdfData = base64ToUint8Array("$base64Pdf");
-                                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'file:///android_asset/pdfjs/build/pdf.worker.js';
-    
-                                        var loadingTask = pdfjsLib.getDocument({data: pdfData});
-                                        loadingTask.promise.then(function(pdf) {
-                                            var loadingEl = document.getElementById('loading');
-                                            if (loadingEl) loadingEl.style.display = 'none';
-                                            var viewer = document.getElementById('viewer');
-                                            for (var pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                                                renderPage(pdf, pageNum, viewer);
-                                            }
-                                        }, function (reason) {
-                                            document.getElementById('loading').innerText = 'Error loading PDF: ' + reason.message;
-                                        });
-    
-                                        function renderPage(pdf, pageNum, container) {
-                                            pdf.getPage(pageNum).then(function(page) {
-                                                var scale = 1.5;
-                                                var viewport = page.getViewport({scale: scale});
-    
-                                                var pageDiv = document.createElement('div');
-                                                pageDiv.className = 'page-container';
-                                                pageDiv.style.width = viewport.width + 'px';
-                                                pageDiv.style.height = viewport.height + 'px';
-                                                
-                                                var canvas = document.createElement('canvas');
-                                                var context = canvas.getContext('2d');
-                                                canvas.height = viewport.height;
-                                                canvas.width = viewport.width;
-    
-                                                pageDiv.appendChild(canvas);
-                                                container.appendChild(pageDiv);
-    
-                                                var renderContext = {
-                                                    canvasContext: context,
-                                                    viewport: viewport
-                                                };
-                                                
-                                                var renderTask = page.render(renderContext);
-                                                renderTask.promise.then(function() {
-                                                    return page.getTextContent();
-                                                }).then(function(textContent) {
-                                                    var textLayerDiv = document.createElement('div');
-                                                    textLayerDiv.className = 'text-layer';
-                                                    pageDiv.appendChild(textLayerDiv);
-                                                    
-                                                    textContent.items.forEach(function(item) {
-                                                        var tx = transformMatrix(
-                                                            viewport.transform,
-                                                            item.transform
-                                                        );
-                                                        
-                                                        var span = document.createElement('span');
-                                                        span.textContent = item.str;
-                                                        span.style.fontFamily = item.fontName;
-                                                        var fontHeight = item.height * scale;
-                                                        span.style.fontSize = fontHeight + 'px';
-                                                        
-                                                        var textWidth = item.width * scale;
-                                                        span.style.width = textWidth + 'px';
-                                                        
-                                                        span.style.left = tx[4] + 'px';
-                                                        span.style.top = (tx[5] - fontHeight) + 'px';
-                                                        
-                                                        textLayerDiv.appendChild(span);
-                                                    });
-                                                });
-                                            });
-                                        }
-                                    </script>
-                                </body>
-                                </html>
-                            """.trimIndent()
-                            webView.loadDataWithBaseURL("file:///android_asset/", htmlContent, "text/html", "UTF-8", null)
-                        } catch (e: Exception) {
-                            webView.loadDataWithBaseURL(null, "<html><body><h3>Error: ${e.message}</h3></body></html>", "text/html", "UTF-8", null)
-                        }
-                    } else {
+                    webChromeClient = android.webkit.WebChromeClient()
+                }
+            },
+            update = { webView ->
+                if (searchQuery.isNotEmpty()) {
+                    webView.findAllAsync(searchQuery)
+                } else {
+                    webView.clearMatches()
+                }
+                val ext = fileEntity.extension.lowercase()
+                if (ext == "html" || ext == "htm") {
+                    loadLocalFileOnce(webView, fileEntity.path, allowScripts)
+                } else {
+                    // PDF, DOCX, TXT, and Markdown have dedicated preview routes; this fallback handles other text formats.
                     try {
                         val content = java.io.File(fileEntity.path).readText()
-                        val htmlContent = if (ext == "md") {
-                            """
-                            <html>
-                            <head>
-                            <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes">
-                            <style>
-                                body {
-                                    background-color: ${if (isDark) "#181715" else "#FAF9F5"};
-                                    color: ${if (isDark) "#FAF9F5" else "#141413"};
-                                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                                    padding: 16px;
-                                    line-height: 1.6;
-                                    margin: 0;
-                                    -webkit-text-size-adjust: none;
-                                }
-                                h1, h2, h3, h4, h5, h6 {
-                                    color: ${if (isDark) "#E8A55A" else "#CC785C"};
-                                    margin-top: 24px;
-                                    margin-bottom: 12px;
-                                }
-                                pre {
-                                    background-color: ${if (isDark) "#252320" else "#EFE9DE"};
-                                    padding: 12px;
-                                    border-radius: 6px;
-                                    overflow-x: auto;
-                                    font-family: ui-monospace, monospace;
-                                    font-size: 13px;
-                                }
-                                code {
-                                    background-color: ${if (isDark) "#252320" else "#EFE9DE"};
-                                    padding: 2px 4px;
-                                    border-radius: 4px;
-                                    font-family: ui-monospace, monospace;
-                                }
-                                blockquote {
-                                    border-left: 4px solid ${if (isDark) "#E8A55A" else "#CC785C"};
-                                    margin: 0;
-                                    padding-left: 16px;
-                                    color: ${if (isDark) "#A09D96" else "#6C6A64"};
-                                    font-style: italic;
-                                }
-                                table {
-                                    border-collapse: collapse;
-                                    width: 100%;
-                                    margin: 16px 0;
-                                }
-                                th, td {
-                                    border: 1px solid ${if (isDark) "#2D2C2A" else "#E6DFD8"};
-                                    padding: 8px;
-                                    text-align: left;
-                                }
-                                th {
-                                    background-color: ${if (isDark) "#252320" else "#EFE9DE"};
-                                }
-                                ul, ol {
-                                    padding-left: 20px;
-                                }
-                            </style>
-                            </head>
-                            <body>
-                                ${formatSimpleMarkdownToHtml(content)}
-                            </body>
-                            </html>
-                            """.trimIndent()
-                        } else {
-                            """
+                        val htmlContent = """
                             <html>
                             <head>
                             <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes">
@@ -3440,7 +4759,6 @@ fun WebViewPreview(
                             <body>${escapeHtml(content)}</body>
                             </html>
                             """.trimIndent()
-                        }
                         webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
                     } catch (e: Exception) {
                         loadLocalFileOnce(webView, fileEntity.path, allowScripts)
@@ -3449,7 +4767,6 @@ fun WebViewPreview(
             },
             modifier = Modifier.fillMaxSize()
         )
-        }
     }
 }
 
@@ -3464,154 +4781,6 @@ private fun loadLocalFileOnce(webView: android.webkit.WebView, path: String, all
     }
 }
 
-fun formatSimpleMarkdownToHtml(mdText: String): String {
-    val lines = mdText.lines()
-    val htmlBuilder = StringBuilder()
-    var inList = false
-    var inCodeBlock = false
-    val codeBlockContent = StringBuilder()
-
-    for (line in lines) {
-        if (line.trim().startsWith("```")) {
-            if (inCodeBlock) {
-                htmlBuilder.append("<pre><code>")
-                htmlBuilder.append(escapeHtml(codeBlockContent.toString()))
-                htmlBuilder.append("</code></pre>\n")
-                codeBlockContent.clear()
-                inCodeBlock = false
-            } else {
-                inCodeBlock = true
-            }
-            continue
-        }
-
-        if (inCodeBlock) {
-            codeBlockContent.append(line).append("\n")
-            continue
-        }
-
-        val trimmed = line.trim()
-        
-        // Handle list items
-        val listStart = trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("+ ")
-        if (listStart) {
-            if (!inList) {
-                htmlBuilder.append("<ul>\n")
-                inList = true
-            }
-            val content = trimmed.substring(2)
-            htmlBuilder.append("<li>").append(formatInlineMarkdownToHtml(content)).append("</li>\n")
-            continue
-        } else {
-            if (inList) {
-                htmlBuilder.append("</ul>\n")
-                inList = false
-            }
-        }
-
-        // Handle headings
-        if (trimmed.startsWith("#")) {
-            val level = trimmed.takeWhile { it == '#' }.length
-            if (level in 1..6 && trimmed.getOrNull(level) == ' ') {
-                val content = trimmed.substring(level + 1)
-                htmlBuilder.append("<h$level>").append(formatInlineMarkdownToHtml(content)).append("</h$level>\n")
-                continue
-            }
-        }
-
-        // Handle horizontal rules
-        if (trimmed == "---" || trimmed == "***" || trimmed == "___") {
-            htmlBuilder.append("<hr/>\n")
-            continue
-        }
-
-        // Handle blockquotes
-        if (trimmed.startsWith(">")) {
-            val content = trimmed.substring(1).trim()
-            htmlBuilder.append("<blockquote>").append(formatInlineMarkdownToHtml(content)).append("</blockquote>\n")
-            continue
-        }
-
-        // Empty lines
-        if (trimmed.isEmpty()) {
-            continue
-        }
-
-        // Default to paragraph
-        htmlBuilder.append("<p>").append(formatInlineMarkdownToHtml(line)).append("</p>\n")
-    }
-
-    if (inList) {
-        htmlBuilder.append("</ul>\n")
-    }
-    if (inCodeBlock) {
-        htmlBuilder.append("<pre><code>")
-        htmlBuilder.append(escapeHtml(codeBlockContent.toString()))
-        htmlBuilder.append("</code></pre>\n")
-    }
-
-    return htmlBuilder.toString()
-}
-
-fun escapeHtml(text: String): String {
-    return text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\"", "&quot;")
-        .replace("'", "&#39;")
-}
-
-fun formatInlineMarkdownToHtml(text: String): String {
-    var formatted = escapeHtml(text)
-    
-    // Bold: **text** or __text__
-    val boldRegex = """\*\*(.*?)\*\*""".toRegex()
-    formatted = boldRegex.replace(formatted) { "<strong>${it.groupValues[1]}</strong>" }
-    
-    // Italic: *text* or _text_
-    val italicRegex = """\*(.*?)\*""".toRegex()
-    formatted = italicRegex.replace(formatted) { "<em>${it.groupValues[1]}</em>" }
-    
-    // Inline code: `code`
-    val codeRegex = """`(.*?)`""".toRegex()
-    formatted = codeRegex.replace(formatted) { "<code>${it.groupValues[1]}</code>" }
-    
-    return formatted
-}
-
-private fun openPdfInBrowser(context: android.content.Context, file: File) {
-    try {
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
-        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/pdf")
-            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(android.content.Intent.createChooser(intent, "Open with Browser / Viewer"))
-    } catch (e: Exception) {
-         try {
-             val uri = androidx.core.content.FileProvider.getUriForFile(
-                 context,
-                 "${context.packageName}.fileprovider",
-                 file
-             )
-             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                 setDataAndType(uri, "text/html")
-                 addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                 addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-             }
-             context.startActivity(android.content.Intent.createChooser(intent, "Open in Browser"))
-         } catch (ex: Exception) {
-             android.widget.Toast.makeText(context, "No app available to open PDF: ${ex.message}", android.widget.Toast.LENGTH_LONG).show()
-         }
-    }
-}
-
-
 @Composable
 fun DocxPreviewWebView(
     base64Docx: String,
@@ -3621,161 +4790,456 @@ fun DocxPreviewWebView(
     modifier: Modifier = Modifier,
     onPageChanged: (Int, Int) -> Unit = { _, _ -> },
     scrollToPage: Int? = null,
-    onScrollProgressHandled: () -> Unit = {}
+    onScrollProgressHandled: () -> Unit = {},
+    searchQuery: String = "",
+    searchTriggerNext: Int = 0,
+    searchTriggerPrev: Int = 0,
+    onSearchResultCount: (Int, Int, Boolean) -> Unit = { _, _, _ -> },
+    zoomFactor: Float = 1.0f,
+    // Loop 12 (Bug A): true while a pinch gesture is physically in progress. While it
+    // is set, zoom updates go to the cheap compositor-only preview path instead of
+    // re-laying-out the whole document per frame; the settle transition commits once.
+    pinchActive: Boolean = false,
+    onWebViewCreated: (android.webkit.WebView?) -> Unit = {},
+    onDocumentReady: () -> Unit = {},
+    onSingleTap: () -> Unit = {},
+    onPinchZoom: (Float) -> Unit = {},
+    onPinchSettled: () -> Unit = {},
+    onDoubleTap: () -> Unit = {},
+    onRendererFallback: (Boolean) -> Unit = {}
 ) {
     var isWebViewLoading by remember(base64Docx) { mutableStateOf(true) }
-    var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
-    var pureKotlinFallback by remember { mutableStateOf<com.example.core.format.DocxExtractor.ExtractedDocx?>(null) }
-    
-    val context = androidx.compose.ui.platform.LocalContext.current
+    var webViewRef by remember(base64Docx) { mutableStateOf<android.webkit.WebView?>(null) }
+    var pureKotlinFallback by remember(base64Docx) { mutableStateOf<com.example.core.format.DocxExtractor.ExtractedDocx?>(null) }
+    // Loop 14: the plain-text view is an honest RECOVERY state, never a normal
+    // preview. The renderer failure reason is surfaced verbatim (no document
+    // content, no sensitive data) and Retry rebuilds the WebView from scratch.
+    var fallbackReason by remember(base64Docx) { mutableStateOf<String?>(null) }
+    var docxReloadKey by remember(base64Docx) { mutableIntStateOf(0) }
+    // Ledger of what the renderer's search engine has already been told (Loop 12, Bug
+    // B): navigation triggers now issue ONLY next/prev deltas; re-issuing searchWord()
+    // per arrow press used to reset the match index to 0 so the counter stuck at 2/N.
+    var issuedSearch by remember(base64Docx) { mutableStateOf(InViewerSearchCommandPolicy.Issued()) }
+    fun retryDocxRender() {
+        pureKotlinFallback = null
+        fallbackReason = null
+        isWebViewLoading = true
+        issuedSearch = InViewerSearchCommandPolicy.Issued()
+        docxReloadKey++
+    }
+    // Display-frame throttle (~30/s) for the pinch preview path (Bug E: coalescing).
+    var lastDisplayDispatchNanos by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    val context = LocalContext.current
+    val latestSearchResultCallback = androidx.compose.runtime.rememberUpdatedState(onSearchResultCount)
+    val latestPageChangedCallback = androidx.compose.runtime.rememberUpdatedState(onPageChanged)
+    val latestDocumentReadyCallback = androidx.compose.runtime.rememberUpdatedState(onDocumentReady)
+    val latestWebViewCreatedCallback = androidx.compose.runtime.rememberUpdatedState(onWebViewCreated)
+    val latestSingleTapCallback = androidx.compose.runtime.rememberUpdatedState(onSingleTap)
+    val latestPinchZoomCallback = androidx.compose.runtime.rememberUpdatedState(onPinchZoom)
+    val latestPinchSettledCallback = androidx.compose.runtime.rememberUpdatedState(onPinchSettled)
+    val latestDoubleTapCallback = androidx.compose.runtime.rememberUpdatedState(onDoubleTap)
+    val latestRendererFallbackCallback = androidx.compose.runtime.rememberUpdatedState(onRendererFallback)
+    // Fresh values for the WebViewClient closures created once in the factory: reading
+    // them at callback time prevents a stale initial zoom/theme being re-applied after
+    // the document finishes loading (Loop 10).
+    val latestZoomForPageLoad = androidx.compose.runtime.rememberUpdatedState(zoomFactor)
+    val latestNightModeForPageLoad = androidx.compose.runtime.rememberUpdatedState(isNightMode)
 
-    LaunchedEffect(scrollToPage) {
-        if (scrollToPage != null) {
-            val pageNum = scrollToPage + 1
-            webViewRef?.evaluateJavascript("if (typeof window.scrollToPage === 'function') { window.scrollToPage($pageNum); }", null)
+    // Loop 12 (Bug B): query changes search exactly once; arrow presses issue only
+    // next/prev deltas, so all N matches stay reachable in both directions.
+    LaunchedEffect(webViewRef, isWebViewLoading, searchQuery, searchTriggerNext, searchTriggerPrev, pureKotlinFallback) {
+        val webView = webViewRef
+        if (webView != null && !isWebViewLoading && pureKotlinFallback == null) {
+            val plan = InViewerSearchCommandPolicy.plan(issuedSearch, searchQuery, searchTriggerNext, searchTriggerPrev)
+            if (!plan.isEmpty) {
+                if (plan.search && issuedSearch.query != null) {
+                    // Debounce rapid typing before re-highlighting the whole DOM.
+                    kotlinx.coroutines.delay(150)
+                    if (!kotlin.coroutines.coroutineContext.isActive) return@LaunchedEffect
+                }
+                val script = buildString {
+                    if (plan.search) {
+                        append("searchWord(${org.json.JSONObject.quote(searchQuery)});")
+                    }
+                    repeat(plan.nextSteps) { append("nextSearchMatch();") }
+                    repeat(plan.prevSteps) { append("prevSearchMatch();") }
+                }
+                webView.evaluateJavascript(script, null)
+            }
+            // Always advance the ledger — including no-op plans, so a trigger counter
+            // reset (file change / find closed) is absorbed instead of replayed.
+            issuedSearch = plan.issued
+        }
+    }
+    LaunchedEffect(webViewRef, isWebViewLoading, isNightMode, pureKotlinFallback) {
+        if (webViewRef != null && !isWebViewLoading && pureKotlinFallback == null) {
+            webViewRef?.evaluateJavascript("setDarkMode($isNightMode);", null)
+        }
+    }
+    // Loop 12 (Bug A): two-phase zoom pipeline.
+    //  - pinchActive == true  -> setZoomDisplay(): compositor-only transform preview,
+    //    throttled to ~30 dispatches/s so a large DOCX stops re-laying-out per frame.
+    //  - pinchActive == false -> setZoom(): the authoritative commit (toolbar +/-,
+    //    percentage dialog, page load, and the settle transition after a pinch).
+    LaunchedEffect(webViewRef, isWebViewLoading, zoomFactor, pinchActive, pureKotlinFallback) {
+        val webView = webViewRef
+        if (webView != null && !isWebViewLoading && pureKotlinFallback == null) {
+            if (pinchActive) {
+                val now = android.os.SystemClock.elapsedRealtimeNanos()
+                if (now - lastDisplayDispatchNanos < 33_000_000L) return@LaunchedEffect
+                lastDisplayDispatchNanos = now
+                webView.evaluateJavascript("setZoomDisplay($zoomFactor);", null)
+            } else {
+                lastDisplayDispatchNanos = 0L
+                webView.evaluateJavascript("setZoom($zoomFactor);", null)
+            }
+        }
+    }
+    LaunchedEffect(webViewRef, isWebViewLoading, scrollToPage, pureKotlinFallback) {
+        if (webViewRef != null && !isWebViewLoading && pureKotlinFallback == null && scrollToPage != null) {
+            webViewRef?.evaluateJavascript("scrollToPage(${scrollToPage + 1});", null)
             onScrollProgressHandled()
         }
     }
 
     Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
         if (pureKotlinFallback != null) {
-            // High-fidelity Pure Kotlin Offline Text Viewer Fallback
             val extracted = pureKotlinFallback!!
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Loop 14: labeled recovery/error state — the extracted text must never
+                // masquerade as a successful formatted preview (the old "Clean Document
+                // View" banner looked like a feature, not a failure).
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    modifier = Modifier.padding(bottom = 12.dp)
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = .5f),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
-                    Text(
-                        text = "Clean Document View • ${extracted.wordCount} words • ${extracted.paragraphCount} paragraphs",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
-
-                if (extracted.paragraphs.isEmpty()) {
-                    Text(
-                        text = "No text content found in this DOCX file.",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                } else {
-                    for (paragraph in extracted.paragraphs) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                         Text(
-                            text = paragraph,
-                            fontSize = 15.sp,
-                            lineHeight = 22.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(bottom = 12.dp)
+                            text = com.example.ui.screens.DocxTextRecovery.bannerHeadline(),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
                         )
+                        com.example.ui.screens.DocxTextRecovery.displayReason(fallbackReason)?.let { reason ->
+                            Text(
+                                text = reason,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = .75f),
+                                maxLines = 2
+                            )
+                        }
+                        com.example.ui.screens.DocxTextRecovery
+                            .statsLabel(extracted.wordCount, extracted.paragraphCount)?.let { stats ->
+                                Text(
+                                    text = stats,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = .75f)
+                                )
+                            }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                            // Retry rebuilds the WebView and re-runs the real renderer;
+                            // the source document is never modified.
+                            TextButton(
+                                onClick = { retryDocxRender() },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                            ) { Text("Retry formatted view", fontSize = 12.sp) }
+                        }
                     }
+                }
+                if (extracted.paragraphs.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No text content could be recovered from this DOCX file.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                    }
+                } else {
+                    PlainTextPreview(
+                        content = extracted.paragraphs.joinToString("\n\n"),
+                        isDarkMode = isNightMode,
+                        fontSizeSetting = "Default",
+                        searchQuery = searchQuery,
+                        searchTriggerNext = searchTriggerNext,
+                        searchTriggerPrev = searchTriggerPrev,
+                        onSearchResultCount = onSearchResultCount,
+                        onSingleTap = onSingleTap,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         } else {
-            AndroidView(
-                factory = { ctx ->
-                    android.webkit.WebView(ctx).apply {
-                        webViewRef = this
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            allowFileAccess = true
-                            allowContentAccess = true
-                            @Suppress("DEPRECATION")
-                            allowFileAccessFromFileURLs = true
-                            @Suppress("DEPRECATION")
-                            allowUniversalAccessFromFileURLs = true
-                            builtInZoomControls = true
-                            displayZoomControls = false
-                            setSupportZoom(true)
-                            useWideViewPort = true
-                            loadWithOverviewMode = true
-                        }
-                        setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
-                        
-                        addJavascriptInterface(object : Any() {
-                            @android.webkit.JavascriptInterface
-                            fun getDocxBase64(): String = base64Docx
+            androidx.compose.runtime.key(base64Docx, docxReloadKey) {
+                AndroidView(
+                    factory = { viewContext ->
+                        // Loop 12 (Bug E): the editor page is now served through the
+                        // WebViewAssetLoader (same mechanism as the PDF reader) so the
+                        // DOCX bytes can be streamed to docx-preview as an ArrayBuffer
+                        // instead of a ~1.33x-larger base64 String crossing the JS bridge
+                        // (which peaked at ~5 simultaneous copies of large documents).
+                        //
+                        // Loop 14 REGRESSION FIX: the editor was previously registered under
+                        // "/editor/" and loaded at /editor/docx_editor.html. WebViewAssetLoader
+                        // hands each handler the path with the registered prefix STRIPPED, so
+                        // AssetsPathHandler tried to open the asset "docx_editor.html" — which
+                        // lives at "editor/docx_editor.html" — and every DOCX open failed the
+                        // main-frame load, silently landing in the plain-text recovery view.
+                        // Registering "/assets/" (the documented pattern, same as the PDF
+                        // reader) makes /assets/editor/docx_editor.html resolve to the real
+                        // asset editor/docx_editor.html. The /docx-src/ stream is unaffected:
+                        // its custom handler receives the stripped suffix "document.docx",
+                        // which is exactly what it matches on.
+                        val docxAssetLoader = androidx.webkit.WebViewAssetLoader.Builder()
+                            .addPathHandler("/assets/", androidx.webkit.WebViewAssetLoader.AssetsPathHandler(context))
+                            .addPathHandler("/docx-src/", object : androidx.webkit.WebViewAssetLoader.PathHandler {
+                                override fun handle(path: String): android.webkit.WebResourceResponse? {
+                                    if (path != "document.docx") return null
+                                    val documentFile = File(fileEntity.path)
+                                    if (!documentFile.isFile) return null
+                                    return runCatching {
+                                        android.webkit.WebResourceResponse(
+                                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                            null,
+                                            200,
+                                            "OK",
+                                            mapOf("Content-Length" to documentFile.length().toString()),
+                                            java.io.FileInputStream(documentFile)
+                                        )
+                                    }.getOrNull()
+                                }
+                            })
+                            .build()
+                        android.webkit.WebView(viewContext).apply {
+                            webViewRef = this
+                            latestWebViewCreatedCallback.value(this)
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                // The asset loader serves both the editor page and the
+                                // document bytes; no raw file scheme access is needed.
+                                allowFileAccess = false
+                                allowContentAccess = false
+                                @Suppress("DEPRECATION")
+                                allowFileAccessFromFileURLs = false
+                                @Suppress("DEPRECATION")
+                                allowUniversalAccessFromFileURLs = false
+                                builtInZoomControls = false
+                                displayZoomControls = false
+                                setSupportZoom(false)
+                                useWideViewPort = true
+                                loadWithOverviewMode = true
+                            }
+                            setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
 
-                            @android.webkit.JavascriptInterface
-                            fun onDocumentLoaded(totalPages: Int) {
-                                post { 
-                                    isWebViewLoading = false
-                                    onPageChanged(1, totalPages)
-                                }
-                            }
-                            @android.webkit.JavascriptInterface
-                            fun onPageChanged(currentPage: Int, totalPages: Int) {
-                                post { 
-                                    onPageChanged(currentPage, totalPages)
-                                }
-                            }
-                            @android.webkit.JavascriptInterface
-                            fun onDocumentError(error: String) {
-                                post { 
-                                    isWebViewLoading = false
-                                    android.util.Log.w("WebViewDocx", "Switching to pure Kotlin DOCX reader: $error")
-                                    val ext = com.example.core.format.DocxExtractor.extractText(java.io.File(fileEntity.path))
-                                    if (ext.paragraphs.isNotEmpty()) {
-                                        pureKotlinFallback = ext
-                                    } else {
-                                        android.widget.Toast.makeText(context, "DOCX Notice: $error", android.widget.Toast.LENGTH_SHORT).show()
+                            val pageChangedCallback = latestPageChangedCallback
+                            addJavascriptInterface(object : Any() {
+                                private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+                                @android.webkit.JavascriptInterface
+                                fun getDocxBase64(): String = base64Docx
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentLoaded(totalPages: Int) {
+                                    mainHandler.post {
+                                        isWebViewLoading = false
+                                        latestDocumentReadyCallback.value()
+                                        pageChangedCallback.value(1, totalPages)
                                     }
                                 }
-                            }
-                            @android.webkit.JavascriptInterface
-                            fun exitWithoutSaving() {
-                                post { 
-                                    viewModel.closeCurrentFile()
+
+                                @android.webkit.JavascriptInterface
+                                fun onPageChanged(currentPage: Int, totalPages: Int) {
+                                    mainHandler.post { pageChangedCallback.value(currentPage, totalPages) }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onSearchResultCount(count: Int, currentIndex: Int, truncated: Boolean) {
+                                    mainHandler.post { latestSearchResultCallback.value(count, currentIndex, truncated) }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentTap() {
+                                    mainHandler.post { latestSingleTapCallback.value() }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentDoubleTap() {
+                                    mainHandler.post { latestDoubleTapCallback.value() }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentError(error: String) {
+                                    mainHandler.post {
+                                        isWebViewLoading = false
+                                        android.util.Log.w("WebViewDocx", "Switching to text-only DOCX preview: $error")
+                                        val extracted = runCatching {
+                                            com.example.core.format.DocxExtractor.extractText(File(fileEntity.path))
+                                        }.getOrNull()
+                                        // Loop 14: always enter the labeled recovery state (even with
+                                        // zero recovered paragraphs) so a failed render is never left
+                                        // as a silent blank surface or a deceptively normal preview.
+                                        fallbackReason = error.take(180)
+                                        pureKotlinFallback = extracted
+                                        latestRendererFallbackCallback.value(true)
+                                    }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun exitWithoutSaving() {
+                                    mainHandler.post { viewModel.closeCurrentFile() }
+                                }
+                            }, "Android")
+
+                            webViewClient = object : android.webkit.WebViewClient() {
+                                override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                    // Apply the CURRENT zoom factor (not a stale factory-time
+                                    // capture) BEFORE loadDocx so the document never flashes at
+                                    // 100% before settling on the preferred zoom. Loop 12: the
+                                    // bytes are streamed by the page itself (loadDocx(null, ...));
+                                    // the bridge base64 path is only the in-page fallback.
+                                    val freshZoom = latestZoomForPageLoad.value
+                                    val freshNightMode = latestNightModeForPageLoad.value
+                                    view?.evaluateJavascript(
+                                        "setZoom($freshZoom); loadDocx(null, $freshNightMode);",
+                                        null
+                                    )
+                                }
+
+                                override fun shouldOverrideUrlLoading(
+                                    view: android.webkit.WebView?,
+                                    request: android.webkit.WebResourceRequest?
+                                ): Boolean {
+                                    val uri = request?.url ?: return true
+                                    val localEditorAsset = uri.scheme == "https" &&
+                                        uri.host == "appassets.androidplatform.net" &&
+                                        (uri.path?.startsWith("/assets/editor/") == true || uri.path?.startsWith("/docx-src/") == true)
+                                    return !localEditorAsset
+                                }
+
+                                override fun shouldInterceptRequest(
+                                    view: android.webkit.WebView?,
+                                    request: android.webkit.WebResourceRequest?
+                                ): android.webkit.WebResourceResponse? {
+                                    return request?.url?.let { docxAssetLoader.shouldInterceptRequest(it) }
+                                }
+
+                                override fun onReceivedError(
+                                    view: android.webkit.WebView?,
+                                    request: android.webkit.WebResourceRequest?,
+                                    error: android.webkit.WebResourceError?
+                                ) {
+                                    super.onReceivedError(view, request, error)
+                                    if (request?.isForMainFrame == true) {
+                                        android.util.Log.e("WebViewDocx", "Error: ${error?.description}")
+                                        val extracted = runCatching {
+                                            com.example.core.format.DocxExtractor.extractText(File(fileEntity.path))
+                                        }.getOrNull()
+                                        // Loop 14: honest recovery state with the failure reason
+                                        // (the Loop 12 /editor/ registration 404 surfaced HERE).
+                                        view?.post {
+                                            fallbackReason = error?.description?.toString()?.take(180)
+                                                ?: "The preview page could not be loaded."
+                                            pureKotlinFallback = extracted
+                                            latestRendererFallbackCallback.value(true)
+                                            isWebViewLoading = false
+                                        }
+                                    }
+                                }
+
+                                // Loop 12 (Bug C/E): a WebView renderer crash must degrade
+                                // to the text-only fallback instead of killing the app or
+                                // leaving a dead blank surface. Returning true tells Android
+                                // this app handled the loss.
+                                override fun onRenderProcessGone(
+                                    view: android.webkit.WebView,
+                                    detail: android.webkit.RenderProcessGoneDetail
+                                ): Boolean {
+                                    android.util.Log.e(
+                                        "WebViewDocx",
+                                        "Renderer process gone (crashed=${detail.didCrash()}); switching to text-only preview"
+                                    )
+                                    view.post {
+                                        val extracted = runCatching {
+                                            com.example.core.format.DocxExtractor.extractText(File(fileEntity.path))
+                                        }.getOrNull()
+                                        fallbackReason = "The document renderer stopped unexpectedly."
+                                        pureKotlinFallback = extracted
+                                        latestRendererFallbackCallback.value(true)
+                                        isWebViewLoading = false
+                                    }
+                                    return true
+                                }
+
+                                override fun onReceivedHttpError(
+                                    view: android.webkit.WebView?,
+                                    request: android.webkit.WebResourceRequest?,
+                                    errorResponse: android.webkit.WebResourceResponse?
+                                ) {
+                                    super.onReceivedHttpError(view, request, errorResponse)
+                                    android.util.Log.e("WebViewDocx", "HTTP Error: ${errorResponse?.statusCode}")
                                 }
                             }
-                        }, "Android")
-                        
-                        webViewClient = object : android.webkit.WebViewClient() {
-                            override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
-                                view?.evaluateJavascript("loadDocx(window.Android.getDocxBase64(), $isNightMode);", null)
-                            }
-                            override fun onReceivedError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, error: android.webkit.WebResourceError?) {
-                                super.onReceivedError(view, request, error)
-                                android.util.Log.e("WebViewDocx", "Error: ${error?.description}")
-                                val ext = com.example.core.format.DocxExtractor.extractText(java.io.File(fileEntity.path))
-                                if (ext.paragraphs.isNotEmpty()) {
-                                    post { pureKotlinFallback = ext; isWebViewLoading = false }
+                            webChromeClient = object : android.webkit.WebChromeClient() {
+                                override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                                    android.util.Log.d("WebViewDocx", "${consoleMessage?.message()} -- From line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
+                                    return true
                                 }
                             }
-                            override fun onReceivedHttpError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, errorResponse: android.webkit.WebResourceResponse?) {
-                                super.onReceivedHttpError(view, request, errorResponse)
-                                android.util.Log.e("WebViewDocx", "HTTP Error: ${errorResponse?.statusCode}")
+                            loadUrl("https://appassets.androidplatform.net/assets/editor/docx_editor.html")
+                        }
+                    },
+                    update = { webView ->
+                        webViewRef = webView
+                        latestWebViewCreatedCallback.value(webView)
+                        webView.setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+                    },
+                    // Loop 12 (Bug E): destroying the WebView when its node leaves
+                    // composition prevents stale instances (and their render processes)
+                    // from retaining the file context after a file switch.
+                    onRelease = { webView ->
+                        webViewRef = null
+                        webView.destroy()
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // Pinch-to-zoom interception: two-finger gestures drive the shared
+                        // docxZoomFactor -> setZoom() pipeline; single-finger scroll passes
+                        // through to the WebView untouched. Loop 10: the gate discards the
+                        // transition event (mixed pointer history -> bogus first delta that
+                        // slammed zoom into the clamp) and only forwards deltas from a
+                        // confirmed, stable multi-touch gesture.
+                        .pointerInput(Unit) {
+                            val gate = PinchGestureGate()
+                            awaitPointerEventScope {
+                                while (true) {
+                                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                    do {
+                                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                                        val pressed = event.changes.filter { it.pressed }
+                                        if (pressed.size >= 2) {
+                                            val zoomChange = event.calculateZoom()
+                                            val gatedDelta = gate.onPointerEvent(pressed.size, zoomChange)
+                                            if (gatedDelta != null) latestPinchZoomCallback.value(gatedDelta)
+                                            event.changes.forEach { change ->
+                                                if (change.pressed) change.consume()
+                                            }
+                                        } else {
+                                            // Single pointer (or all lifted): keep the gate
+                                            // disarmed and let scroll/selection work untouched.
+                                            gate.onPointerEvent(pressed.size, 1f)
+                                        }
+                                    } while (event.changes.any { it.pressed })
+                                    gate.reset()
+                                    // Loop 12 (Bug A): the pinch stream ended — tell the zoom
+                                    // pipeline to commit the displayed factor with ONE CSS
+                                    // zoom application (single re-layout, scroll preserved).
+                                    latestPinchSettledCallback.value()
+                                }
                             }
                         }
-                        webChromeClient = object : android.webkit.WebChromeClient() {
-                            override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
-                                android.util.Log.d("WebViewDocx", "${consoleMessage?.message()} -- From line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
-                                return super.onConsoleMessage(consoleMessage)
-                            }
-                        }
-                        loadUrl("file:///android_asset/editor/docx_editor.html")
-                    }
-                },
-                update = { webView ->
-                    // No-op
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+                )
+            }
 
             if (isWebViewLoading) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
+                    modifier = Modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
                     contentAlignment = Alignment.Center
                 ) {
                     com.example.ui.component.PremiumLoadingIndicator(text = "Rendering Document...")
@@ -3879,3 +5343,13 @@ fun PptxPreviewWebView(
     }
 }
 
+
+/** Unwrap themed/Compose context wrappers to reach the host Activity for orientation requests. */
+private fun Context.findHostActivity(): Activity? {
+    var current: Context? = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return current as? Activity
+}

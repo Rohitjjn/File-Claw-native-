@@ -24,3 +24,10 @@ Scope: code review of the full v1.0 source plus the v1.1.0 changes. No dynamic t
 | 18 | Bundled JS libraries unpinned/unlicensed notice | Low | Notices added; license verification open |
 
 Residual risk notes: WebView renderers parse hostile DOCX/PPTX in JS; the mitigation is no network and no bridge capabilities beyond view callbacks.
+
+## Loop 6 review notes (static review only; no device test)
+- PDF.js 4.10.38 and its worker/CMaps/fonts are bundled locally. The PDF viewer serves only `/assets/` from app assets and the requested `document.pdf` through an exact path check; PDF WebView file/content access remains disabled, and top-level navigation is limited to those local reader/source paths. The trusted local reader uses a JavaScript bridge for page/search/password/tap callbacks. No remote assets or `INTERNET` permission were added.
+- TXT preview HTML escapes source text; Markdown HTML is sanitized. Their local JavaScript bridge is limited to code-copy and reader callbacks. External navigation from those generated previews is blocked.
+- DOCX keeps file access enabled only to load `android_asset/editor/` resources; content access, cross-file access, and universal file access are disabled. Top-level navigation outside the editor asset path is blocked. The bridge exposes DOCX bytes plus view/search callbacks; it does not expose file writes.
+- Large TXT/Markdown search streams the original file and retains bounded hit offsets; it does not load the complete source into the WebView. Print/copy use a bounded character load with an error on overflow. This does not remove parser/renderer risks for hostile document contents.
+- Java/Kotlin compilation and dynamic Android/WebView security checks were not run in this sandbox. Confirm `INTERNET` permission, asset interception, navigation blocking, and memory bounds on a built app before release.

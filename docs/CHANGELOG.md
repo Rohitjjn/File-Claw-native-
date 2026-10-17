@@ -4,6 +4,24 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [Unreleased] Loop 6 — PDF, DOCX, TXT, Markdown reader improvements
+
+### Added
+- Bundled PDF.js 4.10.38 locally with its worker, CMaps, standard fonts, and license notices. Added an offline `WebViewAssetLoader` reader with whole-document PDF text search/highlights, page navigation/bookmarks, password callbacks, reader-style dark canvas, and PrintManager export; search distinguishes the exact match count from retained navigation hits. Removed the obsolete unbounded base64 PDF branch from the generic WebView preview.
+- Added shared local TXT/Markdown search/highlight and fenced-code copy controls. TXT fence parsing now supports both backtick and tilde fences and only copies the code body.
+- Added bounded-memory `TextFileSearchEngine` for truncated TXT/Markdown files: it scans the whole file, retains at most 10,000 navigable byte offsets, and loads a bounded excerpt for each selected match. Added unit tests for buffer-boundary, newline, Unicode, UTF-16, result-cap, cancellation, and code-fence cases; tests were not run here.
+- Added exact DOCX zoom percent entry/reset alongside the 25%–500% slider and 100% default. Search, theme, and zoom operate on the rendered document; print uses the rendered WebView when ready and an extractor fallback otherwise.
+
+### Fixed / changed
+- TXT/Markdown preview, print, and copy no longer load a truncated large file wholesale into memory. Large-file print/copy use a 2,000,000-character cap and show a visible error instead of silently using the current excerpt. Printed DOCX/TXT titles and body text are HTML-escaped.
+- Immersive preview draws under the system bars, uses reader-canvas theme for system-bar icon contrast, and hides the search overlay while focus controls are hidden. DOCX local assets no longer receive cross-file/universal file access, and external top-level navigation is blocked.
+- Organized historical prompt files under `docs/prompts/` with loop-identifying names; removed the exact duplicate `NEXT_PROMPT.md`; created `docs/prompts/LOOP_07_PROMPT.md` for the same four formats.
+
+### Verification
+- **Passed:** `git diff --check`; Node.js 22.22.3 syntax checks for extracted PDF.js reader scripts, DOCX script, TXT/Markdown shared script, and bundled PDF.js modules; Python lexical delimiter sanity on 11 changed/added Kotlin files (not a compiler check).
+- **Not run:** Android/Gradle build, Kotlin compilation, unit tests, lint/detekt, emulator/device tests, actual PrintManager preview/export, performance benchmarks. `java` and `kotlinc` were missing, `ANDROID_HOME` was unset, and the wrapper is not executable in this checkout; invoking it through `bash` failed because Java is unavailable. No performance numbers were measured.
+- Arena Agent Mode did not expose the underlying model identifier. Hermes Agent was inspected but not cloned, installed, or run; no multi-agent team ran.
+
 ## [1.4.0] "DOCX Engine Fix, Glass Properties Sheet & PDF Resume": versionCode 6
 
 ### Fixed

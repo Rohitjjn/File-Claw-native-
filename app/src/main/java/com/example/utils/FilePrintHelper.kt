@@ -28,6 +28,13 @@ object FilePrintHelper {
     private val activeWebViews = mutableSetOf<WebView>()
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    private fun escapeHtml(text: String): String = text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;")
+
     fun printPdf(
         context: Context,
         pdfFile: File,
@@ -134,16 +141,14 @@ object FilePrintHelper {
             try {
                 val extracted = com.example.core.format.DocxExtractor.extractText(docxFile)
                 val paragraphsHtml = extracted.paragraphs.joinToString("\n") { p ->
-                    val escaped = p
-                        .replace("&", "&amp;")
-                        .replace("<", "&lt;")
-                        .replace(">", "&gt;")
+                    val escaped = escapeHtml(p)
                     if (p.startsWith("#") || p.length < 50 && !p.endsWith(".")) {
                         "<h3>$escaped</h3>"
                     } else {
                         "<p>$escaped</p>"
                     }
                 }
+                val escapedTitle = escapeHtml(title)
 
                 val html = """
                     <!DOCTYPE html>
@@ -164,7 +169,7 @@ object FilePrintHelper {
                         </style>
                     </head>
                     <body>
-                        <h2>$title</h2>
+                        <h2>$escapedTitle</h2>
                         $paragraphsHtml
                     </body>
                     </html>
@@ -278,15 +283,17 @@ object FilePrintHelper {
         content: String,
         title: String
     ) {
-        val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager ?: return
+        val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
+        if (printManager == null) {
+            android.widget.Toast.makeText(context, "Print service is not available on this device", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
         mainHandler.post {
             val tempWebView = WebView(context)
             activeWebViews.add(tempWebView)
 
-            val escaped = content
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
+            val escaped = escapeHtml(content)
+            val escapedTitle = escapeHtml(title)
 
             val html = """
                 <!DOCTYPE html>
@@ -324,7 +331,7 @@ object FilePrintHelper {
                     </style>
                 </head>
                 <body>
-                    <h2>$title</h2>
+                    <h2>$escapedTitle</h2>
                     <hr>
                     <pre>$escaped</pre>
                 </body>

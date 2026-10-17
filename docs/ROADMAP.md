@@ -11,6 +11,14 @@ Full support matrix: `FILE_FORMATS.md` (generated from the code).
 | 1.4.0 | Legacy `.doc`, RAR, GLB/PLY/DXF, CJK charsets | ⏳ |
 | 2.0.0 | Streaming renderers (no base64 hand-off), Macrobenchmark-gated performance budget | ⏳ |
 
+## Current preview work (Loop 6, pending Android verification)
+- Scope: PDF, DOCX, TXT, and Markdown only. The working branch adds offline PDF.js reader/search/print, DOCX search/theme/zoom/print improvements, TXT/Markdown fenced-code copy, whole-file text search with bounded excerpts, and print/export wiring for all four formats.
+- Static JavaScript and whitespace checks passed; Android compilation, unit tests, emulator/device checks, and actual print/export were not available in the authoring sandbox. See `TODO.md` → KNOWN ISSUES and the Unreleased changelog entry.
+
+## Proposed next loop (Loop 7)
+- Keep the same four-format scope. Priorities: true paged/virtualized TXT/Markdown reading beyond the initial window; Markdown syntax context across page boundaries; navigation beyond the 10,000 retained large-file search offsets; DOCX search across styled text runs; and device verification of PDF/DOCX/TXT/Markdown printing, dark mode, zoom, and immersive mode.
+- Prompt: `docs/prompts/LOOP_07_PROMPT.md`.
+
 ## Format highlights
 | Area | ✅ done | 🔄 partial | ⏳ planned |
 |---|---|---|---|

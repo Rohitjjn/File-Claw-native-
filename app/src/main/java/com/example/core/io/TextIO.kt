@@ -95,8 +95,21 @@ object TextLoader {
             }
             val detected = TextEncoding.detect(head, n)
             val explicit = TextEncoding.resolve(requested)
-            val charset = explicit ?: detected.charset
-            val hadBom = detected.bomLength > 0 && (explicit == null || explicit == detected.charset)
+            val explicitMatchesDetected = explicit == detected.charset || when (explicit?.name()?.uppercase()) {
+                "UTF-16" -> detected.charset.name().uppercase().startsWith("UTF-16")
+                "UTF-32" -> detected.charset.name().uppercase().startsWith("UTF-32")
+                else -> false
+            }
+            val explicitName = explicit?.name()?.uppercase()
+            val charset = when {
+                explicit == null || explicitMatchesDetected -> detected.charset
+                explicitName == "UTF-16" && detected.charset.name().uppercase().startsWith("UTF-16") -> detected.charset
+                explicitName == "UTF-16" -> Charset.forName("UTF-16BE")
+                explicitName == "UTF-32" && detected.charset.name().uppercase().startsWith("UTF-32") -> detected.charset
+                explicitName == "UTF-32" -> Charset.forName("UTF-32BE")
+                else -> explicit ?: detected.charset
+            }
+            val hadBom = detected.bomLength > 0 && (explicit == null || explicitMatchesDetected)
 
             val sb = StringBuilder(minOf(maxChars, (total.coerceAtMost(Int.MAX_VALUE.toLong())).toInt() + 16))
             var truncated = false
@@ -140,9 +153,9 @@ object TextSaver {
 data class TextWindow(val text: String, val startByte: Long, val endByte: Long, val hasMore: Boolean, val hasPrevious: Boolean)
 
 /**
- * Reads a byte range of a huge file without loading the rest. Intended for UTF-8 / single-byte text:
- * the start is advanced past any UTF-8 continuation bytes and the end is trimmed back to the last
- * newline so pages never split a character or (normally) a line.
+ * Reads a bounded byte range of a huge file without loading the rest. UTF-8 and single-byte text
+ * are line-aligned when possible; UTF-16/UTF-32 windows retain code-unit boundaries. Match offsets
+ * may begin mid-line so a search result can be placed at the start of the returned window.
  */
 object TextWindowReader {
 
@@ -150,29 +163,100 @@ object TextWindowReader {
         require(startByte >= 0 && maxBytes > 0) { "bad window" }
         val total = file.length()
         if (startByte >= total) return TextWindow("", total, total, hasMore = false, hasPrevious = total > 0)
-        val want = minOf(maxBytes.toLong() + 4, total - startByte).toInt()
+
+        val charsetName = charset.name().uppercase()
+        val unitBytes = when (charsetName) {
+            "UTF-16", "UTF-16LE", "UTF-16BE" -> 2
+            "UTF-32", "UTF-32LE", "UTF-32BE" -> 4
+            else -> 1
+        }
+        val alignedStart = if (unitBytes > 1) startByte - startByte % unitBytes else startByte
+        val from = (startByte - alignedStart).toInt()
+        val requested = maxOf(maxBytes, unitBytes).toLong() + unitBytes + 4
+        val want = minOf(requested, total - alignedStart, Int.MAX_VALUE.toLong()).toInt()
         val buf = ByteArray(want)
         java.io.RandomAccessFile(file, "r").use { raf ->
-            raf.seek(startByte)
+            raf.seek(alignedStart)
             raf.readFully(buf)
         }
-        var from = 0
-        if (charset == Charsets.UTF_8) {
-            while (from < buf.size && from < 4 && startByte > 0 && (buf[from].toInt() and 0xC0) == 0x80) from++
+
+        if (unitBytes == 1 && charsetName == "UTF-8") {
+            var skipped = 0
+            while (from + skipped < buf.size && skipped < 4 && startByte > 0 && (buf[from + skipped].toInt() and 0xC0) == 0x80) skipped++
+            // Search hits should begin at code-point boundaries; retain a guard for arbitrary callers.
+            if (skipped > 0) return read(file, startByte + skipped, maxBytes, charset)
         }
-        var to = minOf(buf.size, from + maxBytes)
-        val reachedEof = startByte + to >= total
+
+        var to = minOf(buf.size.toLong(), from.toLong() + maxOf(maxBytes, unitBytes)).toInt()
+        if (unitBytes > 1) {
+            to = from + ((to - from) / unitBytes) * unitBytes
+            if (to == from && buf.size >= from + unitBytes) to = from + unitBytes
+        }
+        val reachedEof = alignedStart + to >= total
         if (!reachedEof) {
-            var nl = to - 1
-            while (nl > from && buf[nl] != '\n'.code.toByte()) nl--
-            if (nl > from) to = nl + 1 else if (charset == Charsets.UTF_8) {
-                while (to > from && (buf[to - 1].toInt() and 0xC0) == 0x80) to--
-                if (to > from && (buf[to - 1].toInt() and 0xC0) == 0xC0) to--
+            val newline = findLastNewline(buf, from, to, unitBytes, charsetName)
+            if (newline >= from) {
+                to = newline + unitBytes
+            } else if (unitBytes == 1 && charsetName == "UTF-8") {
+                var sequenceStart = to - 1
+                while (sequenceStart > from && (buf[sequenceStart].toInt() and 0xC0) == 0x80) sequenceStart--
+                val lead = buf[sequenceStart].toInt() and 0xFF
+                val expectedLength = when {
+                    (lead and 0x80) == 0 -> 1
+                    (lead and 0xE0) == 0xC0 -> 2
+                    (lead and 0xF0) == 0xE0 -> 3
+                    (lead and 0xF8) == 0xF0 -> 4
+                    else -> 1
+                }
+                if (to - sequenceStart < expectedLength) to = sequenceStart
             }
         }
+
+        if (unitBytes == 2 && to - from >= 2) {
+            val decoded = String(buf, from, to - from, charset)
+            if (decoded.isNotEmpty() && Character.isHighSurrogate(decoded.last())) to -= 2
+        }
+        if (to <= from && buf.size > from) {
+            if (unitBytes == 1 && charsetName == "UTF-8") {
+                val lead = buf[from].toInt() and 0xFF
+                val characterLength = when {
+                    (lead and 0x80) == 0 -> 1
+                    (lead and 0xE0) == 0xC0 -> 2
+                    (lead and 0xF0) == 0xE0 -> 3
+                    (lead and 0xF8) == 0xF0 -> 4
+                    else -> 1
+                }
+                if (from + characterLength <= buf.size) to = from + characterLength
+            } else if (buf.size >= from + unitBytes) {
+                to = from + unitBytes
+            }
+        }
+
         val text = String(buf, from, to - from, charset)
-        val start = startByte + from
-        val end = startByte + to
+        val start = alignedStart + from
+        val end = alignedStart + to
         return TextWindow(text, start, end, hasMore = end < total, hasPrevious = start > 0)
+    }
+
+    private fun findLastNewline(buf: ByteArray, from: Int, to: Int, unitBytes: Int, charsetName: String): Int {
+        var index = to - unitBytes
+        while (index >= from) {
+            val isNewline = when (unitBytes) {
+                1 -> buf[index] == '\n'.code.toByte()
+                2 -> if (charsetName.endsWith("LE")) {
+                    buf[index] == '\n'.code.toByte() && index + 1 < to && buf[index + 1] == 0.toByte()
+                } else {
+                    buf[index] == 0.toByte() && index + 1 < to && buf[index + 1] == '\n'.code.toByte()
+                }
+                else -> if (charsetName.endsWith("LE")) {
+                    buf[index] == '\n'.code.toByte() && buf[index + 1] == 0.toByte() && buf[index + 2] == 0.toByte() && buf[index + 3] == 0.toByte()
+                } else {
+                    buf[index] == 0.toByte() && buf[index + 1] == 0.toByte() && buf[index + 2] == 0.toByte() && buf[index + 3] == '\n'.code.toByte()
+                }
+            }
+            if (isNewline) return index
+            index -= unitBytes
+        }
+        return -1
     }
 }

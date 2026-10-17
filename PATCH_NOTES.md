@@ -27,5 +27,8 @@ The Android layer of this patch was written in a sandbox with no Android SDK and
 4. HTML preview has **scripts off** until you tap "Run scripts". 5. Files opened from other apps are edited as an **in-app copy** (you're told on save).
 6. App backup is disabled. 7. Splash is shorter (500 → 150 ms).
 
-## Files added at the root
-`BUILD_GUIDE.md`, `PATCH_NOTES.md`, `NEXT_PROMPT.md` (original v1 prompt), `NEXT_LOOP_PROMPT_v2.md` (evolved prompt), `THIRD_PARTY_NOTICES.md`, `tools/`, `config/`, `.github/workflows/ci.yml`.
+## Files added at the root (historical v1.1.0 snapshot)
+`BUILD_GUIDE.md`, `PATCH_NOTES.md`, the then-current prompt files, `THIRD_PARTY_NOTICES.md`, `tools/`, `config/`, `.github/workflows/ci.yml`.
+
+## Later prompt archive update
+The historical Cycle 2/3 prompts are now stored under `docs/prompts/` as `LOOP_02_PROMPT.md` and `LOOP_03_PROMPT.md`. The former root `NEXT_PROMPT.md` was removed because it was an exact duplicate of the old v3 prompt. See `docs/prompts/README.md` for the current Loop 7 handoff.

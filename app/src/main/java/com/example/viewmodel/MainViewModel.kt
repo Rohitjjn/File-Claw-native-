@@ -84,9 +84,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadSearchTermsHistory() {
         val prefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
         val historyStr = prefs.getString("search_terms_history", "") ?: ""
-        if (historyStr.isNotEmpty()) {
-            _searchTermsHistory.value = historyStr.split("|*|")
+        if (historyStr.isEmpty()) return
+        _searchTermsHistory.value = parseSearchTermsHistory(historyStr)
+    }
+
+    /** Reads the JSON-array format (v1.3.0+), falling back to the legacy "|*|"-joined format. */
+    private fun parseSearchTermsHistory(raw: String): List<String> {
+        return try {
+            val json = org.json.JSONArray(raw)
+            buildList {
+                for (index in 0 until json.length()) {
+                    val term = json.optString(index)
+                    if (term.isNotEmpty()) add(term)
+                }
+            }
+        } catch (_: org.json.JSONException) {
+            raw.split("|*|").filter { it.isNotEmpty() }
         }
+    }
+
+    private fun persistSearchTermsHistory(current: List<String>) {
+        val prefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        val json = org.json.JSONArray()
+        current.forEach { json.put(it) }
+        prefs.edit().putString("search_terms_history", json.toString()).apply()
+    }
+
+    fun clearSearchTermsHistory() {
+        _searchTermsHistory.value = emptyList()
+        persistSearchTermsHistory(emptyList())
     }
 
     fun addSearchTermToHistory(term: String) {
@@ -98,16 +124,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             current.removeAt(current.size - 1)
         }
         _searchTermsHistory.value = current
-        val prefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putString("search_terms_history", current.joinToString("|*|")).apply()
+        persistSearchTermsHistory(current)
     }
 
     fun removeSearchTermFromHistory(term: String) {
         val current = _searchTermsHistory.value.toMutableList()
         current.remove(term)
         _searchTermsHistory.value = current
-        val prefs = getApplication<Application>().getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putString("search_terms_history", current.joinToString("|*|")).apply()
+        persistSearchTermsHistory(current)
     }
 
     init {
@@ -344,6 +368,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _currentFileState = MutableStateFlow<FileContentState>(FileContentState.Idle)
     val currentFileState: StateFlow<FileContentState> = _currentFileState.asStateFlow()
+
+    /**
+     * Inline edit mode for MD/TXT preview: the preview screen stays in place and morphs into an
+     * editor instead of pushing a separate editor route. The draft text itself is intentionally
+     * kept as transient Compose state inside [com.example.ui.screens.FilePreviewScreen] (same
+     * pattern as EditorScreen) so no TextFieldValue ever leaks into the ViewModel.
+     */
+    private val _isEditMode = MutableStateFlow(false)
+    val isEditMode: StateFlow<Boolean> = _isEditMode.asStateFlow()
+
+    /** Enters inline edit mode for the currently open text file. Returns false when not allowed. */
+    fun enterEditMode(): Boolean {
+        val current = _currentFileState.value as? FileContentState.TextSuccess ?: return false
+        if (!current.editable) return false
+        _isEditMode.value = true
+        return true
+    }
+
+    /** Leaves inline edit mode and drops any unconfirmed draft (call only after user confirmation). */
+    fun exitEditMode() {
+        _isEditMode.value = false
+    }
 
     private val _expandedZipPaths = MutableStateFlow<Set<String>>(emptySet())
     val expandedZipPaths: StateFlow<Set<String>> = _expandedZipPaths.asStateFlow()
@@ -1071,6 +1117,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _deviceSearchResults = MutableStateFlow<List<File>>(emptyList())
     val deviceSearchResults: StateFlow<List<File>> = _deviceSearchResults.asStateFlow()
 
+    /** True when the query has more matches than the displayed cap ("showing first N"). */
+    private val _deviceSearchTruncated = MutableStateFlow(false)
+    val deviceSearchTruncated: StateFlow<Boolean> = _deviceSearchTruncated.asStateFlow()
+
     private val _isSearchingDevice = MutableStateFlow(false)
     val isSearchingDevice: StateFlow<Boolean> = _isSearchingDevice.asStateFlow()
 
@@ -1086,6 +1136,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         searchJob?.cancel()
         if (query.trim().isEmpty()) {
             _deviceSearchResults.value = emptyList()
+            _deviceSearchTruncated.value = false
             _isSearchingDevice.value = false
             return
         }
@@ -1103,21 +1154,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     buildStorageIndex()
                 }
 
-                // Gather from indexed snapshot
+                // Gather matches from the indexed snapshot (name-based, no disk IO per file).
                 val currentSnapshot = synchronized(allIndexedFiles) { ArrayList(allIndexedFiles) }
+                var matchCount = 0
+                val candidates = ArrayList<File>(256)
                 for (path in currentSnapshot) {
                     val file = File(path)
                     if (file.name.contains(pattern, ignoreCase = true)) {
-                        resultsList.add(file)
-                        if (resultsList.size >= 150) {
-                            break
+                        matchCount++
+                        // Buffer a small overshoot so relevance ranking can fill the cap
+                        // even after dropping files that no longer exist on disk.
+                        if (candidates.size < 300) {
+                            candidates.add(file)
                         }
                     }
                 }
 
+                // Rank by relevance (exact > prefix > word-boundary > substring), then drop
+                // entries whose files were deleted from storage, then apply the display cap.
+                val ranked = com.example.core.search.FileSearchRanker.rank(
+                    items = candidates.distinctBy { it.absolutePath },
+                    query = pattern,
+                    nameOf = { it.name },
+                    limit = 400
+                )
+                val existing = ranked.filter { it.isFile }
+                resultsList.addAll(existing.take(150))
+
                 // Removed live-scan to use only existing indexes (Room & memory cache)
 
-                _deviceSearchResults.value = resultsList.distinctBy { it.absolutePath }
+                _deviceSearchResults.value = resultsList
+                _deviceSearchTruncated.value = com.example.core.search.FileSearchRanker.isTruncated(matchCount, 150)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {

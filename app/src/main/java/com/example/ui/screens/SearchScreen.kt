@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -20,19 +21,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.core.search.FileSearchRanker
 import com.example.data.RecentFileEntity
 import com.example.ui.component.ClaudeAppBar
 import com.example.ui.component.ClaudeCard
 import com.example.ui.component.FileIcon
+import com.example.ui.component.formatFileSize
 import com.example.ui.component.premiumLoadingPulse
-import com.example.ui.theme.ClaudeMutedText
+import com.example.ui.theme.ClaudeOrangeAccent
 import com.example.viewmodel.MainViewModel
 import java.io.File
 
@@ -47,24 +52,26 @@ import androidx.compose.ui.text.input.ImeAction
 fun SearchScreen(
     viewModel: MainViewModel,
     onBackClick: () -> Unit,
-    onNavigateToPreview: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val searchQuery by viewModel.searchQuery.collectAsState()
     val historyResults by viewModel.recentFilesState.collectAsState()
     val deviceResults by viewModel.deviceSearchResults.collectAsState()
+    val deviceSearchTruncated by viewModel.deviceSearchTruncated.collectAsState()
     val isSearchingDevice by viewModel.isSearchingDevice.collectAsState()
     val isIndexing by viewModel.isIndexing.collectAsState()
     val searchTermsHistory by viewModel.searchTermsHistory.collectAsState()
 
     var showAllHistory by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
+        keyboardController?.show()
         viewModel.triggerStorageIndexRefresh()
     }
-    
+
     DisposableEffect(Unit) {
         onDispose {
             viewModel.updateSearchQuery("")
@@ -100,9 +107,13 @@ fun SearchScreen(
                     Surface(
                         shape = RoundedCornerShape(20.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+                        ),
                         modifier = Modifier
                             .weight(1f)
-                            .height(40.dp)
+                            .height(44.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -111,7 +122,7 @@ fun SearchScreen(
                             Icon(
                                 imageVector = Icons.Outlined.Search,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -134,8 +145,9 @@ fun SearchScreen(
                                         color = MaterialTheme.colorScheme.onSurface
                                     ),
                                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                    keyboardActions = KeyboardActions(onSearch = { 
+                                    keyboardActions = KeyboardActions(onSearch = {
                                         if (searchQuery.isNotBlank()) viewModel.addSearchTermToHistory(searchQuery)
+                                        keyboardController?.hide()
                                     }),
                                     cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                                     modifier = Modifier
@@ -145,11 +157,11 @@ fun SearchScreen(
                             }
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(
-                                    onClick = { 
+                                    onClick = {
                                         viewModel.updateSearchQuery("")
                                         viewModel.searchLocalFiles("")
                                     },
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(
                                         Icons.Default.Clear,
@@ -162,7 +174,7 @@ fun SearchScreen(
                         }
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
             }
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -196,17 +208,59 @@ fun SearchScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onBackground
                             )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Find documents by name across your history and device folders",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
                         }
                     }
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(top = 8.dp)
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
                     ) {
+                        item(contentType = "HistoryHeader") {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "RECENT SEARCHES",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(
+                                    onClick = { viewModel.clearSearchTermsHistory() },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DeleteSweep,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Clear all",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        }
                         items(searchTermsHistory, key = { it }) { term ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .animateItemPlacement()
                                     .clickable {
                                         viewModel.updateSearchQuery(term)
                                         viewModel.searchLocalFiles(term)
@@ -230,7 +284,7 @@ fun SearchScreen(
                                 )
                                 IconButton(
                                     onClick = { viewModel.removeSearchTermFromHistory(term) },
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(28.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Clear,
@@ -253,17 +307,32 @@ fun SearchScreen(
                     state = rememberLazyListState(),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // 1. RECENT HISTORY MATCHES (ORANGE COLOR SCHEME)
+                    // 1. RECENT HISTORY MATCHES (signature terracotta scheme)
                     item(contentType = "HistoryHeader") {
-                        Text(
-                            text = "RECENT HISTORY MATCHES",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFD97757), // Terracotta Orange
-                            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 4.dp, bottom = 2.dp)
+                        ) {
+                            Text(
+                                text = "RECENT HISTORY MATCHES",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (historyResults.isNotEmpty()) {
+                                Text(
+                                    text = "${historyResults.size} found",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
                     }
 
                     if (historyResults.isEmpty()) {
@@ -284,30 +353,28 @@ fun SearchScreen(
                     } else {
                         items(displayedHistory, key = { "hist_" + it.id }, contentType = { "HistoryItem" }) { file ->
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .animateItemPlacement()
                                     .clickable { viewModel.openFile(file) }
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(12.dp),
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     FileIcon(extension = file.extension, size = 28, isSample = file.isSample)
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = file.name,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        val formattedSize = remember(file.size) { formatLocalFileSize(file.size) }
+                                        HighlightedFileName(name = file.name, query = searchQuery)
+                                        val formattedSize = remember(file.size) { formatFileSize(file.size) }
                                         Text(
                                             text = "History • ${file.extension.uppercase()} • $formattedSize",
                                             fontSize = 11.sp,
@@ -335,7 +402,7 @@ fun SearchScreen(
                                         text = "Show More (${historyResults.size - 3} more)",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFD97757),
+                                        color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier
                                             .clickable { showAllHistory = true }
                                             .padding(vertical = 4.dp, horizontal = 8.dp)
@@ -345,30 +412,37 @@ fun SearchScreen(
                         }
                     }
 
-                    // 2. DEVICE DIRECT FILES MATCHES (BLUE COLOR SCHEME)
+                    // 2. DEVICE DIRECT FILES MATCHES (warm amber accent)
                     item(contentType = "DeviceHeader") {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 4.dp, top = 8.dp, bottom = 4.dp)
+                                .padding(start = 4.dp, top = 8.dp, bottom = 2.dp)
                         ) {
                             Text(
                                 text = "DEVICE STORAGE SEARCH",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF3B67A4), // Dynamic blue accent
+                                color = ClaudeOrangeAccent,
+                                modifier = Modifier.weight(1f, fill = false)
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
                             if (isSearchingDevice || isIndexing) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = if (isIndexing) "Building index... " else "Searching... ",
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF3B67A4),
-                                        modifier = Modifier.premiumLoadingPulse(true)
-                                    )
-                                }
+                                Text(
+                                    text = if (isIndexing) "Building index... " else "Searching... ",
+                                    fontSize = 11.sp,
+                                    color = ClaudeOrangeAccent,
+                                    modifier = Modifier.premiumLoadingPulse(true)
+                                )
+                            } else if (deviceResults.isNotEmpty()) {
+                                Text(
+                                    text = if (deviceSearchTruncated) "first ${deviceResults.size} of 150+" else "${deviceResults.size} found",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ClaudeOrangeAccent.copy(alpha = 0.75f)
+                                )
                             }
                         }
                     }
@@ -391,12 +465,17 @@ fun SearchScreen(
                     } else {
                         items(deviceResults, key = { "dev_" + it.absolutePath }, contentType = { "DeviceItem" }) { localFile ->
                             val isAlreadyInHistory = historyResults.any { it.path == localFile.absolutePath }
-                            
+
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .animateItemPlacement()
                                     .clickable {
                                         viewModel.importAndOpenFile(localFile)
                                     }
@@ -404,7 +483,7 @@ fun SearchScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(12.dp),
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     val ext = localFile.name.substringAfterLast('.', "")
@@ -416,16 +495,9 @@ fun SearchScreen(
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
+                                        HighlightedFileName(name = localFile.name, query = searchQuery)
                                         Text(
-                                            text = localFile.name,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = "Storage • ${localFile.absolutePath}",
+                                            text = "Storage • ${localFile.parent ?: localFile.absolutePath}",
                                             fontSize = 10.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                                             maxLines = 1,
@@ -448,10 +520,33 @@ fun SearchScreen(
     }
 }
 
-private fun formatLocalFileSize(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
-    val kb = bytes / 1024.0
-    if (kb < 1024) return String.format("%.1f KB", kb)
-    val mb = kb / 1024.0
-    return String.format("%.1f MB", mb)
+/**
+ * File name with the matched substring painted in the signature terracotta tone
+ * and bold, so users can instantly see why a result matched.
+ */
+@Composable
+private fun HighlightedFileName(name: String, query: String) {
+    val highlightColor = MaterialTheme.colorScheme.primary
+    val annotated = remember(name, query) {
+        buildAnnotatedString {
+            val range = FileSearchRanker.firstMatchRange(query, name)
+            if (range == null) {
+                append(name)
+            } else {
+                append(name.substring(0, range.start))
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = highlightColor)) {
+                    append(name.substring(range.start, range.end))
+                }
+                append(name.substring(range.end))
+            }
+        }
+    }
+    Text(
+        text = annotated,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
 }

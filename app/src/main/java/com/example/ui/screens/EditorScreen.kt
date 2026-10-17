@@ -53,6 +53,9 @@ class TextUndoStack(private val capacity: Int = 50) {
     val size get() = buffer.size
     
     fun lastOrNull(): TextFieldValue? = buffer.lastOrNull()
+
+    /** Read-only newest-last copy of the stack for the history (undo-log) viewer. */
+    fun snapshot(): List<TextFieldValue> = buffer.toList()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

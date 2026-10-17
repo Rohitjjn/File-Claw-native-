@@ -2,6 +2,7 @@ package com.example.core.io
 
 import java.io.File
 import java.io.IOException
+import java.nio.charset.Charset
 import java.nio.file.Files
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -82,6 +83,11 @@ class TextIoTest {
         assertEquals("café", TextLoader.load(f, "ISO-8859-1").text)
         val u16 = file("u16.txt", "héllo".toByteArray(Charsets.UTF_16LE))
         assertEquals("héllo", TextLoader.load(u16).text)
+        val u16Bom = file("u16-bom.txt", byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + "héllo".toByteArray(Charsets.UTF_16LE))
+        val genericUtf16 = TextLoader.load(u16Bom, "UTF-16")
+        assertEquals("héllo", genericUtf16.text)
+        assertEquals("UTF-16LE", genericUtf16.charset.name())
+        assertTrue(genericUtf16.hadBom)
     }
 
     @Test fun missingFileThrowsInsteadOfReturningErrorText() {
@@ -181,6 +187,20 @@ class TextIoTest {
         // a window with no newline still never cuts a UTF-8 character
         val noNl = file("n.txt", "é".repeat(100).toByteArray())
         assertFalse(TextWindowReader.read(noNl, 0, 51).text.contains('\uFFFD'))
+    }
+
+    @Test fun windowReaderCanOpenUtf16AtSearchHitOffset() {
+        val charset = Charset.forName("UTF-16LE")
+        val prefix = "Alpha\n"
+        val text = "$prefix BETA\nGamma"
+        val file = file("utf16-window.txt", byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + text.toByteArray(charset))
+        val betaOffset = 2L + "$prefix ".toByteArray(charset).size
+
+        val window = TextWindowReader.read(file, betaOffset, 16, charset)
+
+        assertTrue(window.text.startsWith("BETA"))
+        assertFalse(window.text.contains('\uFFFD'))
+        assertTrue(window.startByte > 0)
     }
 
     @Test(expected = IllegalArgumentException::class) fun windowReaderRejectsBadArgs() {

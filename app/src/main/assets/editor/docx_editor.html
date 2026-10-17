@@ -6,6 +6,7 @@
     <script src="jszip.min.js"></script>
     <script src="docx-preview.min.js"></script>
     <style>
+        body { touch-action: manipulation; }
         :root {
             --bg-color: #faf9f5;
             --text-primary: #141413;
@@ -28,19 +29,29 @@
             overflow-x: auto;
             -webkit-text-size-adjust: 100%;
         }
+        /* The viewport is the horizontal scroller; vertical reading stays on the page. */
         #viewport-wrapper {
             flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
+            display: block;
+            width: 100%;
+            min-width: 0;
+            overflow-x: auto;
+            overflow-y: visible;
             padding: 16px;
             box-sizing: border-box;
-            transform-origin: top center;
-            transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+            overscroll-behavior-x: contain;
+            -webkit-overflow-scrolling: touch;
         }
+        /* Do not scale the wrapper's width and the output's width at the same time.
+           The old 100%-wide output + wrapper min-width multiplier could double-count
+           zoom and left-align/clip the page on narrow screens. */
         #output {
-            width: 100%;
-            max-width: 900px;
+            position: relative;
+            width: max-content;
+            min-width: 100%;
+            max-width: none;
+            margin: 0;
+            transform-origin: top left;
         }
         .docx-wrapper {
             background: transparent !important;
@@ -68,15 +79,15 @@
             background: transparent !important;
             background-color: transparent !important;
         }
-        body.dark .docx, 
-        body.dark section.docx, 
+        body.dark .docx,
+        body.dark section.docx,
         body.dark .docx-wrapper > section {
             background-color: #1e1e1e !important;
             color: #e2e2e6 !important;
             box-shadow: 0 4px 24px rgba(0,0,0,0.65) !important;
             border: 1px solid #333336 !important;
         }
-        body.dark .docx * {
+        body.dark .docx *:not(mark.docx-highlight) {
             color: #e2e2e6 !important;
             border-color: #383838 !important;
         }
@@ -108,14 +119,45 @@
             color: #ffffff !important;
             outline: 2px solid #e65100;
         }
-        .loading-banner {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 48px;
-            font-size: 15px;
-            font-weight: 500;
-            color: #888;
+        /* Loop 14: skeleton loading for the DOCX open path — neutral page-shaped
+           placeholders with a soft shimmer instead of a lone text line. The whole
+           #loading node is replaced as soon as renderAsync produces the document. */
+        .docx-skeleton {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        .docx-skeleton-page {
+            background: var(--page-bg, #ffffff);
+            border: 1px solid rgba(25, 25, 25, .08);
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            padding: 26px 22px;
+            margin-bottom: 24px;
+            box-sizing: border-box;
+        }
+        body.dark .docx-skeleton-page {
+            --page-bg: #1e1e1e;
+            border-color: #333336;
+        }
+        .docx-skeleton-bar {
+            height: 10px;
+            border-radius: 5px;
+            background: rgba(25, 25, 25, .10);
+            margin-bottom: 12px;
+            animation: docx-skeleton-pulse 1.3s ease-in-out infinite;
+        }
+        body.dark .docx-skeleton-bar { background: rgba(255, 255, 255, .12); }
+        .docx-skeleton-bar.short { width: 42%; }
+        .docx-skeleton-bar.mid { width: 68%; }
+        .docx-skeleton-bar.wide { width: 100%; }
+        @keyframes docx-skeleton-pulse {
+            0%, 100% { opacity: .45; }
+            50% { opacity: .95; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .docx-skeleton-bar { animation: none; opacity: .6; }
         }
         .error-banner {
             padding: 20px;
@@ -126,40 +168,193 @@
             color: #d32f2f;
             font-size: 14px;
         }
+        @media print {
+            html, body, body.dark, body.dark #viewport-wrapper, body.dark #output { background: #ffffff !important; color: #141413 !important; }
+            #viewport-wrapper { display: block; min-width: 0 !important; padding: 0; overflow: visible; }
+            /* Loop 12: never let a mid-gesture transform preview leak into print output. */
+            #output { zoom: 1 !important; transform: none !important; width: 100% !important; max-width: none !important; }
+            .docx, section.docx { margin: 0 auto !important; box-shadow: none !important; border-color: #d5d5d5 !important; break-after: page; }
+            .docx:last-child, section.docx:last-child { break-after: auto; }
+            body.dark .docx, body.dark section.docx { background: #ffffff !important; color: #141413 !important; }
+            body.dark .docx *:not(mark.docx-highlight) { color: #141413 !important; border-color: #d5d5d5 !important; }
+        }
     </style>
 </head>
 <body>
     <div id="viewport-wrapper">
         <div id="output">
-            <div id="loading" class="loading-banner">Rendering Word document...</div>
+            <div id="loading" class="docx-skeleton" role="status" aria-label="Rendering Word document">
+                <div class="docx-skeleton-page">
+                    <div class="docx-skeleton-bar short"></div>
+                    <div class="docx-skeleton-bar wide"></div>
+                    <div class="docx-skeleton-bar wide"></div>
+                    <div class="docx-skeleton-bar mid"></div>
+                </div>
+                <div class="docx-skeleton-page">
+                    <div class="docx-skeleton-bar mid"></div>
+                    <div class="docx-skeleton-bar wide"></div>
+                    <div class="docx-skeleton-bar short"></div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
+        // ---------------------------------------------------------------------------
+        // Zoom model (Loop 12, Bug A)
+        //
+        // Applying CSS `zoom` per gesture frame forces Chromium to re-run
+        // style -> layout -> paint over the whole rendered document (thousands of
+        // nodes in a large DOCX), which made pinch zoom feel unreliable: the chip
+        // moved while the visual lagged seconds behind and then jumped. The official
+        // pdf.js viewer solves the same problem with a compositor-only preview plus
+        // one committed re-layout, and docx-preview itself has no zoom support
+        // (upstream wontfix docxjs#109), so the hybrid lives here:
+        //
+        //   currentZoom : the committed layout zoom (CSS `zoom` on #output).
+        //   displayZoom : what the user currently sees.
+        //   setZoomDisplay(f): per-frame preview via `transform: scale()` — no layout,
+        //                      compositor-only (web.dev: transforms skip layout+paint).
+        //   setZoom(f)       : authoritative commit — clears the preview, applies CSS
+        //                      zoom once, resyncs the horizontal scroll area and
+        //                      restores the relative scroll offset.
+        // Android drives setZoomDisplay during an active pinch and setZoom on settle,
+        // toolbar +/-, the percentage dialog and page load. A backstop timer commits
+        // the last previewed factor if the settle event is ever missed.
+        // ---------------------------------------------------------------------------
         let currentZoom = 1.0;
-        let searchMatches = [];
-        let currentMatchIdx = -1;
+        let displayZoom = 1.0;
+        let zoomCommitTimer = null;
 
-        function setZoom(factor) {
-            currentZoom = Math.min(Math.max(factor, 0.25), 5.0);
-            const container = document.getElementById("output");
-            if (container) {
-                container.style.zoom = currentZoom;
-                container.style.transformOrigin = "top center";
-            }
-            const wrapper = document.getElementById("viewport-wrapper");
-            if (wrapper) {
-                wrapper.style.minWidth = (currentZoom > 1.0 ? (currentZoom * 100) + "%" : "100%");
-            }
+        function clampZoom(factor) {
+            const numeric = Number(factor);
+            return Math.min(Math.max(Number.isFinite(numeric) ? numeric : 1.0, 0.25), 5.0);
         }
 
+        function commitZoom(factor) {
+            const container = document.getElementById("output");
+            const viewport = document.getElementById("viewport-wrapper");
+            if (!container || !viewport) return;
+
+            // Preserve the page nearest the top of the visible reading viewport, rather
+            // than scaling the document's global scrollTop ratio (which jumps to a
+            // different paragraph when document length changes after zoom).
+            const pages = Array.from(container.querySelectorAll(".docx"));
+            const viewportTop = viewport.getBoundingClientRect().top;
+            let anchorPage = null;
+            let anchorOffset = 0;
+            for (const page of pages) {
+                const rect = page.getBoundingClientRect();
+                if (rect.bottom > viewportTop) {
+                    anchorPage = page;
+                    anchorOffset = rect.top - viewportTop;
+                    break;
+                }
+            }
+            const previousScrollLeft = viewport.scrollLeft;
+            container.style.transform = "";
+            container.style.zoom = String(factor);
+            // CSS zoom participates in layout, so the horizontal scroll range updates
+            // naturally. Do not multiply the wrapper width by the zoom a second time.
+            requestAnimationFrame(function () {
+                viewport.scrollLeft = previousScrollLeft;
+                if (anchorPage && anchorPage.isConnected) {
+                    const nextOffset = anchorPage.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+                    const pageDelta = nextOffset - anchorOffset;
+                    const documentScroller = document.scrollingElement || document.documentElement || document.body;
+                    if (documentScroller && Math.abs(pageDelta) > 0.5) {
+                        documentScroller.scrollTop += pageDelta;
+                    }
+                }
+            });
+        }
+
+        function setZoom(factor) {
+            currentZoom = clampZoom(factor);
+            displayZoom = currentZoom;
+            if (zoomCommitTimer) { window.clearTimeout(zoomCommitTimer); zoomCommitTimer = null; }
+            commitZoom(currentZoom);
+        }
+
+        function setZoomDisplay(factor) {
+            displayZoom = clampZoom(factor);
+            const container = document.getElementById("output");
+            if (container) {
+                container.style.transform = "scale(" + displayZoom + ")";
+                container.style.transformOrigin = "top center";
+            }
+            if (zoomCommitTimer) window.clearTimeout(zoomCommitTimer);
+            zoomCommitTimer = window.setTimeout(function () {
+                zoomCommitTimer = null;
+                setZoom(displayZoom);
+            }, 260);
+        }
+
+        let pageObserver = null;
+
         function setDarkMode(isDark) {
-            if (isDark) {
-                document.body.classList.add('dark');
-                document.documentElement.classList.add('dark');
+            document.body.classList.toggle('dark', Boolean(isDark));
+            document.documentElement.classList.toggle('dark', Boolean(isDark));
+        }
+
+        function scrollToPage(pageNumber) {
+            const pages = document.querySelectorAll('#output .docx');
+            const page = pages[Math.max(0, Math.min(pages.length - 1, Number(pageNumber) - 1))];
+            if (page) page.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function observePages() {
+            if (pageObserver) pageObserver.disconnect();
+            const pages = Array.from(document.querySelectorAll('#output .docx'));
+            if (!pages.length || !('IntersectionObserver' in window)) return;
+            pageObserver = new IntersectionObserver(function (entries) {
+                const visible = entries.filter(entry => entry.isIntersecting);
+                if (!visible.length) return;
+                const center = (window.innerHeight || 0) / 2;
+                visible.sort((a, b) => {
+                    const rectA = a.boundingClientRect;
+                    const rectB = b.boundingClientRect;
+                    return Math.abs((rectA.top + rectA.bottom) / 2 - center) - Math.abs((rectB.top + rectB.bottom) / 2 - center);
+                });
+                const currentIndex = pages.indexOf(visible[0].target);
+                if (window.Android && window.Android.onPageChanged && currentIndex >= 0) {
+                    window.Android.onPageChanged(currentIndex + 1, pages.length);
+                }
+            }, { threshold: [0.15, 0.5, 0.85] });
+            pages.forEach(page => pageObserver.observe(page));
+        }
+
+        let lastTapTime = 0;
+        document.addEventListener('click', function (event) {
+            const target = event.target && event.target.closest ? event.target.closest('a, button, input, textarea, select') : null;
+            if (target || !window.Android) return;
+            const now = Date.now();
+            if (now - lastTapTime < 300) {
+                // Double tap: toggle zoom (handled natively), suppress the second single tap.
+                lastTapTime = 0;
+                if (window.Android.onDocumentDoubleTap) window.Android.onDocumentDoubleTap();
             } else {
-                document.body.classList.remove('dark');
-                document.documentElement.classList.remove('dark');
+                lastTapTime = now;
+                if (window.Android.onDocumentTap) window.Android.onDocumentTap();
+            }
+        });
+
+        // ---------------------------------------------------------------------------
+        // Search state (Loop 14 regression fix): the Loop 12 rewrite dropped the
+        // declaration of maxSearchHighlights while searchWord() still READ it, so
+        // every query that actually matched threw ReferenceError and DOCX find never
+        // reported results. All five engine globals are declared explicitly now
+        // (mirroring the generated TXT/MD preview script and the Loop 10 cap of 5000).
+        // ---------------------------------------------------------------------------
+        let maxSearchHighlights = 5000;
+        let searchMatches = [];
+        let currentMatchIdx = -1;
+        let totalSearchMatches = 0;
+        let searchMatchesTruncated = false;
+
+        function notifySearchCount() {
+            if (window.Android && window.Android.onSearchResultCount) {
+                window.Android.onSearchResultCount(totalSearchMatches, currentMatchIdx, searchMatchesTruncated);
             }
         }
 
@@ -167,79 +362,182 @@
             document.querySelectorAll('mark.docx-highlight').forEach(el => {
                 const parent = el.parentNode;
                 if (parent) {
-                    parent.replaceChild(document.createTextNode(el.textContent), el);
+                    parent.replaceChild(document.createTextNode(el.textContent || ''), el);
                     parent.normalize();
                 }
             });
             searchMatches = [];
             currentMatchIdx = -1;
+            totalSearchMatches = 0;
+            searchMatchesTruncated = false;
         }
 
         function searchWord(keyword) {
             clearSearch();
-            if (!keyword || keyword.trim().length === 0) return 0;
-            const query = keyword.trim().toLowerCase();
+            const query = String(keyword || '').trim().toLowerCase();
             const container = document.getElementById("output");
-            if (!container) return 0;
+            if (!query || !container) {
+                notifySearchCount();
+                return 0;
+            }
 
-            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+                acceptNode: function (node) {
+                    const parent = node.parentElement;
+                    if (!parent || !node.nodeValue || parent.closest('script, style, button, mark.docx-highlight')) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
             const textNodes = [];
             while (walker.nextNode()) textNodes.push(walker.currentNode);
+            const foundMatches = [];
+            let totalCount = 0;
 
             for (const node of textNodes) {
-                const text = node.textContent;
+                const text = node.nodeValue || '';
                 const lower = text.toLowerCase();
                 let index = lower.indexOf(query);
-                if (index >= 0) {
-                    const frag = document.createDocumentFragment();
-                    let last = 0;
-                    while (index >= 0) {
-                        frag.appendChild(document.createTextNode(text.substring(last, index)));
+                if (index < 0) continue;
+                const fragment = document.createDocumentFragment();
+                let last = 0;
+                while (index >= 0) {
+                    totalCount++;
+                    fragment.appendChild(document.createTextNode(text.substring(last, index)));
+                    if (foundMatches.length < maxSearchHighlights) {
                         const mark = document.createElement('mark');
                         mark.className = 'docx-highlight';
                         mark.textContent = text.substring(index, index + query.length);
-                        frag.appendChild(mark);
-                        searchMatches.push(mark);
-                        last = index + query.length;
-                        index = lower.indexOf(query, last);
+                        fragment.appendChild(mark);
+                        foundMatches.push(mark);
                     }
-                    frag.appendChild(document.createTextNode(text.substring(last)));
-                    if (node.parentNode) {
-                        node.parentNode.replaceChild(frag, node);
-                    }
+                    last = index + query.length;
+                    index = lower.indexOf(query, last);
                 }
+                fragment.appendChild(document.createTextNode(text.substring(last)));
+                if (node.parentNode) node.parentNode.replaceChild(fragment, node);
             }
 
-            if (searchMatches.length > 0) {
-                currentMatchIdx = 0;
-                highlightMatch(0);
-            }
-            return searchMatches.length;
+            searchMatches = foundMatches;
+            totalSearchMatches = totalCount;
+            searchMatchesTruncated = totalCount > foundMatches.length;
+            if (searchMatches.length > 0) highlightMatch(0);
+            else notifySearchCount();
+            return totalSearchMatches;
         }
 
         function highlightMatch(idx) {
-            searchMatches.forEach((m, i) => {
-                if (i === idx) {
-                    m.className = 'docx-highlight docx-highlight-active';
-                    m.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                } else {
-                    m.className = 'docx-highlight';
-                }
+            if (!searchMatches.length) {
+                currentMatchIdx = -1;
+                notifySearchCount();
+                return 0;
+            }
+            currentMatchIdx = ((idx % searchMatches.length) + searchMatches.length) % searchMatches.length;
+            searchMatches.forEach((match, index) => {
+                match.className = index === currentMatchIdx
+                    ? 'docx-highlight docx-highlight-active'
+                    : 'docx-highlight';
             });
+            searchMatches[currentMatchIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            notifySearchCount();
+            return currentMatchIdx + 1;
         }
 
         function nextSearchMatch() {
-            if (searchMatches.length === 0) return 0;
-            currentMatchIdx = (currentMatchIdx + 1) % searchMatches.length;
-            highlightMatch(currentMatchIdx);
-            return currentMatchIdx + 1;
+            return searchMatches.length ? highlightMatch(currentMatchIdx + 1) : 0;
         }
 
         function prevSearchMatch() {
-            if (searchMatches.length === 0) return 0;
-            currentMatchIdx = (currentMatchIdx - 1 + searchMatches.length) % searchMatches.length;
-            highlightMatch(currentMatchIdx);
-            return currentMatchIdx + 1;
+            return searchMatches.length ? highlightMatch(currentMatchIdx - 1) : 0;
+        }
+
+        // ---------------------------------------------------------------------------
+        // Loading (Loop 12, Bug E): stream the raw OOXML bytes through the WebView asset
+        // loader instead of pushing a giant base64 string across the JS bridge. A 20 MB
+        // DOCX previously peaked at ~5 simultaneous copies of the file (Kotlin String +
+        // bridge String + JS UTF-16 string + atob binary string + Uint8Array); with the
+        // streamed ArrayBuffer there is exactly one binary copy. The bridge path is kept
+        // as a fallback in case the streamed request ever fails.
+        // ---------------------------------------------------------------------------
+        function base64ToBuffer(value) {
+            const binaryString = window.atob(value);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function fetchDocumentBytes() {
+            return fetch('/docx-src/document.docx', { credentials: 'omit' }).then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.arrayBuffer();
+            });
+        }
+
+        function showLoadError(message) {
+            const container = document.getElementById("output");
+            const loadingEl = document.getElementById("loading");
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (container) container.innerHTML = '<div class="error-banner">' + message + '</div>';
+            if (window.Android && window.Android.onDocumentError) {
+                window.Android.onDocumentError(message);
+            }
+        }
+
+        function renderDocument(arrayBuffer) {
+            const container = document.getElementById("output");
+            if (!container) return;
+            // Render off-screen while the page-shaped skeleton remains visible. The
+            // previous implementation cleared #output before renderAsync finished,
+            // causing a blank reader during large DOCX parsing.
+            const staging = document.createElement("div");
+            staging.style.position = "absolute";
+            staging.style.left = "-100000px";
+            staging.style.top = "0";
+            staging.style.visibility = "hidden";
+            staging.style.pointerEvents = "none";
+            staging.style.width = "max-content";
+            staging.style.minWidth = "100%";
+            staging.setAttribute("aria-hidden", "true");
+            container.appendChild(staging);
+
+            const options = {
+                className: "docx",
+                inWrapper: true,
+                ignoreWidth: false,
+                ignoreHeight: false,
+                ignoreFonts: false,
+                breakPages: true,
+                ignoreLastRenderedPageBreak: false,
+                experimental: true,
+                trimXmlDeclaration: true,
+                debug: false
+            };
+
+            docx.renderAsync(arrayBuffer, staging, null, options).then(function() {
+                const pages = staging.querySelectorAll('.docx');
+                const totalPages = pages.length > 0 ? pages.length : 1;
+                const renderedNodes = Array.from(staging.childNodes);
+                container.replaceChildren(...renderedNodes);
+                // Reapply zoom only after the rendered pages are attached to the live
+                // viewport; this ensures the CSS layout and horizontal range are real.
+                setZoom(currentZoom);
+                if (document.body.classList.contains('dark')) setDarkMode(true);
+                observePages();
+                if (window.Android && window.Android.onDocumentLoaded) {
+                    window.Android.onDocumentLoaded(totalPages);
+                }
+            }).catch(function(err) {
+                staging.remove();
+                console.error("renderAsync error:", err);
+                container.innerHTML = '<div class="error-banner"><strong>DOCX Preview Notice:</strong> Could not render formatted layout (' + (err ? err.toString() : 'Unknown error') + ').</div>';
+                if (window.Android && window.Android.onDocumentError) {
+                    window.Android.onDocumentError(err ? err.toString() : "Render failed");
+                }
+            });
         }
 
         function loadDocx(base64, isDark) {
@@ -249,77 +547,31 @@
             const loadingEl = document.getElementById("loading");
 
             if (typeof docx === 'undefined' || typeof JSZip === 'undefined') {
-                const msg = "Document preview engine components could not be loaded.";
-                if (loadingEl) loadingEl.style.display = 'none';
-                container.innerHTML = '<div class="error-banner"><strong>Error:</strong> ' + msg + '</div>';
-                if (window.Android && window.Android.onDocumentError) {
-                    window.Android.onDocumentError(msg);
-                }
+                showLoadError("<strong>Error:</strong> Document preview engine components could not be loaded.");
                 return;
             }
 
             if (!base64 || base64.trim().length === 0) {
-                if (window.Android && window.Android.getDocxBase64) {
-                    try {
-                        base64 = window.Android.getDocxBase64();
-                    } catch (e) {
-                        console.error(e);
+                // Loop 12: preferred path — streamed bytes, no base64 bridge traffic.
+                fetchDocumentBytes().then(function (buffer) {
+                    renderDocument(buffer);
+                }).catch(function (fetchError) {
+                    console.warn("docx-src fetch failed; falling back to bridge", fetchError);
+                    let bridged = null;
+                    if (window.Android && window.Android.getDocxBase64) {
+                        try { bridged = window.Android.getDocxBase64(); } catch (e) { console.error(e); }
                     }
-                }
-            }
-
-            if (!base64 || base64.trim().length === 0) {
-                if (loadingEl) loadingEl.style.display = 'none';
-                container.innerHTML = '<div class="error-banner">Document data is empty or unavailable.</div>';
-                if (window.Android && window.Android.onDocumentError) {
-                    window.Android.onDocumentError("Document data is empty");
-                }
+                    if (!bridged || bridged.trim().length === 0) {
+                        showLoadError("Document data is empty or unavailable.");
+                        return;
+                    }
+                    renderDocument(base64ToBuffer(bridged));
+                });
                 return;
             }
 
             try {
-                const binary_string = window.atob(base64);
-                const len = binary_string.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) {
-                    bytes[i] = binary_string.charCodeAt(i);
-                }
-                const arrayBuffer = bytes.buffer;
-
-                const options = {
-                    className: "docx",
-                    inWrapper: true,
-                    ignoreWidth: false,
-                    ignoreHeight: false,
-                    ignoreFonts: false,
-                    breakPages: true,
-                    ignoreLastRenderedPageBreak: false,
-                    experimental: true,
-                    trimXmlDeclaration: true,
-                    debug: false
-                };
-
-                container.innerHTML = "";
-
-                docx.renderAsync(arrayBuffer, container, null, options).then(function() {
-                    const pages = container.querySelectorAll('.docx');
-                    const totalPages = pages.length > 0 ? pages.length : 1;
-                    if (currentZoom !== 1.0) {
-                        setZoom(currentZoom);
-                    }
-                    if (document.body.classList.contains('dark')) {
-                        setDarkMode(true);
-                    }
-                    if (window.Android && window.Android.onDocumentLoaded) {
-                        window.Android.onDocumentLoaded(totalPages);
-                    }
-                }).catch(function(err) {
-                    console.error("renderAsync error:", err);
-                    container.innerHTML = '<div class="error-banner"><strong>DOCX Preview Notice:</strong> Could not render formatted layout (' + (err ? err.toString() : 'Unknown error') + ').</div>';
-                    if (window.Android && window.Android.onDocumentError) {
-                        window.Android.onDocumentError(err ? err.toString() : "Render failed");
-                    }
-                });
+                renderDocument(base64ToBuffer(base64));
             } catch (err) {
                 console.error("loadDocx catch:", err);
                 if (loadingEl) loadingEl.style.display = 'none';
@@ -330,19 +582,6 @@
             }
         }
 
-        window.addEventListener('DOMContentLoaded', function() {
-            if (window.Android && window.Android.getDocxBase64) {
-                try {
-                    const b64 = window.Android.getDocxBase64();
-                    if (b64 && b64.length > 0) {
-                        const isDark = document.body.classList.contains('dark') || false;
-                        loadDocx(b64, isDark);
-                    }
-                } catch (e) {
-                    console.log("Waiting for evaluateJavascript call");
-                }
-            }
-        });
     </script>
 </body>
 </html>
