@@ -20,5 +20,6 @@ data class RecentFileEntity(
     val lastOpened: Long,
     val isSample: Boolean = false,
     val parentZipPath: String? = null,
-    val zipEntryPath: String? = null
+    val zipEntryPath: String? = null,
+    val sourceUri: String? = null
 )

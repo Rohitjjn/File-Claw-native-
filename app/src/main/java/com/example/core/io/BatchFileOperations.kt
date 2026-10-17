@@ -16,7 +16,8 @@ object BatchFileOperations {
     enum class BatchAction {
         COPY,
         MOVE,
-        DELETE
+        DELETE,
+        TRASH
     }
 
     data class BatchOperationResult(
@@ -226,6 +227,60 @@ object BatchFileOperations {
             failedCount = files.size - moved.size,
             errors = errors,
             affectedFiles = moved
+        )
+    }
+
+    /**
+     * Moves files into [trashDir] for soft deletion, allowing easy recovery.
+     */
+    fun moveToTrash(files: List<File>, trashDir: File): BatchOperationResult {
+        if (files.isEmpty()) {
+            return BatchOperationResult(BatchAction.TRASH, 0, 0, 0, emptyList(), emptyList())
+        }
+
+        if (!trashDir.exists()) {
+            trashDir.mkdirs()
+        }
+
+        val errors = mutableListOf<String>()
+        val trashed = mutableListOf<File>()
+
+        for (file in files) {
+            try {
+                if (!file.exists()) {
+                    errors.add("${file.name}: Source file does not exist")
+                    continue
+                }
+
+                if (file.isDirectory && PathGuard.isInside(file, trashDir)) {
+                    errors.add("${file.name}: Cannot trash the trash directory itself")
+                    continue
+                }
+
+                val targetFile = PathGuard.uniqueFile(trashDir, file.name)
+                val success = file.renameTo(targetFile) || run {
+                    if (file.isDirectory) copyDirectoryRecursively(file, targetFile)
+                    else copySingleFile(file, targetFile)
+                    deleteRecursively(file)
+                }
+
+                if (success) {
+                    trashed.add(targetFile)
+                } else {
+                    errors.add("${file.name}: Could not move to trash")
+                }
+            } catch (e: Exception) {
+                errors.add("${file.name}: ${e.message ?: "Failed to trash"}")
+            }
+        }
+
+        return BatchOperationResult(
+            action = BatchAction.TRASH,
+            totalCount = files.size,
+            successfulCount = trashed.size,
+            failedCount = files.size - trashed.size,
+            errors = errors,
+            affectedFiles = trashed
         )
     }
 

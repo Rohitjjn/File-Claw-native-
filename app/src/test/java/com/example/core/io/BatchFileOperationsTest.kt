@@ -134,4 +134,21 @@ class BatchFileOperationsTest {
         assertTrue(targetNested.exists())
         assertEquals("Inner Content", targetNested.readText())
     }
+
+    @Test
+    fun moveToTrash_safelyMovesFilesToTrashDirectory() {
+        val trashDir = tempFolder.newFolder("trash")
+        val file1 = File(sourceDir, "important.txt").apply { writeText("Important Data") }
+
+        val result = BatchFileOperations.moveToTrash(listOf(file1), trashDir)
+
+        assertEquals(1, result.successfulCount)
+        assertEquals(0, result.failedCount)
+        assertFalse(file1.exists())
+
+        val trashedFiles = trashDir.listFiles()?.filter { it.name.endsWith("important.txt") }
+        assertTrue("File should exist in trash folder", !trashedFiles.isNullOrEmpty())
+        assertEquals("Important Data", trashedFiles!![0].readText())
+    }
 }
+

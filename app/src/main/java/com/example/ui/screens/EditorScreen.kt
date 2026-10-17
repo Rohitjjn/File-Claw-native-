@@ -370,6 +370,9 @@ fun EditorScreen(
                 }
             }
 
+            val sharedVerticalScroll = rememberScrollState()
+            val horizontalScroll = rememberScrollState()
+
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -378,8 +381,6 @@ fun EditorScreen(
             ) {
                 // 1. Line Numbers Sidebar
                 if (settings.showLineNumbers) {
-                    val scrollState = rememberScrollState()
-                    
                     // Formatted sequence text
                     val lineNumbersText = remember(linesCount) {
                         (1..linesCount).joinToString("\n")
@@ -391,7 +392,7 @@ fun EditorScreen(
                             .background(MaterialTheme.colorScheme.background.copy(alpha = 0.7f))
                             .padding(horizontal = 8.dp)
                             .verticalScroll(
-                                state = scrollState,
+                                state = sharedVerticalScroll,
                             ),
                         contentAlignment = Alignment.TopCenter
                     ) {
@@ -421,9 +422,6 @@ fun EditorScreen(
                         .weight(1f)
                         .fillMaxHeight()
                 ) {
-                    val workspaceScroll = rememberScrollState()
-                    val horizontalScroll = rememberScrollState()
-                    
                     BasicTextField(
                         value = textValue,
                         onValueChange = { newValue ->
@@ -444,7 +442,7 @@ fun EditorScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(
-                                state = workspaceScroll,
+                                state = sharedVerticalScroll,
                             )
                             .then(
                                 if (!settings.wordWrap) {

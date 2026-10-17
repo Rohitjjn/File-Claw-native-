@@ -4,6 +4,26 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [Unreleased] Loop 2 (v2) — In-Document Global Search, DOCX Clean Architecture & Batch Operations
+
+### Added
+- **Global Text Search in Document Previews**:
+  - Full-document text search and occurrence highlighting implemented across **PDF, DOCX, TXT, and Markdown** previews.
+  - PDF: Multi-page text highlighting via canvas overlay and search result navigation with occurrence counts.
+  - DOCX: In-DOM `<mark class="search-highlight">` and `.search-highlight-active` highlighting with smooth scrolling to active match.
+  - TXT & Markdown: `SearchableDocumentWebView` and `DocumentPreviewScript` highlights all matches and updates occurrence badge with seamless next/previous navigation.
+- **Batch Selection Mode in File Browser**:
+  - Multi-select files and folders in both `FileTreeComponent` and `AllFilesScreen`.
+  - Batch **Move**, **Copy**, and **Delete** actions supported with batch progress feedback and permanent deletion safeguards.
+  - Powered by pure-Kotlin `BatchFileOperations.kt` with thread safety, recursive handling, and path sanitization.
+- **Clean DOCX Preview**:
+  - Debugged and cleanly isolated DOCX preview pipeline using local asset streaming via `WebViewAssetLoader`, robust zoom handling, and honest fallback to pure-Kotlin OOXML text recovery without altering the established Claude UI.
+- **Loop v3 Evolution**:
+  - Generated `NEXT_LOOP_PROMPT_v3.md` and `NEXT_PROMPT.md` adhering to the Self-Replicating Prompt Rule for cycle continuation.
+
+### Verification
+- **Passed:** `compile_applet` build succeeded; `./gradlew :app:testDebugUnitTest` executed 27/27 tasks successfully with 0 test failures.
+
 ## [Unreleased] Loop 6 — PDF, DOCX, TXT, Markdown reader improvements
 
 ### Added

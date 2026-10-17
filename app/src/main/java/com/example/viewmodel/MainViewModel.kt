@@ -605,10 +605,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 readOnlyReason = "Text extracted from an OpenDocument file (read-only)."
             )
             FileKind.EPUB -> FileContentState.HtmlSuccess(EpubReader.toHtml(file), entity, entity.name)
-            FileKind.LEGACY_OFFICE -> identifyOnly(
-                file, entity, detection,
-                "Legacy binary Office format. Convert it to .docx / .xlsx / .pptx to open it here."
-            )
+            FileKind.LEGACY_OFFICE -> {
+                val ext = entity.extension.lowercase()
+                when (ext) {
+                    "xls" -> {
+                        val parsed = runCatching { com.example.core.format.Biff8XlsParser.parse(file) }.getOrNull()
+                        if (parsed != null && parsed.primarySheetRows.isNotEmpty()) {
+                            val sheetLabel = parsed.sheetNames.firstOrNull()?.let { "Sheet: $it • " }.orEmpty()
+                            FileContentState.CsvSuccess(
+                                rows = parsed.primarySheetRows,
+                                file = entity,
+                                truncated = false,
+                                readOnlyReason = "${sheetLabel}Legacy Excel (.xls) file is shown as read-only grid."
+                            )
+                        } else {
+                            identifyOnly(file, entity, detection, "Legacy Excel (.xls) binary file could not be parsed.")
+                        }
+                    }
+                    "doc" -> {
+                        val extracted = runCatching { com.example.core.format.LegacyDocExtractor.extract(file) }.getOrNull()
+                        if (extracted != null && extracted.paragraphs.isNotEmpty()) {
+                            FileContentState.TextSuccess(
+                                content = extracted.text,
+                                file = entity,
+                                readOnlyReason = "Text recovered from legacy Word (.doc) binary file (read-only)."
+                            )
+                        } else {
+                            identifyOnly(file, entity, detection, "Legacy Word (.doc) binary file could not be parsed.")
+                        }
+                    }
+                    else -> identifyOnly(
+                        file, entity, detection,
+                        "Legacy binary Office format. Convert it to .docx / .xlsx / .pptx to open it here."
+                    )
+                }
+            }
             FileKind.BINARY -> identifyOnly(
                 file, entity, detection,
                 if (detection.mismatch) "The extension says one thing, but the content is binary data." else null
@@ -775,7 +806,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.Main) {
                     _currentFileState.value = FileContentState.CsvSuccess(newRows, updatedEntity, false, null, table)
                 }
-                if (isInAppImportedCopy(fileEntity.path)) {
+
+                val writeBackError = if (fileEntity.sourceUri != null) {
+                    tryWriteBackToSourceUri(fileEntity, diskFile)
+                } else null
+
+                if (fileEntity.sourceUri != null) {
+                    if (writeBackError == null) {
+                        _fileEvent.value = "Saved and synced back to source file."
+                    } else {
+                        _fileEvent.value = "Saved to in-app copy ($writeBackError)."
+                    }
+                } else if (isInAppImportedCopy(fileEntity.path)) {
                     _fileEvent.value = "Saved to the in-app copy. The original file was not changed."
                 } else if (settingsState.value.notificationSaveComplete) {
                     _fileEvent.value = "Saved successfully!"
@@ -783,6 +825,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 _fileEvent.value = "Error saving file: ${e.message}"
             }
+        }
+    }
+
+    private fun tryWriteBackToSourceUri(fileEntity: RecentFileEntity, diskFile: File): String? {
+        val rawUri = fileEntity.sourceUri ?: return null
+        return try {
+            val uri = android.net.Uri.parse(rawUri)
+            val context = getApplication<Application>()
+            context.contentResolver.openOutputStream(uri, "wt")?.use { outStream ->
+                diskFile.inputStream().use { inStream -> inStream.copyTo(outStream) }
+            } ?: return "could not open source provider for writing"
+            null
+        } catch (e: Exception) {
+            "could not sync to source: ${e.message ?: "permission denied"}"
         }
     }
 
@@ -826,7 +882,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
-                if (isInAppImportedCopy(fileEntity.path)) {
+                val writeBackError = if (fileEntity.sourceUri != null) {
+                    tryWriteBackToSourceUri(fileEntity, diskFile)
+                } else null
+
+                if (fileEntity.sourceUri != null) {
+                    if (writeBackError == null) {
+                        _fileEvent.value = "Saved and synced back to source file."
+                    } else {
+                        _fileEvent.value = "Saved to in-app copy ($writeBackError)."
+                    }
+                } else if (isInAppImportedCopy(fileEntity.path)) {
                     _fileEvent.value = "Saved to the in-app copy. The original file was not changed."
                 } else if (settingsState.value.notificationSaveComplete) {
                     _fileEvent.value = "Saved successfully!"
@@ -1094,7 +1160,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     name = sanitizedFileName,
                     size = fileSize,
                     extension = extension,
-                    lastOpened = System.currentTimeMillis()
+                    lastOpened = System.currentTimeMillis(),
+                    sourceUri = uri.toString()
                 )
 
                 val id = repository.insertRecentFile(recent)

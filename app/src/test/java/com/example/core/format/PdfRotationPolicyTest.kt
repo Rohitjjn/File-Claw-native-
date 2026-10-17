@@ -17,7 +17,7 @@ class PdfRotationPolicyTest {
     // --- normalize / stepping ------------------------------------------------
 
     @Test
-    fun `normalize maps negative and oversized degrees into 0..359`() {
+    fun `normalize maps negative and oversized degrees into 0 to 359`() {
         assertEquals(0, PdfRotationPolicy.normalize(0))
         assertEquals(90, PdfRotationPolicy.normalize(90))
         assertEquals(0, PdfRotationPolicy.normalize(360))
@@ -112,7 +112,7 @@ class PdfRotationPolicyTest {
     // --- scroll anchor ---------------------------------------------------------
 
     @Test
-    fun `anchor fraction is clamped into 0..1`() {
+    fun `anchor fraction is clamped into 0 to 1`() {
         assertEquals(0f, PdfRotationPolicy.anchorFraction(-10f, 500f), 1e-6f)
         assertEquals(0.5f, PdfRotationPolicy.anchorFraction(250f, 500f), 1e-6f)
         assertEquals(1f, PdfRotationPolicy.anchorFraction(900f, 500f), 1e-6f)

@@ -453,7 +453,7 @@ object InViewerSearchNavigation {
      */
     fun nextIndex(current: Int, count: Int): Int? {
         if (count <= 0) return null
-        val safeCurrent = current.coerceIn(0, count - 1)
+        val safeCurrent = if (current in 0 until count) current else 0
         return (safeCurrent + 1) % count
     }
 
@@ -463,7 +463,7 @@ object InViewerSearchNavigation {
      */
     fun prevIndex(current: Int, count: Int): Int? {
         if (count <= 0) return null
-        val safeCurrent = current.coerceIn(0, count - 1)
+        val safeCurrent = if (current in 0 until count) current else 0
         return (safeCurrent - 1 + count) % count
     }
 }
