@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.25, maximum-scale=8, user-scalable=yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=8, user-scalable=yes">
   <title>File Claw PDF Reader</title>
   <style>
     /* Loop 14: PDF is ALWAYS light mode. The dark palette, the invert/natural page
@@ -12,8 +12,8 @@
       color-scheme: light;
       --reader-background: #f0f0f0;
       --page-background: #ffffff;
-      --page-shadow: 0 3px 16px rgba(0, 0, 0, .18);
-      --page-border: rgba(25, 25, 25, .12);
+      --page-shadow: 0 4px 20px rgba(0, 0, 0, .14);
+      --page-border: rgba(25, 25, 25, .10);
     }
     * { box-sizing: border-box; }
     html, body { width: 100%; min-height: 100%; margin: 0; }
@@ -28,8 +28,8 @@
       min-height: 100vh;
       flex-direction: column;
       align-items: center;
-      gap: 14px;
-      padding: 12px 10px 28px;
+      gap: 16px;
+      padding: 12px 10px 32px;
     }
     .pdf-page {
       position: relative;
@@ -38,18 +38,21 @@
       background: var(--page-background);
       border: 1px solid var(--page-border);
       box-shadow: var(--page-shadow);
+      border-radius: 12px;
       transform-origin: top center;
     }
     .pdf-page canvas {
       display: block;
       max-width: none;
       background: white;
+      border-radius: 12px;
     }
     .highlight-layer {
       position: absolute;
       inset: 0;
       overflow: hidden;
       pointer-events: none;
+      border-radius: 12px;
     }
     .pdf-search-highlight {
       position: absolute;
@@ -63,17 +66,18 @@
       outline: 2px solid rgba(204, 120, 92, .95);
       z-index: 2;
     }
-    /* Loop 14 (skeletons): pages that have never rendered show a neutral shimmer
-       pulse instead of a plain white rectangle. The class is only present while
-       there is no bitmap to display; finished, failed and re-rendered pages keep
-       their existing canvas visible (no skeleton over live content). */
+    /* Rounded page skeleton with soft shimmer */
+    .pdf-page.skeleton {
+      border-radius: 12px;
+    }
     .pdf-page.skeleton::after {
       content: '';
       position: absolute;
       inset: 0;
+      border-radius: 12px;
       background: linear-gradient(100deg,
         rgba(25, 25, 25, 0) 30%,
-        rgba(25, 25, 25, 0.06) 50%,
+        rgba(25, 25, 25, 0.08) 50%,
         rgba(25, 25, 25, 0) 70%);
       animation: pdf-skeleton-pulse 1.4s ease-in-out infinite;
       pointer-events: none;
@@ -791,7 +795,7 @@
         standardFontDataUrl: assetBase + 'standard_fonts/',
         isEvalSupported: false,
         useWorkerFetch: true,
-        disableRange: true,
+        disableRange: false,
         disableStream: true,
         disableAutoFetch: true
       });
@@ -946,17 +950,22 @@
     // ---------------------------------------------------------------------------
     function captureScrollAnchor() {
       const scroller = document.scrollingElement || document.documentElement || document.body;
-      if (!scroller) return { page: Math.max(1, currentPage), fraction: 0, top: 0 };
-      const record = pageRecords[currentPage - 1];
-      if (!record || !record.element) return { page: Math.max(1, currentPage), fraction: 0, top: scroller.scrollTop };
-      const elementTop = record.element.offsetTop;
-      const elementHeight = Math.max(1, record.element.offsetHeight);
-      const within = scroller.scrollTop - elementTop;
+      if (!scroller || !pageRecords.length) return { page: Math.max(1, currentPage), fraction: 0, top: 0 };
+      const scrollTop = scroller.scrollTop;
+      let targetRecord = pageRecords[0];
+      for (const rec of pageRecords) {
+        if (rec.element && (rec.element.offsetTop + rec.element.offsetHeight) > scrollTop) {
+          targetRecord = rec;
+          break;
+        }
+      }
+      const elementTop = targetRecord.element.offsetTop;
+      const elementHeight = Math.max(1, targetRecord.element.offsetHeight);
+      const within = Math.max(0, scrollTop - elementTop);
       return {
-        page: Math.max(1, currentPage),
-        // Mirrors PdfRotationPolicy.anchorFraction (clamped 0..1).
+        page: targetRecord.pageNumber,
         fraction: Math.min(1, Math.max(0, within / elementHeight)),
-        top: scroller.scrollTop
+        top: scrollTop
       };
     }
 
@@ -1010,9 +1019,23 @@
       }
     }
 
+    let lastTapTime = 0;
+    let singleTapTimer = null;
     document.addEventListener('click', function (event) {
       if (event.target && event.target.closest && event.target.closest('button, a, input, textarea, select')) return;
-      bridgeCall('onPdfSingleTap');
+      const now = Date.now();
+      if (now - lastTapTime < 280) {
+        lastTapTime = 0;
+        if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+        bridgeCall('onPdfDoubleTap');
+      } else {
+        lastTapTime = now;
+        if (singleTapTimer) clearTimeout(singleTapTimer);
+        singleTapTimer = setTimeout(function () {
+          singleTapTimer = null;
+          bridgeCall('onPdfSingleTap');
+        }, 250);
+      }
     });
     let resizeTimer = null;
     window.addEventListener('resize', function () {

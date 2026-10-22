@@ -137,66 +137,171 @@ object FilePrintHelper {
             android.widget.Toast.makeText(context, "Print service is not available on this device", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
+        if (!docxFile.exists() || docxFile.length() == 0L) {
+            android.widget.Toast.makeText(context, "Cannot print: File is empty or missing", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
         mainHandler.post {
             try {
-                val extracted = com.example.core.format.DocxExtractor.extractText(docxFile)
-                val paragraphsHtml = extracted.paragraphs.joinToString("\n") { p ->
-                    val escaped = escapeHtml(p)
-                    if (p.startsWith("#") || p.length < 50 && !p.endsWith(".")) {
-                        "<h3>$escaped</h3>"
-                    } else {
-                        "<p>$escaped</p>"
-                    }
-                }
-                val escapedTitle = escapeHtml(title)
-
-                val html = """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset="utf-8">
-                        <style>
-                            body {
-                                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                                font-size: 13px;
-                                line-height: 1.6;
-                                padding: 24px;
-                                color: #1a1a1a;
-                            }
-                            h2 { margin-top: 0; color: #111; font-size: 20px; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
-                            h3 { color: #222; margin-top: 16px; margin-bottom: 8px; font-size: 15px; }
-                            p { margin: 8px 0; }
-                        </style>
-                    </head>
-                    <body>
-                        <h2>$escapedTitle</h2>
-                        $paragraphsHtml
-                    </body>
-                    </html>
-                """.trimIndent()
-
                 val tempWebView = WebView(context)
                 activeWebViews.add(tempWebView)
-                tempWebView.webViewClient = object : WebViewClient() {
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        val printAdapter = tempWebView.createPrintDocumentAdapter(title)
-                        printManager.print(
-                            title,
-                            printAdapter,
-                            PrintAttributes.Builder()
-                                .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                                .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
-                                .build()
-                        )
-                        mainHandler.postDelayed({
-                            activeWebViews.remove(tempWebView)
-                            tempWebView.destroy()
-                        }, 60000)
+
+                val docxAssetLoader = androidx.webkit.WebViewAssetLoader.Builder()
+                    .addPathHandler("/assets/", androidx.webkit.WebViewAssetLoader.AssetsPathHandler(context))
+                    .addPathHandler("/docx-src/", object : androidx.webkit.WebViewAssetLoader.PathHandler {
+                        override fun handle(path: String): android.webkit.WebResourceResponse? {
+                            if (path != "document.docx" || !docxFile.isFile) return null
+                            return runCatching {
+                                android.webkit.WebResourceResponse(
+                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    null,
+                                    200,
+                                    "OK",
+                                    mapOf("Content-Length" to docxFile.length().toString()),
+                                    FileInputStream(docxFile)
+                                )
+                            }.getOrNull()
+                        }
+                    })
+                    .build()
+
+                tempWebView.settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = true
+                    builtInZoomControls = false
+                    displayZoomControls = false
+                    setSupportZoom(false)
+                }
+
+                var printSubmitted = false
+                fun triggerPrint() {
+                    if (printSubmitted) return
+                    printSubmitted = true
+                    val printAdapter = tempWebView.createPrintDocumentAdapter(title)
+                    printManager.print(
+                        title,
+                        printAdapter,
+                        PrintAttributes.Builder()
+                            .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                            .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                            .build()
+                    )
+                    mainHandler.postDelayed({
+                        activeWebViews.remove(tempWebView)
+                        tempWebView.destroy()
+                    }, 60000)
+                }
+
+                fun fallbackTextPrint(reason: String) {
+                    if (printSubmitted) return
+                    printSubmitted = true
+                    try {
+                        val extracted = com.example.core.format.DocxExtractor.extractText(docxFile)
+                        val paragraphsHtml = extracted.paragraphs.joinToString("\n") { p ->
+                            val escaped = escapeHtml(p)
+                            if (p.startsWith("#") || p.length < 50 && !p.endsWith(".")) {
+                                "<h3>$escaped</h3>"
+                            } else {
+                                "<p>$escaped</p>"
+                            }
+                        }
+                        val escapedTitle = escapeHtml(title)
+                        val html = """
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <meta charset="utf-8">
+                                <style>
+                                    body { font-family: sans-serif; font-size: 13px; line-height: 1.6; padding: 24px; color: #1a1a1a; }
+                                    h2 { margin-top: 0; color: #111; font-size: 20px; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
+                                    h3 { color: #222; margin-top: 16px; margin-bottom: 8px; font-size: 15px; }
+                                    p { margin: 8px 0; }
+                                </style>
+                            </head>
+                            <body>
+                                <h2>$escapedTitle</h2>
+                                $paragraphsHtml
+                            </body>
+                            </html>
+                        """.trimIndent()
+
+                        tempWebView.webViewClient = object : WebViewClient() {
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                val printAdapter = tempWebView.createPrintDocumentAdapter(title)
+                                printManager.print(
+                                    title,
+                                    printAdapter,
+                                    PrintAttributes.Builder()
+                                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                                        .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                                        .build()
+                                )
+                                mainHandler.postDelayed({
+                                    activeWebViews.remove(tempWebView)
+                                    tempWebView.destroy()
+                                }, 60000)
+                            }
+                        }
+                        tempWebView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                        android.widget.Toast.makeText(context, "Printed with text recovery ($reason)", android.widget.Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        activeWebViews.remove(tempWebView)
+                        tempWebView.destroy()
+                        android.widget.Toast.makeText(context, "Print failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
-                tempWebView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+
+                tempWebView.addJavascriptInterface(object : Any() {
+                    @android.webkit.JavascriptInterface
+                    fun onPrintReady() {
+                        mainHandler.post { triggerPrint() }
+                    }
+
+                    @android.webkit.JavascriptInterface
+                    fun onDocumentLoaded(totalPages: Int) {
+                        mainHandler.postDelayed({ triggerPrint() }, 300)
+                    }
+
+                    @android.webkit.JavascriptInterface
+                    fun onDocumentError(error: String) {
+                        mainHandler.post { fallbackTextPrint(error) }
+                    }
+                }, "Android")
+
+                tempWebView.webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): android.webkit.WebResourceResponse? {
+                        return request?.url?.let { docxAssetLoader.shouldInterceptRequest(it) }
+                    }
+
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        view?.evaluateJavascript("loadDocx(null, false);", null)
+                    }
+
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?,
+                        error: android.webkit.WebResourceError?
+                    ) {
+                        if (request?.isForMainFrame == true) {
+                            fallbackTextPrint(error?.description?.toString() ?: "Load error")
+                        }
+                    }
+                }
+
+                // Safety timeout: if formatted layout takes more than 12 seconds, fall back
+                mainHandler.postDelayed({
+                    if (!printSubmitted) {
+                        fallbackTextPrint("Format timeout")
+                    }
+                }, 12000)
+
+                tempWebView.loadUrl("https://appassets.androidplatform.net/assets/editor/docx_editor.html?print=1")
             } catch (e: Exception) {
-                android.widget.Toast.makeText(context, "Could not format Word document: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(context, "Print initialization error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
     }

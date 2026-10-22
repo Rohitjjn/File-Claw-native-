@@ -26,6 +26,7 @@ import com.example.core.text.EpubReader
 import com.example.core.text.OdfTextExtractor
 import com.example.core.text.RtfExtractor
 import com.example.services.FileManager
+import com.example.utils.SampleFilesGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -272,6 +273,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    fun seedBenchmarkSampleFiles(onComplete: ((Int) -> Unit)? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val entities = SampleFilesGenerator.generateAllSamples(getApplication())
+            for (entity in entities) {
+                repository.insertRecentFile(entity)
+            }
+            withContext(Dispatchers.Main) {
+                onComplete?.invoke(entities.size)
+            }
+        }
     }
 
     private val _isInitialized = MutableStateFlow(false)

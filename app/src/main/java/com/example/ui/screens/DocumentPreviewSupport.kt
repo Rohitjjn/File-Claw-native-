@@ -281,9 +281,24 @@ internal val DocumentPreviewScript = """
 
       document.addEventListener('DOMContentLoaded', function () {
         decorateCodeBlocks();
+        var lastTapTime = 0;
+        var singleTapTimer = null;
         document.addEventListener('click', function (event) {
           var target = event.target && event.target.closest ? event.target.closest('button, a, input, textarea, select') : null;
-          if (!target && window.Android && window.Android.onDocumentTap) window.Android.onDocumentTap();
+          if (target || !window.Android) return;
+          var now = Date.now();
+          if (now - lastTapTime < 280) {
+            lastTapTime = 0;
+            if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+            if (window.Android.onDocumentDoubleTap) window.Android.onDocumentDoubleTap();
+          } else {
+            lastTapTime = now;
+            if (singleTapTimer) clearTimeout(singleTapTimer);
+            singleTapTimer = setTimeout(function () {
+              singleTapTimer = null;
+              if (window.Android.onDocumentTap) window.Android.onDocumentTap();
+            }, 250);
+          }
         });
       });
     </script>

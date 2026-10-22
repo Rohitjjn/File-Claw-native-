@@ -1230,18 +1230,15 @@ fun FilePreviewScreen(
                                         }
                                     }
 
-                                    // Screen orientation control: rotate the device UI between
-                                    // portrait and landscape. Never rotate the PDF page contents.
+                                    // Screen orientation control: rotate between portrait and sensor landscape
                                     IconButton(
                                         onClick = {
                                             val activity = context.findHostActivity()
                                             if (activity != null) {
                                                 activity.requestedOrientation =
-                                                    if (activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                                                        ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                                                    } else {
-                                                        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                                                    }
+                                                    com.example.core.format.ScreenOrientationPolicy.toggleOrientation(
+                                                        activity.resources.configuration.orientation
+                                                    )
                                             }
                                         },
                                         modifier = Modifier.size(36.dp)
@@ -2098,6 +2095,7 @@ fun FilePreviewScreen(
                         onWebViewCreated = { docxPreviewWebView = it },
                         onDocumentReady = { docxPreviewReady = true },
                         onSingleTap = { isBarsVisible = !isBarsVisible },
+                        onZoomChanged = { factor -> docxZoomFactor = factor },
                         onPinchZoom = { delta ->
                             docxPinchActive = true
                             docxZoomFactor = com.example.core.format.DocxZoomPolicy.applyPinch(docxZoomFactor, delta)
@@ -3935,7 +3933,7 @@ fun PdfPreview(
                                 displayZoomControls = false
                                 setSupportZoom(true)
                                 useWideViewPort = true
-                                loadWithOverviewMode = true
+                                loadWithOverviewMode = false
                                 cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
                             }
                             addJavascriptInterface(
@@ -3963,7 +3961,10 @@ fun PdfPreview(
                                         pdfErrorMessage = message
                                         isPdfReady = false
                                     },
-                                    onSingleTap = { latestSingleTap.value() }
+                                    onSingleTap = { latestSingleTap.value() },
+                                    onDoubleTap = {
+                                        webViewRef?.evaluateJavascript("if (window.setPdfZoom) setPdfZoom(1.0);", null)
+                                    }
                                 ),
                                 "Android"
                             )
@@ -4020,6 +4021,11 @@ fun PdfPreview(
                                     view: android.webkit.WebView,
                                     request: android.webkit.WebResourceRequest
                                 ): android.webkit.WebResourceResponse? {
+                                    val uri = request.url
+                                    if (uri.path?.contains("document.pdf") == true) {
+                                        val response = com.example.utils.PdfRangeResponder.respond(pdfFile, request.requestHeaders)
+                                        if (response != null) return response
+                                    }
                                     return assetLoader.shouldInterceptRequest(request.url)
                                 }
 
@@ -4027,7 +4033,12 @@ fun PdfPreview(
                                     view: android.webkit.WebView,
                                     url: String
                                 ): android.webkit.WebResourceResponse? {
-                                    return assetLoader.shouldInterceptRequest(android.net.Uri.parse(url))
+                                    val uri = android.net.Uri.parse(url)
+                                    if (uri.path?.contains("document.pdf") == true) {
+                                        val response = com.example.utils.PdfRangeResponder.respond(pdfFile, null)
+                                        if (response != null) return response
+                                    }
+                                    return assetLoader.shouldInterceptRequest(uri)
                                 }
                             }
                             webChromeClient = object : android.webkit.WebChromeClient() {
@@ -4250,47 +4261,94 @@ private fun PdfPageScrubber(
         com.example.core.format.PdfRotationPolicy.pageFromFraction(dragFraction, pageTotal)
     } else currentPage.coerceIn(1, pageTotal)
 
-    // Match the older native PDF scroll handle: a small page-number tab attached
-    // to the right edge, moving across the full usable viewer height. The touch
-    // target remains full-height so the user can grab it anywhere along the edge.
     BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
-            .width(64.dp)
+            .width(220.dp)
             .semantics {
-                contentDescription = "PDF page scroller. Drag the right edge to navigate. Page $displayPage of $pageTotal."
+                contentDescription = "PDF page scroller. Page $displayPage of $pageTotal."
             },
         contentAlignment = Alignment.TopEnd
     ) {
-        val handleHeight = 54.dp
+        val handleHeight = 52.dp
         val usableHeight = (maxHeight - handleHeight).coerceAtLeast(0.dp)
         val handleY = usableHeight * fraction.coerceIn(0f, 1f)
 
+        // Floating Page Bubble shown prominently to the left of the pill handle when touching/dragging
+        AnimatedVisibility(
+            visible = isDragging,
+            enter = fadeIn(tween(140)) + slideInVertically(tween(140)) { it / 2 },
+            exit = fadeOut(tween(140)),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(y = handleY - 6.dp)
+                .padding(end = 46.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.94f),
+                shadowElevation = 8.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "Page $displayPage",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.inverseOnSurface
+                    )
+                    Text(
+                        text = "of $pageTotal",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.75f)
+                    )
+                }
+            }
+        }
+
+        // Floating Pill Handle on the right edge
         Surface(
-            shape = RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.70f)),
+            shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
+            color = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.50f)),
             shadowElevation = if (isDragging) 6.dp else 2.dp,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset(y = handleY)
-                .width(if (isDragging) 64.dp else 52.dp)
+                .width(if (isDragging) 36.dp else 28.dp)
                 .height(handleHeight)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = if (isDragging) "$displayPage / $pageTotal" else displayPage.toString(),
-                    fontSize = if (isDragging) 14.sp else 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    repeat(3) {
+                        Box(
+                            modifier = Modifier
+                                .width(if (isDragging) 14.dp else 10.dp)
+                                .height(2.dp)
+                                .background(
+                                    if (isDragging) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    RoundedCornerShape(1.dp)
+                                )
+                        )
+                    }
+                }
             }
         }
 
+        // Touch capture area along the edge
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxHeight()
+                .width(56.dp)
+                .align(Alignment.TopEnd)
                 .pointerInput(pageTotal, maxHeight) {
                     detectDragGestures(
                         onDragStart = { offset ->
@@ -4327,7 +4385,8 @@ private class PdfWebAppInterface(
     private val onSearchError: (String) -> Unit,
     private val onPasswordRequired: (Int) -> Unit,
     private val onError: (String) -> Unit,
-    private val onSingleTap: () -> Unit
+    private val onSingleTap: () -> Unit,
+    private val onDoubleTap: () -> Unit = {}
 ) {
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val appContext = context.applicationContext
@@ -4393,6 +4452,11 @@ private class PdfWebAppInterface(
     @android.webkit.JavascriptInterface
     fun onPdfSingleTap() {
         mainHandler.post { onSingleTap() }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onPdfDoubleTap() {
+        mainHandler.post { onDoubleTap() }
     }
 }
 
@@ -4803,6 +4867,7 @@ fun DocxPreviewWebView(
     onWebViewCreated: (android.webkit.WebView?) -> Unit = {},
     onDocumentReady: () -> Unit = {},
     onSingleTap: () -> Unit = {},
+    onZoomChanged: (Float) -> Unit = {},
     onPinchZoom: (Float) -> Unit = {},
     onPinchSettled: () -> Unit = {},
     onDoubleTap: () -> Unit = {},
@@ -4835,6 +4900,7 @@ fun DocxPreviewWebView(
     val latestDocumentReadyCallback = androidx.compose.runtime.rememberUpdatedState(onDocumentReady)
     val latestWebViewCreatedCallback = androidx.compose.runtime.rememberUpdatedState(onWebViewCreated)
     val latestSingleTapCallback = androidx.compose.runtime.rememberUpdatedState(onSingleTap)
+    val latestZoomChangedCallback = androidx.compose.runtime.rememberUpdatedState(onZoomChanged)
     val latestPinchZoomCallback = androidx.compose.runtime.rememberUpdatedState(onPinchZoom)
     val latestPinchSettledCallback = androidx.compose.runtime.rememberUpdatedState(onPinchSettled)
     val latestDoubleTapCallback = androidx.compose.runtime.rememberUpdatedState(onDoubleTap)
@@ -5065,6 +5131,11 @@ fun DocxPreviewWebView(
                                 }
 
                                 @android.webkit.JavascriptInterface
+                                fun onZoomChanged(newZoom: Double) {
+                                    mainHandler.post { latestZoomChangedCallback.value(newZoom.toFloat()) }
+                                }
+
+                                @android.webkit.JavascriptInterface
                                 fun onDocumentError(error: String) {
                                     mainHandler.post {
                                         isWebViewLoading = false
@@ -5197,43 +5268,7 @@ fun DocxPreviewWebView(
                         webViewRef = null
                         webView.destroy()
                     },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // Pinch-to-zoom interception: two-finger gestures drive the shared
-                        // docxZoomFactor -> setZoom() pipeline; single-finger scroll passes
-                        // through to the WebView untouched. Loop 10: the gate discards the
-                        // transition event (mixed pointer history -> bogus first delta that
-                        // slammed zoom into the clamp) and only forwards deltas from a
-                        // confirmed, stable multi-touch gesture.
-                        .pointerInput(Unit) {
-                            val gate = PinchGestureGate()
-                            awaitPointerEventScope {
-                                while (true) {
-                                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                                    do {
-                                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                                        val pressed = event.changes.filter { it.pressed }
-                                        if (pressed.size >= 2) {
-                                            val zoomChange = event.calculateZoom()
-                                            val gatedDelta = gate.onPointerEvent(pressed.size, zoomChange)
-                                            if (gatedDelta != null) latestPinchZoomCallback.value(gatedDelta)
-                                            event.changes.forEach { change ->
-                                                if (change.pressed) change.consume()
-                                            }
-                                        } else {
-                                            // Single pointer (or all lifted): keep the gate
-                                            // disarmed and let scroll/selection work untouched.
-                                            gate.onPointerEvent(pressed.size, 1f)
-                                        }
-                                    } while (event.changes.any { it.pressed })
-                                    gate.reset()
-                                    // Loop 12 (Bug A): the pinch stream ended — tell the zoom
-                                    // pipeline to commit the displayed factor with ONE CSS
-                                    // zoom application (single re-layout, scroll preserved).
-                                    latestPinchSettledCallback.value()
-                                }
-                            }
-                        }
+                    modifier = Modifier.fillMaxSize()
                 )
             }
 

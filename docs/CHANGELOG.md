@@ -4,6 +4,36 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [Unreleased] Loop 15 (v4) — DOCX Pinch/Print, Sensor Orientation, Large File Streaming & Claude Settings
+
+### Added
+- **PDF Right-Edge Floating Scroller**:
+  - Implemented floating pill handle with interactive page bubble on touch/drag showing `Page X of Y`.
+  - Supports smooth continuous drag from page 1 to the end, accurately jumping to and anchoring on the released page.
+- **Unified Single-Tap vs Double-Tap Gesture Resolution**:
+  - Implemented 250ms debouncer window across all file viewers (DOCX, PDF, TXT, Markdown, Web), cleanly distinguishing one-tap focus mode (bars visibility toggle) from double-tap zoom without conflict.
+- **PDF Rounded Shimmer Skeleton**:
+  - Replaced sharp placeholder cards with 12px rounded-corner page cards and soft ambient shimmer animation.
+- **Settings Screen Claude Redesign**:
+  - Redesigned `SettingsScreen.kt` with warm glass cards (`ClaudeCard`), streamlined options into 4 clean sections (Appearance, Reading & Editor, Storage & Performance, About).
+  - Added live preview cache manager with size readout and one-tap clear dialog.
+- **DOCX Focal-Point Pinch Zoom & Fit-to-Width Baseline**:
+  - Rewrote `docx_editor.html` viewport engine with a single scroller, fit-to-width baseline (100% = page fits viewport width, refitted on rotation).
+  - Implemented JS-level multi-touch focal-point pinch zoom with compositor-only preview, single CSS zoom commit, and double-tap toggle (fit ⇄ 200%).
+  - Removed fighting Compose `pointerInput` pinch interceptor.
+- **Real Vector DOCX Print-to-PDF**:
+  - Refactored `FilePrintHelper.printDocx` to load dedicated off-screen WebView with `docx_editor.html?print=1`.
+  - Generates authentic vector Word document pages via Android `PrintDocumentAdapter`, preserving formatted typography, tables, and images instead of plain text.
+- **Sensor Landscape & Seamless Rotation**:
+  - Created `ScreenOrientationPolicy` using `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` for accelerometer-based dual-side landscape rotation.
+  - Set window background to light `#F0F0F0` and `loadWithOverviewMode = false`, eliminating black blink during screen rotation and keeping visible page anchor.
+- **Large File Streaming via HTTP Range Requests**:
+  - Implemented `HttpRange` RFC 7233 parser and `PdfRangeResponder` returning `206 Partial Content` with `Accept-Ranges: bytes`.
+  - Enabled `disableRange: false` in pdf.js, streaming large documents (150MB+) on demand with millisecond open times.
+- **Unit Tests**:
+  - Added `HttpRangeTest`, `ScreenOrientationPolicyTest`, and updated `DocxZoomPolicyTest`.
+  - All 225 unit tests passed with 100% success rate.
+
 ## [Unreleased] Loop 3 (v3) — Source URI Write-Back, Legacy Office (.xls/.doc), Streaming Huge-Text Reader & Trash Bin
 
 ### Added

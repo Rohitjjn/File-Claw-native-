@@ -1,19 +1,20 @@
 package com.example.core.format
 
 /**
- * Zoom policy for the DOCX preview (v1.3.0).
+ * Zoom policy for the DOCX preview engine.
  *
- * - Documents now open at [DEFAULT_ZOOM] (40%) instead of 100%.
- * - Pinch gestures multiply the current zoom by the gesture delta.
- * - Double-tap toggles between fit (40%) and full size (100%).
- * All values are expressed as CSS zoom factors (0.25 - 5.0).
+ * Uses fit-to-width as the 1.0 (100%) baseline:
+ * - Documents open at [DEFAULT_ZOOM] (1.0 = page fits device screen width).
+ * - Pinch gestures scale smoothly relative to fingers and anchor at focal point.
+ * - Double-tap toggles between fit-width (1.0 = 100%) and 2.0 (200% reading zoom).
+ * All values are expressed as relative factors (0.50 - 5.00).
  */
 object DocxZoomPolicy {
 
-    const val DEFAULT_ZOOM = 0.40f
-    const val MIN_ZOOM = 0.25f
+    const val DEFAULT_ZOOM = 1.00f
+    const val MIN_ZOOM = 0.50f
     const val MAX_ZOOM = 5.00f
-    const val FULL_SIZE_ZOOM = 1.00f
+    const val ZOOMED_READING = 2.00f
 
     fun coerce(zoom: Float): Float =
         zoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
@@ -26,14 +27,14 @@ object DocxZoomPolicy {
         return coerce(rounded)
     }
 
-    /** Double-tap toggle: fit-width (40%) <-> actual size (100%). */
+    /** Double-tap toggle: fit-width (100%) <-> 200% reading zoom. */
     fun toggleDoubleTap(current: Float): Float =
-        if (current > (DEFAULT_ZOOM + FULL_SIZE_ZOOM) / 2f) DEFAULT_ZOOM else FULL_SIZE_ZOOM
+        if (current > 1.4f) DEFAULT_ZOOM else ZOOMED_READING
 
     fun fromPercent(percent: Int): Float = coerce(percent / 100f)
 
     fun toPercent(zoom: Float): Int = Math.round(coerce(zoom) * 100f)
 
-    /** Persisted zoom percent falls back to the shipped default (40%). */
-    fun defaultPercent(): Int = Math.round(DEFAULT_ZOOM * 100f)
+    /** Default display zoom percent: 100% (Fit Width). */
+    fun defaultPercent(): Int = 100
 }
