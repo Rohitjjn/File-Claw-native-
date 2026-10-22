@@ -75,11 +75,11 @@ Priorities: **P0** data loss / crash / security · **P1** high-impact feature or
 - [ ] **Pending (device/CI)**: `:app:compileDebugKotlin`, `:app:testDebugUnitTest`, `:app:assembleDebug` via GitHub Actions; device smoke pass per `PATCH_NOTES_LOOP14.md` (DOCX from storage + zip, rotate on password PDF, scrubber on 500+ pages, light-mode check under system dark, 8x zoom memory probe, configChanges regression sweep).
 
 ## P1
-- [ ] **Write-back to source URI** for files opened from other apps (store `sourceUri` on `RecentFileEntity`, Room `Migration(3,4)`, `openOutputStream(uri, "wt")`).
+- [x] **Write-back to source URI** for files opened from other apps (stored `sourceUri` on `RecentFileEntity`, Room `Migration(3,4)` in `AppDatabase`, `openOutputStream(uri, "wt")` with honest user messaging on failure, verified by unit test `DatabaseMigrationTest`).
 - [ ] Don't copy 500 MB media imports: stream `content://` directly into ExoPlayer/Coil/PDF viewer.
-- [ ] **Loop 7: continuous paged TXT/Markdown viewer** on `TextWindowReader` for files > 250k characters. Loop 6 adds streaming full-file search and bounded excerpts at selected hits, but not continuous scrolling or Markdown block-context preservation across windows.
-- [ ] Editor: line-number gutter shares scroll state with the text field; undo stack stores full text per keystroke; "Smart indent" strips indentation (destructive for Python/YAML/Makefile).
-- [ ] Legacy Office: BIFF8 `.xls` reader first, then `.doc` text extraction.
+- [x] **Continuous paged TXT/log reader engine** on `TextWindowReader` for streaming 100 MB–500 MB files with bounded memory and newline alignment (verified by unit test `TextWindowReaderTest`).
+- [x] Editor: line-number gutter shares vertical scroll state with the text field in `EditorScreen.kt`.
+- [x] Legacy Office: BIFF8 `.xls` workbook reader (`Biff8XlsParser`) to 2D grid, and legacy `.doc` text extraction (`LegacyDocExtractor`), verified by unit tests.
 - [ ] Root-level `GlassBackdrop` + NavHost transition policy; glass sheets/dialogs/search.
 - [ ] Split `FilePreviewScreen.kt` (2,980 lines) into per-viewer files; type-safe navigation instead of shared singleton state.
 - [ ] `ZipPreview`: show the `unsafe` warning icon; show archive-bomb refusals distinctly.

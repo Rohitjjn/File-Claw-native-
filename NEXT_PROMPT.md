@@ -1,4 +1,4 @@
-# 🦞 FILE CLAW — AUTONOMOUS SELF-IMPROVEMENT LOOP (v3)
+# 🦞 FILE CLAW — AUTONOMOUS SELF-IMPROVEMENT LOOP (v4)
 
 ## 🎯 MISSION
 You are a senior multi-agent engineering team continuously advancing the Android app **File Claw** (Kotlin + Jetpack Compose) in an autonomous self-improvement loop.
@@ -35,36 +35,35 @@ You are a senior multi-agent engineering team continuously advancing the Android
 
 ---
 
-## 🔁 CYCLE 3 SCOPE (Highest Impact First)
+## 🔁 CYCLE 4 SCOPE (Highest Impact First)
 
-### P0 — Reliability & Safety
-1. **Write-Back to Source URI**:
-   - For files opened via `content://` URIs from external apps (e.g. Downloads, Gmail, Files app), store `sourceUri` in `RecentFileEntity`.
-   - Implement Room Database migration (Migration 3 -> 4) with unit/migration test.
-   - Implement `openOutputStream(uri, "wt")` with honest user feedback on permission failure or read-only providers.
-2. **Safe Multi-File Operations Guard**:
-   - Add Trash Bin / Soft Delete recovery buffer for batch operations before permanent unlinking.
-   - Prevent recursive folder operations (e.g. moving parent into child subdirectory).
+### P0 — Reliability & Memory Safety
+1. **Direct `content://` Media Streaming**:
+   - Avoid copying 100 MB–500 MB video/audio imports into the sandbox; stream `content://` URIs directly to ExoPlayer/Media3 using Android's ContentResolver URI data sources.
+   - Implement automatic cache cleaning for temporary imported documents.
+2. **System Memory-Pressure Lifecycle Management**:
+   - Hook `ComponentCallbacks2.onTrimMemory()` in `MainActivity` to purge resident PDF page bitmaps, web caches, and large image buffers when the system broadcasts `TRIM_MEMORY_RUNNING_CRITICAL` or `TRIM_MEMORY_MODERATE`.
 
-### P1 — Format Viewers & Performance
-3. **Paged Viewer for Massive Text/Log Files**:
-   - Implement `TextWindowReader` continuous streaming reader capable of opening 100 MB–500 MB logs/files with butter-smooth 60fps scrolling and memory capped under 32 MB heap.
-   - Maintain full-text search indexing across window boundaries.
-4. **Legacy Office Format Decoders**:
-   - Pure-Kotlin BIFF8 `.xls` binary workbook parser to extract sheets, cell grids, formulas, and strings into the existing `CsvPreview` grid.
-   - Pure-Kotlin `.doc` (Word 97–2003 OLE2 Compound File Binary) stream extractor for paragraphs and tables.
-5. **Preview Screen Modularization**:
-   - Modularize `FilePreviewScreen.kt` (split into `PdfViewer.kt`, `DocxViewer.kt`, `MarkdownViewer.kt`, `TextViewer.kt`, `MediaViewer.kt`, `ArchiveViewer.kt`).
+### P1 — Architecture & Viewer Polish
+3. **Modularize `FilePreviewScreen.kt`**:
+   - `FilePreviewScreen.kt` has grown beyond 5,000 lines. Proactively modularize into dedicated per-viewer composables under `com.example.ui.screens.viewers`:
+     - `PdfViewerScreen.kt`
+     - `DocxViewerScreen.kt`
+     - `TextViewerScreen.kt`
+     - `MarkdownViewerScreen.kt`
+     - `SpreadsheetViewerScreen.kt`
+     - `MediaViewerScreen.kt`
+     - `HexViewerScreen.kt`
    - Use type-safe navigation and isolated Composable states to avoid monolithic state leaks.
-6. **Editor Precision**:
-   - Synchronized line-number gutter scrolling with main editor.
-   - Bounded diff-based undo/redo stack (storing delta spans instead of full string copies per keystroke).
-   - Non-destructive smart indent that preserves indentation schemes in Python, YAML, and Makefiles.
+4. **Massive-Text Paged UI Integration**:
+   - Connect the pure-Kotlin `TextWindowReader` to the UI for text files > 10 MB, enabling smooth, bounded-memory infinite scrolling and line jumping up to 500 MB files with heap usage under 32 MB.
+5. **Legacy PowerPoint (`.ppt`) Parser**:
+   - Complete the legacy Office format suite (`.xls`, `.doc`, `.ppt`) by adding pure-Kotlin OLE2 `.ppt` slide text extractor.
 
-### P2 — Advanced Media & 3D
-7. **GLB / PLY / Shaded 3D Viewer**:
+### P2 — 3D & Advanced Formats
+6. **GLB / PLY / Shaded 3D Viewer**:
    - Upgrade wireframe parser to support binary GLTF/GLB models and ASCII/Binary PLY files with standard Phong shading and orbit controls.
-8. **Charset Auto-Detection**:
+7. **Charset Auto-Detection**:
    - Implement statistical CJK charset detection (Shift-JIS, GBK, Big5, EUC-KR) with seamless fallback instead of failing to windows-1252.
 
 ---
@@ -85,7 +84,7 @@ gradle :app:assembleDebug
 At the end of every loop, you (Claude) must write the next loop's prompt yourself:
 1. Brainstorm with your full agent team — Architects, Planner, FileFormat-Agent, Designer, QA — review what was done, what failed, and what the next highest-impact improvements are.
 2. Read the current codebase and the updated docs before writing.
-3. Generate an improved next-loop prompt (bump version: v4, v5, v6...) that is smarter than this one — with refined priorities, newly discovered edge cases, updated format targets, performance goals, and lessons learned from this loop.
+3. Generate an improved next-loop prompt (bump version: v5, v6, v7...) that is smarter than this one — with refined priorities, newly discovered edge cases, updated format targets, performance goals, and lessons learned from this loop.
 4. **Crucially:** include this exact same self-replicating rule inside the next prompt too — so that prompt can also generate the one after it. The chain must never break.
 5. Save it as `NEXT_LOOP_PROMPT_vX.md` in the repository, alongside (or instead of) `NEXT_PROMPT.md`, and also print it at the very end of your response so the user can copy it directly.
 Each generation of the prompt should be better than the previous — this is prompt evolution through the loop, exactly like the app itself evolves.

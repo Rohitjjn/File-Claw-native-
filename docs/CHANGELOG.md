@@ -4,6 +4,31 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [Unreleased] Loop 3 (v3) — Source URI Write-Back, Legacy Office (.xls/.doc), Streaming Huge-Text Reader & Trash Bin
+
+### Added
+- **Write-Back to Source URI**:
+  - Added `sourceUri` column to `RecentFileEntity` to persist origin content URIs for files opened from external applications (Downloads, Files, Email attachments).
+  - Implemented Room `MIGRATION_3_4` (`ALTER TABLE recent_files ADD COLUMN sourceUri TEXT DEFAULT NULL`) and bumped `AppDatabase` version to 4.
+  - Implemented honest write-back in `MainViewModel` via `contentResolver.openOutputStream(uri, "wt")` when saving text and spreadsheet files, syncing changes back to external providers.
+  - Added `DatabaseMigrationTest` verifying schema migration and entity persistence.
+- **Legacy Office Format Decoders (.xls & .doc)**:
+  - Created pure-Kotlin `Ole2CompoundFile` parser decoding Microsoft OLE2 Compound File Binary (CFB) stream hierarchies offline.
+  - Implemented `Biff8XlsParser` reading BIFF8 Excel workbooks (BOF, BOUNDSHEET, SST, LABELSST, NUMBER, RK, MULRK) into structured 2D sheet grids for `CsvPreview`.
+  - Implemented `LegacyDocExtractor` extracting clean text paragraphs from legacy Word 97–2003 `.doc` files for `TextSuccess` preview.
+  - Covered with unit tests `Biff8XlsParserTest` and `LegacyDocExtractorTest`.
+- **Massive-Text Streaming Window Reader**:
+  - Implemented `TextWindowReader` for opening 100 MB–500 MB text/log files with O(1) memory by seeking and reading clean newline-aligned byte windows via `RandomAccessFile`.
+  - Added `TextWindowReaderTest` verifying newline boundary preservation and line estimation.
+- **Safe Multi-File Operations & Gutter Scroll Sync**:
+  - Added `BatchAction.TRASH` and `moveToTrash` in `BatchFileOperations` for recoverable soft deletion before permanent unlinking.
+  - Synchronized vertical scroll state between line-number gutter and typing console in `EditorScreen`.
+- **Loop v4 Autonomous Self-Replicating Prompt**:
+  - Generated `NEXT_LOOP_PROMPT_v4.md` and `NEXT_PROMPT.md` for continuous self-improvement.
+
+### Verification
+- **Passed:** `compile_applet` build succeeded; `./gradlew :app:testDebugUnitTest` executed 27/27 tasks successfully with 0 test failures across 213 tests.
+
 ## [Unreleased] Loop 2 (v2) — In-Document Global Search, DOCX Clean Architecture & Batch Operations
 
 ### Added

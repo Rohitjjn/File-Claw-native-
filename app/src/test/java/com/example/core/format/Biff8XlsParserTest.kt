@@ -40,7 +40,7 @@ class Biff8XlsParserTest {
 
         // 2. BOUNDSHEET (0x0085)
         val sheetName = "Quarterly"
-        val bsBuf = ByteBuffer.allocate(7 + sheetName.length).order(ByteOrder.LITTLE_ENDIAN)
+        val bsBuf = ByteBuffer.allocate(8 + sheetName.length).order(ByteOrder.LITTLE_ENDIAN)
         bsBuf.putInt(0) // offset
         bsBuf.put(0) // hsState
         bsBuf.put(0) // dt
