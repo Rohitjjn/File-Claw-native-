@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.coroutines.flow.first
 
 /**
  * AUD-034 follow-through: the Room v4 schema now ships in app/schemas, so the 3 → 4 migration
@@ -52,7 +53,7 @@ class DatabaseMigrationInstrumentedTest {
             .fallbackToDestructiveMigrationFrom(1, 2)
             .build()
         val files = kotlinx.coroutines.runBlocking {
-            kotlinx.coroutines.flow.first(roomDb.recentFileDao().getAllRecentFiles())
+            roomDb.recentFileDao().getAllRecentFiles().first()
         }
         assertEquals(1, files.size)
         roomDb.close()
