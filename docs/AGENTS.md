@@ -8,7 +8,7 @@ Architect · Reader/Analyzer · Planner · Coder · Designer · FileFormat · QA
 Arena Agent Mode did not expose the underlying model identifier in this session. Report that limitation; do not attribute this work to a guessed model such as Claude Sonnet 5 or claim Hermes used a model.
 
 ## State to read on every run (in this order)
-`docs/AGENTS.md` → `docs/TODO.md` (KNOWN ISSUES first) → `docs/CHANGELOG.md` → `docs/ROADMAP.md` → `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, `docs/SECURITY_AUDIT.md`, `docs/SANITY_CHECKLIST.md` → `docs/PRD.md`, `docs/FILE_SUPPORT_AUDIT.md`, `docs/UI_FRONTIER.md` → `docs/prompts/README.md` → source.
+`docs/AGENTS.md` → `docs/TODO.md` (KNOWN ISSUES first) → `docs/CHANGELOG.md` → `docs/ROADMAP.md` → `docs/PHASES.md` → `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, `docs/SECURITY_AUDIT.md`, `docs/SANITY_CHECKLIST.md` → `docs/PRD.md`, `docs/FILE_SUPPORT_AUDIT.md`, `docs/UI_FRONTIER.md` → `docs/prompts/README.md` → source.
 Never recreate docs; update them. Add a CHANGELOG entry with **measured** numbers and explicitly label unverified work.
 
 ## Commands

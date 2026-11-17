@@ -2,19 +2,26 @@
 
 Full support matrix: `FILE_FORMATS.md` (generated from the code).
 
-## Phase plan (set in Phase 0, 2026-11-17)
+## The Phase Plan — 10 phases (0–9)
 
-Phases supersede the loop-numbering era. Each phase has written exit criteria; Phase 1+ is executed
-by pasting the matching prompt from `docs/prompts/`.
+Full execution plan with per-phase steps, CI test ladder, and exit criteria lives in
+**`docs/PHASES.md`**. Summary:
 
-| Phase | Theme | Exit criteria | Status |
-|---|---|---|---|
-| **Phase 0** | Audit & repo hygiene | Unwanted files removed; structure organised; PRD created; `FILE_SUPPORT_AUDIT.md`; `UI_FRONTIER.md`; Phase 1 prompt written; docs index | ✅ done (2026-11-17) |
-| **Phase 1** | Quality Gate + broken-format repairs | CI green (compile/tests/assemble); AUD-001/005–010/013/034 fixed; four open UI bugs (BUG-004/005/006/007); honest MIDI/PPTX/media states | ⏳ next — see `docs/prompts/PHASE_1_PROMPT.md` |
-| **Phase 2** | Architecture | `FilePreviewScreen.kt` split per-viewer; type-safe navigation (remove singleton route-without-args); Compose UI round-trip tests; detekt baseline green | ⏳ |
-| **Phase 3** | Claude frontier UI (per `docs/UI_FRONTIER.md` §11) | Tokens + bundled typefaces; glass-at-root; Quick Open palette; adaptive two-pane; reader chrome v2; a11y/RTL/reduced-motion gates | ⏳ |
-| **Phase 4** | Format depth | Legacy `.ppt` text recovery, `.xlsb`, CJK charsets, MIDI decision, RAR revisit, GLB/PLY, WOFF→TTF, sheet picker, Parquet preview | ⏳ |
-| **Phase 5** | Performance & release | Macrobenchmark gates; cold start < 1.5 s; applicationId decision; Play listing; crash-free ≥ 99.9 % | ⏳ |
+| # | Phase | Status |
+|---|---|---|
+| 0 | Audit & repo hygiene | ✅ done (2026-11-17) |
+| 1 | Quality Gate green + broken-format repairs | ⏳ next — `docs/prompts/PHASE_1_PROMPT.md` |
+| 2 | Test infrastructure & architecture (split monolith, typed nav, emulator CI) | ⏳ |
+| 3 | Claude frontier UI — "The Quiet Desk" | ⏳ |
+| 4 | Format depth (.ppt, .xlsb, CJK, RAR, GLB/PLY, Parquet…) | ⏳ |
+| 5 | Performance, memory & 500 MB-class files (Macrobenchmark, Baseline Profiles) | ⏳ |
+| 6 | Security & privacy hardening (manifest guard, SAF-first, fuzz gates) | ⏳ |
+| 7 | Accessibility, i18n & device matrix (EN+HI, RTL, TalkBack, API 26→34) | ⏳ |
+| 8 | Release & Play Store (applicationId, signed release, staged rollout) | ⏳ |
+| 9 | Post-release loop & 2.0 streaming renderers | ⏳ ongoing |
+
+Phases supersede the loop-numbering era. Phase 1+ is executed by pasting the matching prompt from
+`docs/prompts/`; each phase ends by writing the next phase's prompt.
 
 ## Milestones
 | Version | Theme | Status |

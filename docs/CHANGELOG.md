@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [Unreleased] Phase plan — 10 phases documented (docs) (2026-11-17)
+
+Documentation only; no source changed; nothing compiled.
+- **`docs/PHASES.md`** — the complete execution plan: Phase 0 (done) → Phase 1 (Quality Gate + broken-format repairs) → Phase 2 (test infra + architecture split) → Phase 3 (Claude frontier UI, "The Quiet Desk") → Phase 4 (format depth) → Phase 5 (performance/memory/500 MB files) → Phase 6 (security/privacy hardening) → Phase 7 (a11y/i18n/device matrix) → Phase 8 (Play release) → Phase 9 (post-release + 2.0). Includes the **universal per-phase CI test ladder** (unit / JaCoCo gate / screenshot tests / emulator instrumented tests / manifest security guards / device sanity) and per-phase exit criteria. Phases supersede the loop era; each phase ends by writing the next phase's prompt.
+- `docs/ROADMAP.md` phase table replaced with the 10-phase summary + link; `docs/AGENTS.md` read order + `docs/README.md` index updated.
+
 ## [Unreleased] Phase 0 — Audit & repo hygiene (2026-11-17)
 
 **Verification status:** documentation and file-structure changes only. **No Kotlin/JS/assets were

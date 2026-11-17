@@ -152,3 +152,15 @@ Work Log:
 - CI: `.github/workflows/ci.yml` added (unverified first run — call this out in the Phase 1 preflight).
 - Honesty notes: `android-pdf-viewer` dependency is dead code (zero imports) — not removed yet (Phase 1, AUD-001) because this phase changes no build files. MIDI is listed FULL by the registry but MediaPlayer cannot decode it — documented (AUD-006), not yet re-labelled. `app/schemas/…/4.json` missing for Room v4 — documented (AUD-034). Everything device-behaviour-related in the audit is unverified on hardware.
 - Branch note: user asked for a new branch; the session is pinned to `arena/5100f329-file-claw-native`, so all work landed there (no other branch was created or pushed).
+
+---
+
+Task ID: PHASE-PLAN
+Agent: Arena Agent (Phase 0 follow-up, single session) · Date: 2026-11-17 · Branch: `arena/5100f329-file-claw-native`
+
+Task: User asked for the complete phase-by-phase plan for finishing the app, with per-phase CI/GitHub-Actions testing and the total phase count.
+
+Work Log:
+- Wrote `docs/PHASES.md`: 10 phases (0–9) — 0 Audit (done) · 1 Quality Gate + broken-format repairs · 2 Test infra + architecture (monolith split, typed nav, emulator instrumented CI) · 3 Claude frontier UI · 4 Format depth · 5 Performance/memory/500 MB paging · 6 Security hardening (manifest guard, SAF-first) · 7 a11y/i18n/device matrix · 8 Play release (staged rollout, rollback) · 9 post-release + 2.0 streaming renderers. Universal CI test ladder + per-phase steps and exit criteria included; phases strictly sequential from Phase 1; each phase ends by writing the next phase's prompt.
+- Updated ROADMAP.md (10-phase table + link), docs/README.md (index), docs/AGENTS.md (read order), docs/CHANGELOG.md (entry).
+- Verification: docs-only; nothing compiled. Per-phase test strategy is written against `.github/workflows/ci.yml` (unverified first run) and to be extended per phase (emulator AVDs, Paparazzi, macrobenchmarks, manifest guards).

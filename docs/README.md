@@ -7,10 +7,12 @@ label every claim `measured` or `not verified`.
 1. [`AGENTS.md`](AGENTS.md) — how the improvement loop works; state to read on every run
 2. [`TODO.md`](TODO.md) — backlog + KNOWN ISSUES (read first)
 3. [`FILE_SUPPORT_AUDIT.md`](FILE_SUPPORT_AUDIT.md) — Phase 0 audit: what works, what's broken (AUD register), what to add next
-4. [`PRD.md`](PRD.md) — product requirements, metrics, release plan
-5. [`CHANGELOG.md`](CHANGELOG.md) — what changed; measured vs unverified
+4. [`PHASES.md`](PHASES.md) — the complete 10-phase execution plan (steps + CI test ladder per phase)
+5. [`PRD.md`](PRD.md) — product requirements, metrics, release plan
+6. [`CHANGELOG.md`](CHANGELOG.md) — what changed; measured vs unverified
 
 ## Product
+- [`PHASES.md`](PHASES.md) — master plan: 10 phases, exit criteria, universal test ladder
 - [`PRD.md`](PRD.md) — vision, scope, FR/NFR, success metrics, phase plan
 - [`ROADMAP.md`](ROADMAP.md) — milestones + phase exit criteria
 - [`FILE_FORMATS.md`](FILE_FORMATS.md) — generated format matrix (399 ext / 284 full / 32 partial / 83 identify)
