@@ -26,6 +26,13 @@ if (base64File.exists() && !keystoreFile.exists()) {
 
 android {
     namespace = "com.example"
+
+    // Ship the committed Room schema JSONs as assets of the *test* APK so MigrationTestHelper can load them.
+    sourceSets {
+        getByName("androidTest") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
     compileSdk = 34
 
     defaultConfig {
@@ -161,6 +168,7 @@ dependencies {
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
