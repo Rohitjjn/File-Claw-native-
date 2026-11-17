@@ -200,7 +200,7 @@ detekt {
 tasks.register("detektUi", io.gitlab.arturbosch.detekt.Detekt::class.java) {
     buildUponDefaultConfig = true
     config.setFrom(rootProject.file("config/detekt/detekt.yml"))
-    source.setFrom("src/main/java/com/example/ui", "src/main/java/com/example/viewmodel")
+    setSource(files("src/main/java/com/example/ui", "src/main/java/com/example/viewmodel"))
     ignoreFailures = true
     reports {
         xml.required.set(false)
