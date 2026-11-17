@@ -1,3 +1,70 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" ?>
 <SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ComplexCondition:ArchiveSafety.kt$ArchivePaths$name.startsWith("/") || (name.length &gt;= 2 &amp;&amp; name[1] == ':' &amp;&amp; name[0].isLetter())</ID>
+    <ID>ComplexCondition:Delimited.kt$DelimitedParser$!stopped &amp;&amp; (anyData || cell.isNotEmpty() || row.isNotEmpty())</ID>
+    <ID>ComplexCondition:FormatDetector.kt$MagicSniffer$ascii(b, n, "BM") &amp;&amp; n &gt;= 10 &amp;&amp; b[6].toInt() == 0 &amp;&amp; b[7].toInt() == 0 &amp;&amp; b[8].toInt() == 0 &amp;&amp; b[9].toInt() == 0</ID>
+    <ID>ComplexCondition:FormatDetector.kt$MagicSniffer$startsWith(b, n, 0x00, 0x00, 0x01, 0x00) &amp;&amp; n &gt;= 6 &amp;&amp; (b[4].toInt() and 0xFF) in 1..64 &amp;&amp; b[5].toInt() == 0</ID>
+    <ID>ComplexCondition:FormatDetector.kt$MagicSniffer$startsWith(b, n, 0x00, 0x01, 0x00, 0x00) || ascii(b, n, "OTTO") || ascii(b, n, "true") || ascii(b, n, "ttcf")</ID>
+    <ID>ComplexCondition:FormatDetector.kt$TextHeuristics$b &lt; 0x20 &amp;&amp; b != 0x09 &amp;&amp; b != 0x0A &amp;&amp; b != 0x0D &amp;&amp; b != 0x0C &amp;&amp; b != 0x1B</ID>
+    <ID>ComplexCondition:LegacyDocExtractor.kt$LegacyDocExtractor$b1 == 0 &amp;&amp; (b0 in 0x20..0x7E || b0 in 0xA0..0xFF || b0 == 0x09 || b0 == 0x0A || b0 == 0x0D)</ID>
+    <ID>ComplexCondition:Ole2CompoundFile.kt$Ole2CompoundFile$curr &gt;= 0 &amp;&amp; curr &lt; fat.size &amp;&amp; curr != -2 &amp;&amp; count++ &lt; maxIterations</ID>
+    <ID>ComplexCondition:Ole2CompoundFile.kt$Ole2CompoundFile$currSector &gt;= 0 &amp;&amp; currSector &lt; fat.size &amp;&amp; currSector != -2 &amp;&amp; bytesRead &lt; readSize &amp;&amp; count++ &lt; 50_000</ID>
+    <ID>ComplexCondition:TextIO.kt$TextEncoding$len &gt;= 3 &amp;&amp; at(0) == 0xEF &amp;&amp; at(1) == 0xBB &amp;&amp; at(2) == 0xBF</ID>
+    <ID>ComplexCondition:TextIO.kt$TextEncoding$len &gt;= 4 &amp;&amp; at(0) == 0 &amp;&amp; at(1) == 0 &amp;&amp; at(2) == 0xFE &amp;&amp; at(3) == 0xFF</ID>
+    <ID>ComplexCondition:TextIO.kt$TextEncoding$len &gt;= 4 &amp;&amp; at(0) == 0xFF &amp;&amp; at(1) == 0xFE &amp;&amp; at(2) == 0 &amp;&amp; at(3) == 0</ID>
+    <ID>ComplexCondition:TextIO.kt$TextWindowReader$from + skipped &lt; buf.size &amp;&amp; skipped &lt; 4 &amp;&amp; startByte &gt; 0 &amp;&amp; (buf[from + skipped].toInt() and 0xC0) == 0x80</ID>
+    <ID>CyclomaticComplexMethod:FormatDetector.kt$MagicSniffer$fun sniff(b: ByteArray, n: Int, totalLength: Long): MagicHit?</ID>
+    <ID>CyclomaticComplexMethod:RtfExtractor.kt$RtfExtractor$fun extract(rtf: String, maxChars: Int = 5_000_000): String</ID>
+    <ID>CyclomaticComplexMethod:TextIO.kt$TextWindowReader$fun read(file: File, startByte: Long, maxBytes: Int, charset: Charset = Charsets.UTF_8): TextWindow</ID>
+    <ID>FunctionOnlyReturningConstant:DocxZoomPolicy.kt$DocxZoomPolicy$fun defaultPercent(): Int</ID>
+    <ID>ImplicitDefaultLocale:HexDump.kt$HexDump$String.format("%02X ", b)</ID>
+    <ID>ImplicitDefaultLocale:HexDump.kt$HexDump$String.format("%08X: ", baseOffset + rowStart)</ID>
+    <ID>LongMethod:Biff8XlsParser.kt$Biff8XlsParser$fun parseWorkbookStream(bytes: ByteArray): ParsedXls</ID>
+    <ID>LongParameterList:FormatDetector.kt$FormatDetector$( header: ByteArray, totalLength: Long, fileName: String, zipEntries: List&lt;String&gt;? = null, zipMimetype: String? = null, gzipIsTar: Boolean = false )</ID>
+    <ID>LongParameterList:FormatDetector.kt$FormatDetector$( id: String, ext: String, extSpec: FormatSpec?, zipEntries: List&lt;String&gt;?, zipMimetype: String?, gzipIsTar: Boolean )</ID>
+    <ID>LongParameterList:FormatRegistry.kt$FormatRegistry$( id: String, name: String, kind: FileKind, support: Support, mime: String, vararg ext: String )</ID>
+    <ID>LongParameterList:TextFileSearchEngine.kt$TextFileSearchEngine$( file: File, query: String, charset: Charset = Charsets.UTF_8, maxMatches: Int = DEFAULT_MAX_MATCHES, bufferSize: Int = DEFAULT_BUFFER_SIZE, shouldContinue: () -&gt; Boolean = { true } )</ID>
+    <ID>LoopWithTooManyJumpStatements:ArchiveSafety.kt$ArchiveTreeBuilder$for</ID>
+    <ID>LoopWithTooManyJumpStatements:BatchFileOperations.kt$BatchFileOperations$for</ID>
+    <ID>LoopWithTooManyJumpStatements:Biff8XlsParser.kt$Biff8XlsParser$for</ID>
+    <ID>LoopWithTooManyJumpStatements:Delimited.kt$DelimitedParser$for</ID>
+    <ID>LoopWithTooManyJumpStatements:EpubReader.kt$EpubReader$for</ID>
+    <ID>LoopWithTooManyJumpStatements:MeshParser.kt$MeshParser$for</ID>
+    <ID>LoopWithTooManyJumpStatements:PdfTextSearcher.kt$PdfTextSearcher$while</ID>
+    <ID>LoopWithTooManyJumpStatements:TextIO.kt$TextLoader$while</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("archive-other", "Other archive / disk image", FileKind.BINARY, ident, "application/octet-stream", "iso", "cab", "dmg", "img", "wim", "zst", "lz4", "lz", "z", "arj", "lzh", "ace", "rpm", "vhdx", "vmdk", "qcow2")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("code-data", "Query / schema / infra", FileKind.TEXT, full, "text/x-source", "sql", "proto", "tf", "hcl", "nix", "sol", "v", "sv", "vhd", "vhdl", "thrift", "avsc", "prisma")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("code-jvm", "JVM source", FileKind.TEXT, full, "text/x-source", "kt", "kts", "java", "scala", "groovy", "gradle", "clj", "cljs")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("code-native", "Native source", FileKind.TEXT, full, "text/x-source", "c", "h", "cpp", "cc", "cxx", "hpp", "hh", "cs", "go", "rs", "swift", "m", "mm", "zig", "d", "nim", "asm", "s", "f90", "for", "pas", "vb", "cr")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("code-script", "Script source", FileKind.TEXT, full, "text/x-source", "py", "rb", "pl", "pm", "lua", "sh", "bash", "zsh", "fish", "bat", "cmd", "ps1", "r", "jl", "dart", "ex", "exs", "erl", "hs", "ml", "fs", "lisp", "el", "vim", "tcl", "awk", "sed", "cmake", "mk")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("code-web", "Web source", FileKind.TEXT, full, "text/x-source", "js", "mjs", "cjs", "ts", "tsx", "jsx", "css", "scss", "sass", "less", "vue", "svelte", "php", "graphql", "gql", "wxss", "wxml")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("config", "Config / INI / TOML", FileKind.TEXT, full, "text/plain", "toml", "ini", "cfg", "conf", "properties", "env", "editorconfig", "gitignore", "gitattributes", "npmrc", "reg", "desktop", "service", "lock")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("data", "Binary data", FileKind.BINARY, ident, "application/octet-stream", "bin", "dat", "parquet", "avro", "orc", "pkl", "npy", "h5", "hdf5", "mat", "torrent", "lnk", "pak", "tflite", "onnx", "pb", "ckpt", "safetensors", "gguf")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("docx", "Word document (OOXML)", FileKind.DOCX, full, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx", "docm", "dotx", "dotm")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("exe", "Executable / library", FileKind.BINARY, ident, "application/octet-stream", "exe", "dll", "so", "dylib", "elf", "o", "class", "dex", "wasm", "pyc", "msi", "sys", "ko")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("json", "JSON", FileKind.TEXT, full, "application/json", "json", "jsonl", "ndjson", "geojson", "jsonc", "json5", "ipynb", "webmanifest", "har")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("markup-text", "Markup / docs source", FileKind.TEXT, full, "text/plain", "tex", "bib", "rst", "adoc", "org", "diff", "patch", "pem", "crt", "cer", "csr", "pub", "ics", "vcf", "eml", "m3u", "m3u8", "pls", "cue", "ass", "ssa")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("model-other", "Other 3D / CAD", FileKind.MODEL_3D, ident, "model/x-other", "ply", "glb", "gltf", "fbx", "blend", "dwg", "dxf", "step", "stp", "iges", "igs", "skp", "3ds", "usdz")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("ole2", "Legacy Microsoft Office (OLE2)", FileKind.LEGACY_OFFICE, ident, "application/x-ole-storage", "doc", "xls", "ppt", "msg", "vsd", "xlsb", "wps", "mpp")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("pptx", "PowerPoint (OOXML)", FileKind.PPTX, full, "application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx", "pptm", "ppsx", "potx", "potm")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("psd", "Photoshop / layered image", FileKind.BINARY, ident, "image/vnd.adobe.photoshop", "psd", "xcf", "ai", "eps", "ps", "kra", "sketch", "fig")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("sqlite", "SQLite database", FileKind.SQLITE, full, "application/vnd.sqlite3", "sqlite", "sqlite3", "db", "db3", "sdb", "s3db", "sqlitedb")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("text", "Plain text", FileKind.TEXT, full, "text/plain", "txt", "text", "log", "nfo", "diz", "asc", "srt", "vtt", "sub", "lst", "out")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("video-other", "Other video", FileKind.VIDEO, part, "video/x-other", "avi", "mov", "mpg", "mpeg", "flv", "wmv", "asf", "ogv", "mts", "m2ts", "vob")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("xlsx", "Excel workbook (OOXML)", FileKind.SPREADSHEET, full, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx", "xlsm", "xltx", "xltm")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("xml", "XML", FileKind.TEXT, full, "application/xml", "xml", "xsl", "xslt", "xsd", "wsdl", "plist", "gpx", "kml", "rss", "atom", "opml", "dae", "resx", "csproj", "vcxproj", "pom", "iml", "fxml", "storyboard", "xaml")</ID>
+    <ID>MaxLineLength:FormatRegistry.kt$FormatRegistry$spec("zip-app", "ZIP-based package", FileKind.ARCHIVE, full, "application/zip", "jar", "war", "ear", "aar", "apk", "xapk", "apks", "xpi", "crx", "whl", "egg", "nupkg", "vsix", "ipa", "3mf", "kmz", "mrpack", "sb3", "love", "pk3")</ID>
+    <ID>MaxLineLength:HtmlSanitizer.kt$HtmlSanitizer$private val dangerousUrlKeepImages = Regex("(href|src|xlink:href|action|formaction)\\s*=\\s*(\"\\s*(javascript|vbscript):[^\"]*\"|'\\s*(javascript|vbscript):[^']*'|\"\\s*data:(?!image/(png|jpe?g|gif|webp)[;,])[^\"]*\"|'\\s*data:(?!image/(png|jpe?g|gif|webp)[;,])[^']*')", RegexOption.IGNORE_CASE)</ID>
+    <ID>MaxLineLength:HtmlSanitizer.kt$HtmlSanitizer$private val dangerousUrlStrict = Regex("(href|src|xlink:href|action|formaction)\\s*=\\s*(\"\\s*(javascript|data|vbscript):[^\"]*\"|'\\s*(javascript|data|vbscript):[^']*')", RegexOption.IGNORE_CASE)</ID>
+    <ID>MaxLineLength:HtmlSanitizer.kt$HtmlSanitizer$private val strayActive = Regex("&lt;(script|style|iframe|object|embed|link|meta|base|form|input|button|source|frame|frameset)[^&gt;]*/?&gt;", RegexOption.IGNORE_CASE)</ID>
+    <ID>MaxLineLength:LegacyDocExtractor.kt$LegacyDocExtractor$val printableRatio = p.count { it.isLetterOrDigit() || it.isWhitespace() || it in ".,;:!?'\"()-+/*[]{}@#$%&amp;" }.toDouble() / p.length</ID>
+    <ID>MaxLineLength:TextIO.kt$TextWindowReader$buf[index] == '\n'.code.toByte() &amp;&amp; buf[index + 1] == 0.toByte() &amp;&amp; buf[index + 2] == 0.toByte() &amp;&amp; buf[index + 3] == 0.toByte()</ID>
+    <ID>MaxLineLength:TextIO.kt$TextWindowReader$buf[index] == 0.toByte() &amp;&amp; buf[index + 1] == 0.toByte() &amp;&amp; buf[index + 2] == 0.toByte() &amp;&amp; buf[index + 3] == '\n'.code.toByte()</ID>
+    <ID>NestedBlockDepth:Biff8XlsParser.kt$Biff8XlsParser$fun parseWorkbookStream(bytes: ByteArray): ParsedXls</ID>
+    <ID>NestedBlockDepth:RtfExtractor.kt$RtfExtractor$fun extract(rtf: String, maxChars: Int = 5_000_000): String</ID>
+    <ID>UseRequire:OdfTextExtractor.kt$OdfTextExtractor$throw IllegalArgumentException("content.xml too large")</ID>
+    <ID>UseRequire:Ole2CompoundFile.kt$Ole2CompoundFile$throw IllegalArgumentException("Not an OLE2 Compound File (invalid magic header)")</ID>
+  </CurrentIssues>
 </SmellBaseline>
