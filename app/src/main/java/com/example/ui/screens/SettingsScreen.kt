@@ -472,9 +472,9 @@ fun SettingsScreen(
 
     // Clear Cache Confirmation Dialog
     if (showClearCacheDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showClearCacheDialog = false },
-            title = { Text("Clear Cache") },
+            title = "Clear Cache",
             text = { Text("This will free up $cacheSize of preview and temporary rendering data. All documents remain intact on your device.") },
             confirmButton = {
                 TextButton(onClick = {
@@ -497,9 +497,9 @@ fun SettingsScreen(
 
     // Clear History Confirmation Dialog
     if (showClearHistoryDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showClearHistoryDialog = false },
-            title = { Text("Clear Recent Files") },
+            title = "Clear Recent Files",
             text = { Text("Are you sure you want to clear your recent file history? Your actual files will not be deleted.") },
             confirmButton = {
                 TextButton(onClick = {

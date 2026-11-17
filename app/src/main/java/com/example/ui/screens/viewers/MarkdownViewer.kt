@@ -97,14 +97,17 @@ fun MarkdownPreview(
                         --code-text: $codeBlockText;
                         --code-buttons: $codeBlockButtons;
                     }
+                    /* §7: serif reading voice with a 68ch measure; background stays on <html>. */
+                    html { background-color: var(--bg-color); }
                     body {
-                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                        background-color: var(--bg-color);
+                        font-family: Georgia, "Noto Serif", "Times New Roman", serif;
+                        background-color: transparent;
                         color: var(--text-body);
                         font-size: $fontSize;
-                        line-height: 1.55;
-                        padding: 16px;
-                        margin: 0;
+                        line-height: 1.65;
+                        padding: 16px 24px;
+                        max-width: 68ch;
+                        margin: 0 auto;
                         word-wrap: break-word;
                     }
                     h1, h2, h3, h4, h5, h6 {

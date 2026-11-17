@@ -93,9 +93,9 @@ fun FilePropertiesBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         dragHandle = { BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        containerColor = glass.fillStrong,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         modifier = modifier.testTag("file_properties_bottom_sheet")
     ) {
         Column(

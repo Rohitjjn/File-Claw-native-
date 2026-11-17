@@ -82,9 +82,9 @@ fun DocumentOutlineBottomSheet(
         dragHandle = {
             BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
         },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        containerColor = com.example.ui.theme.LocalGlass.current.fillStrong,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         modifier = modifier.testTag("document_outline_bottom_sheet")
     ) {
         Column(

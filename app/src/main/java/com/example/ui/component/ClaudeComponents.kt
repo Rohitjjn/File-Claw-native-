@@ -379,3 +379,37 @@ fun StaggeredAnimatedItem(
         content()
     }
 }
+
+/**
+ * §6 Dialogs v2 — one dialog shape for the whole app: 24 dp radius, glass shell,
+ * Source Serif title, no shadow. Callers keep responsibility for ≤ 3 actions and
+ * destructive placement (danger-left).
+ */
+@Composable
+fun ClawAlertDialog(
+    onDismissRequest: () -> Unit,
+    title: String,
+    text: @Composable () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    dismissButton: @Composable () -> Unit = {}
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = com.example.ui.theme.LocalGlass.current.fillStrong,
+        tonalElevation = 0.dp,
+        title = {
+            Text(
+                text = title,
+                fontFamily = com.example.ui.theme.SerifFamily,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Normal,
+                fontSize = 20.sp,
+                letterSpacing = (-0.2).sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = text,
+        confirmButton = confirmButton,
+        dismissButton = dismissButton
+    )
+}

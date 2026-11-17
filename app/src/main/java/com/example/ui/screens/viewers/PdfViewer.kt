@@ -426,9 +426,9 @@ fun PdfPreview(
         }
 
         if (requirePassword) {
-            AlertDialog(
+            com.example.ui.component.ClawAlertDialog(
                 onDismissRequest = onBackClick,
-                title = { Text("Password Required") },
+                title = "Password Required",
                 text = {
                     // BUG-005: keep the dialog above the keyboard instead of under it.
                     Column(modifier = Modifier.imePadding()) {
