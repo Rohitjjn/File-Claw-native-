@@ -255,7 +255,7 @@ Branch `arena/5100f329-file-claw-native`; every claim below is anchored to a Git
 |---|---|
 | AUD-026 (gate) | FIXED — full Android gate blocking in CI; instrumented job (API 34 emulator) also green. See §9 table note rewritten. |
 | AUD-034 | FIXED — 4.json committed; migration validated on-device by `MigrationTestHelper` (instrumented). |
-| Split `FilePreviewScreen.kt` | DONE — 5,740 → **2,501 lines**; 25 files under `ui/screens/viewers/`; no viewer file exceeds 800 lines (enforced by review). |
+| Split `FilePreviewScreen.kt` | DONE — 5,740 → **2,306 lines**; largest viewer (`PdfViewer.kt`) 747 lines; `FilePreviewScreen` keeps only the orchestrating screen composable (effects, find orchestration, Scaffold, menu, dialogs) — further reduction is a behavioral refactor, deliberately not done this phase. 26 files under `ui/screens/viewers/`; no viewer file exceeds 800 lines (enforced by review). |
 | Navigation | DONE — type-safe `ClawDestination` (@Serializable) Navigation Compose 2.8 routes; `hasRoute` compile issue worked around via serial-name comparison. `currentFileState` singleton remains deliberately (see §9/CHANGELOG — Phase 3+). |
 | detekt | BASELINED — `core/` blocking with an **empty-then-generated baseline** (`config/detekt/baseline.xml`): 10 pre-existing findings above the threshold (ComplexCondition ×7, CyclomaticComplexMethod ×3 incl. `TextIO.read` 45 / `RtfExtractor.extract` 55, NestedBlockDepth, LongParameterList). New findings fail the build. `detektUi` (UI) is advisory-only until a dedicated triage. **Debt is recorded, not hidden.** |
 | JaCoCo | FIXED — `jacocoCoreVerify` ≥ 80 % core lines, blocking; **measured 83.84 % (1816/2166)**; report uploaded as CI artifact `jacoco-core-report`. |

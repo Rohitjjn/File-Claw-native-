@@ -98,7 +98,7 @@ budget compile-fallout triage generously.
 Paparazzi verify task; jacoco report artifact; detekt baseline. Failing screenshot = PR blocked.
 
 **Exit criteria (all met 2026-11-17):**
-- [x] No viewer file > 800 lines; `FilePreviewScreen.kt` reduced to a 2,501-line shell
+- [x] No viewer file > 800 lines; `FilePreviewScreen.kt` reduced to 2,306 lines (only the orchestrating screen composable remains; viewers mechanics fully extracted)
 - [x] Navigation is type-safe (`ClawDestination`, @Serializable); `hasRoute` drift fixed via serial-name comparison
 - [x] Instrumented + screenshot suites green in CI; `jacocoCoreVerify` blocking (measured 83.84 % core lines); `detekt` blocking on `core/`
 - [x] AUTHORS/CHANGELOG updated; PHASE 3 prompt written (`docs/prompts/PHASE_3_PROMPT.md`)
