@@ -64,6 +64,32 @@ jobs:
           grep -E '^e: ' /tmp/itcompile.log | head -60 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
           exit $code
 
+      # Phase 2: screenshot golden masters (Roborazzi, JVM + Robolectric).
+      # Baselines live in app/src/test/snapshots/images. Bootstrap: on push events with no baselines,
+      # record and bot-commit them; everywhere else, verify (mismatch = blocked run).
+      # To intentionally re-record baselines, delete the PNGs and let the push bootstrap re-record.
+      - name: Screenshot baselines (Roborazzi)
+        run: |
+          set -e
+          IMG_DIR=app/src/test/snapshots/images
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && { [ ! -d "$IMG_DIR" ] || [ -z "$(ls -A "$IMG_DIR" 2>/dev/null)" ]; }; then
+            echo "No baselines found — recording initial set and committing."
+            ./gradlew recordRoborazziDebug --console=plain > /tmp/record.log 2>&1 || { echo '::error title=Screenshots::recordRoborazziDebug failed'; grep -E '^e: ' /tmp/record.log | head -40 | sed 's#^#::error ::#'; tail -30 /tmp/record.log; exit 1; }
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add "$IMG_DIR"
+            git commit -m "test(screenshots): record golden baselines (Roborazzi)" || echo "nothing to commit"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          else
+            set +e
+            ./gradlew verifyRoborazziDebug --console=plain > /tmp/verify.log 2>&1
+            code=$?
+            grep -E '^e: ' /tmp/verify.log | head -40 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
+            grep -E 'FAILED|were different' /tmp/verify.log | head -20 | sed 's#^#::error ::#'
+            tail -20 /tmp/verify.log
+            exit $code
+          fi
+
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
