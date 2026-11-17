@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
+import androidx.navigation.hasRoute
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.screens.AllFilesScreen
@@ -40,6 +41,7 @@ import com.example.ui.screens.FilePreviewScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SplashScreen
+import com.example.ui.navigation.ClawDestination
 import com.example.ui.screens.SearchScreen
 import com.example.ui.theme.FilesClawTheme
 import com.example.viewmodel.MainViewModel
@@ -227,11 +229,11 @@ class MainActivity : ComponentActivity() {
                                     if (lastFile != null) {
                                         mainViewModel.openFile(lastFile)
                                         if (lastFile.extension.lowercase() == "txt" && settings.defaultToEditOnOpen) {
-                                            navController.navigate("editor") {
+                                            navController.navigate(ClawDestination.Editor) {
                                                 launchSingleTop = true
                                             }
                                         } else {
-                                            navController.navigate("preview") {
+                                            navController.navigate(ClawDestination.Preview) {
                                                 launchSingleTop = true
                                             }
                                         }
@@ -242,11 +244,11 @@ class MainActivity : ComponentActivity() {
                                     e.printStackTrace()
                                 }
                             } else if (action == "com.example.action.HISTORY") {
-                                navController.navigate("home") {
-                                    popUpTo("splash") { inclusive = true }
+                                navController.navigate(ClawDestination.Home) {
+                                    popUpTo(ClawDestination.Splash) { inclusive = true }
                                 }
                             } else if (action == "com.example.action.SETTINGS") {
-                                navController.navigate("settings") {
+                                navController.navigate(ClawDestination.Settings) {
                                     launchSingleTop = true
                                 }
                             }
@@ -255,14 +257,16 @@ class MainActivity : ComponentActivity() {
                     
                     val navigateToPreviewWithEditOnOpen = {
                         val fileState = mainViewModel.currentFileState.value
-                        val currentRoute = navController.currentBackStackEntry?.destination?.route
-                        if (currentRoute != "preview" && currentRoute != "editor") {
+                        val dest = navController.currentBackStackEntry?.destination
+                        val onPreviewOrEditor = dest?.hasRoute<ClawDestination.Preview>() == true ||
+                            dest?.hasRoute<ClawDestination.Editor>() == true
+                        if (!onPreviewOrEditor) {
                             if (fileState.opensInEditor() && settings.defaultToEditOnOpen) {
-                                navController.navigate("editor") {
+                                navController.navigate(ClawDestination.Editor) {
                                     launchSingleTop = true
                                 }
                             } else {
-                                navController.navigate("preview") {
+                                navController.navigate(ClawDestination.Preview) {
                                     launchSingleTop = true
                                 }
                             }
@@ -274,20 +278,22 @@ class MainActivity : ComponentActivity() {
                         mainViewModel.navigationEvent.collect { event ->
                             when (event) {
                                 is MainViewModel.NavigationEvent.NavigateToPreview -> {
-                                    val currentRoute = navController.currentBackStackEntry?.destination?.route
-                                    if (currentRoute != "preview" && currentRoute != "editor") {
+                                    val dest = navController.currentBackStackEntry?.destination
+                                    val onPreviewOrEditor = dest?.hasRoute<ClawDestination.Preview>() == true ||
+                                        dest?.hasRoute<ClawDestination.Editor>() == true
+                                    if (!onPreviewOrEditor) {
                                         if (event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
-                                            navController.navigate("editor") {
+                                            navController.navigate(ClawDestination.Editor) {
                                                 launchSingleTop = true
                                             }
                                         } else {
-                                            navController.navigate("preview") {
+                                            navController.navigate(ClawDestination.Preview) {
                                                 launchSingleTop = true
                                             }
                                         }
-                                    } else if (currentRoute == "preview" && event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
-                                        navController.navigate("editor") {
-                                            popUpTo("preview") { inclusive = true }
+                                    } else if (dest?.hasRoute<ClawDestination.Preview>() == true && event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
+                                        navController.navigate(ClawDestination.Editor) {
+                                            popUpTo(ClawDestination.Preview) { inclusive = true }
                                             launchSingleTop = true
                                         }
                                     }
@@ -301,7 +307,7 @@ class MainActivity : ComponentActivity() {
 
                     NavHost(
                         navController = navController,
-                        startDestination = "splash",
+                        startDestination = ClawDestination.Splash,
                         modifier = Modifier.fillMaxSize(),
                         enterTransition = {
                             scaleIn(
@@ -328,33 +334,33 @@ class MainActivity : ComponentActivity() {
                             ) + fadeOut(animationSpec = tween(60))
                         }
                     ) {
-                        composable("splash") {
+                        composable<ClawDestination.Splash> {
                             SplashScreen(
                                 onNavigateToHome = {
-                                    navController.navigate("home") {
-                                        popUpTo("splash") { inclusive = true }
+                                    navController.navigate(ClawDestination.Home) {
+                                        popUpTo(ClawDestination.Splash) { inclusive = true }
                                     }
                                 }
                             )
                         }
 
-                        composable("home") {
+                        composable<ClawDestination.Home> {
                             HomeScreen(
                                 viewModel = mainViewModel,
                                 onNavigateToPreview = navigateToPreviewWithEditOnOpen,
                                 onNavigateToSettings = {
-                                    navController.navigate("settings")
+                                    navController.navigate(ClawDestination.Settings)
                                 },
                                 onNavigateToAllFiles = {
-                                    navController.navigate("all_files")
+                                    navController.navigate(ClawDestination.AllFiles)
                                 },
                                 onNavigateToSearch = {
-                                    navController.navigate("search")
+                                    navController.navigate(ClawDestination.Search)
                                 }
                             )
                         }
 
-                        composable("all_files") {
+                        composable<ClawDestination.AllFiles> {
                             AllFilesScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
@@ -364,7 +370,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        composable("search") {
+                        composable<ClawDestination.Search> {
                             SearchScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
@@ -374,19 +380,19 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        composable("preview") {
+                        composable<ClawDestination.Preview> {
                             FilePreviewScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
                                     navController.popBackStack()
                                 },
                                 onNavigateToEditor = {
-                                    navController.navigate("editor")
+                                    navController.navigate(ClawDestination.Editor)
                                 }
                             )
                         }
 
-                        composable("editor") {
+                        composable<ClawDestination.Editor> {
                             EditorScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
@@ -395,7 +401,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        composable("settings") {
+                        composable<ClawDestination.Settings> {
                             SettingsScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
