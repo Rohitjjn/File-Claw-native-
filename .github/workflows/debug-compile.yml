@@ -1,0 +1,45 @@
+name: Debug Compile
+
+# Phase 2 diagnostic helper: run the same Kotlin compile as CI but surface compiler
+# errors as workflow annotations (the raw log endpoint is not readable from the agent sandbox).
+# Manual dispatch only.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug-compile:
+    name: Debug compile (annotations)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Accept Android SDK licenses
+        run: |
+          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          fi
+
+      - name: Set up Gradle (cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Compile Kotlin with annotations
+        run: |
+          set +e
+          ./gradlew compileDebugKotlin --console=plain > /tmp/compile.log 2>&1
+          code=$?
+          grep -E '^e: ' /tmp/compile.log | head -60 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
+          tail -5 /tmp/compile.log
+          exit $code
