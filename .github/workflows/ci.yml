@@ -53,7 +53,7 @@ jobs:
           ./gradlew compileDebugKotlin --console=plain > /tmp/compile.log 2>&1
           code=$?
           grep -E '^e: ' /tmp/compile.log | head -60 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
-          tail -20 /tmp/compile.log
+          tail -30 /tmp/compile.log | sed 's#^#::error ::#'
           exit $code
 
       - name: Compile instrumented tests
@@ -62,6 +62,7 @@ jobs:
           ./gradlew compileDebugAndroidTestKotlin --console=plain > /tmp/itcompile.log 2>&1
           code=$?
           grep -E '^e: ' /tmp/itcompile.log | head -60 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
+          [ $code -ne 0 ] && tail -30 /tmp/itcompile.log | sed 's#^#::error ::#'
           exit $code
 
       # Phase 2: screenshot golden masters (Roborazzi, JVM + Robolectric).
@@ -74,7 +75,7 @@ jobs:
           IMG_DIR=app/src/test/snapshots/images
           if [ "${GITHUB_EVENT_NAME}" = "push" ] && { [ ! -d "$IMG_DIR" ] || [ -z "$(ls -A "$IMG_DIR" 2>/dev/null)" ]; }; then
             echo "No baselines found — recording initial set and committing."
-            ./gradlew recordRoborazziDebug --console=plain > /tmp/record.log 2>&1 || { echo '::error title=Screenshots::recordRoborazziDebug failed'; grep -E '^e: ' /tmp/record.log | head -40 | sed 's#^#::error ::#'; tail -30 /tmp/record.log; exit 1; }
+            ./gradlew recordRoborazziDebug --console=plain > /tmp/record.log 2>&1 || { echo '::error title=Screenshots::recordRoborazziDebug failed'; grep -E '^e: ' /tmp/record.log | head -40 | sed 's#^#::error ::#'; tail -30 /tmp/record.log | sed 's#^#::error ::#'; exit 1; }
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add "$IMG_DIR"
@@ -86,7 +87,7 @@ jobs:
             code=$?
             grep -E '^e: ' /tmp/verify.log | head -40 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
             grep -E 'FAILED|were different' /tmp/verify.log | head -20 | sed 's#^#::error ::#'
-            tail -20 /tmp/verify.log
+            [ $code -ne 0 ] && tail -30 /tmp/verify.log | sed 's#^#::error ::#'
             exit $code
           fi
 
@@ -185,7 +186,7 @@ jobs:
             code=$?
             grep -E '^e: ' /tmp/it.log | head -40 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
             grep -E 'FAILED|failing tests|> [A-Za-z].*(Error|error|failed)' /tmp/it.log | head -30 | sed 's#^#::error ::#'
-            tail -30 /tmp/it.log
+            [ $code -ne 0 ] && tail -30 /tmp/it.log | sed 's#^#::error ::#'
             exit $code
 
       - name: Upload instrumented test reports (on failure)
