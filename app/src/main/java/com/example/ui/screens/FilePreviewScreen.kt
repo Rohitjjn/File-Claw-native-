@@ -105,6 +105,9 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.example.R
 import androidx.compose.material.icons.outlined.RotateRight
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.ui.semantics.contentDescription
 import com.example.ui.screens.viewers.MarkdownPreview
 import com.example.ui.screens.viewers.PlainTextPreview
@@ -779,7 +782,7 @@ fun FilePreviewScreen(
                                             },
                                             leadingIcon = {
                                                 Icon(
-                                                    imageVector = androidx.compose.material.icons.outlined.Flag,
+                                                    imageVector = Icons.Outlined.Flag,
                                                     contentDescription = androidx.compose.ui.res.stringResource(R.string.report_render_item)
                                                 )
                                             }
@@ -1700,7 +1703,7 @@ fun FilePreviewScreen(
                                     trailingIcon = {
                                         IconButton(onClick = { archivePasswordVisible = !archivePasswordVisible }) {
                                             Icon(
-                                                imageVector = if (archivePasswordVisible) androidx.compose.material.icons.outlined.VisibilityOff else androidx.compose.material.icons.outlined.Visibility,
+                                                imageVector = if (archivePasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                                                 contentDescription = androidx.compose.ui.res.stringResource(if (archivePasswordVisible) R.string.hide_password else R.string.show_password)
                                             )
                                         }
@@ -2087,7 +2090,7 @@ fun FilePreviewScreen(
                     showRenderReportDialog = false
                     val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("diagnostic", reportDetail))
-                    Toast.makeText(context, R.string.report_render_copied, Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(context, R.string.report_render_copied, android.widget.Toast.LENGTH_SHORT).show()
                 }) {
                     Text(androidx.compose.ui.res.stringResource(R.string.report_render_copy))
                 }
