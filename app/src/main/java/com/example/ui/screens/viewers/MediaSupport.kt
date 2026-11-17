@@ -7,6 +7,7 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import java.io.File
+import com.example.R
 
 internal fun formatTime(ms: Int): String {
     val totalSecs = ms / 1000
@@ -39,7 +40,7 @@ internal fun openWithFile(context: android.content.Context, file: File, extensio
         }
         context.startActivity(android.content.Intent.createChooser(intent, "Open with"))
     } catch (e: Exception) {
-        android.widget.Toast.makeText(context, "No app can open this file", android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(context, context.getString(R.string.no_app_can_open), android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 

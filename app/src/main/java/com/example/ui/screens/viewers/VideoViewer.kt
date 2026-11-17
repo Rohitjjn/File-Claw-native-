@@ -16,6 +16,8 @@ import com.example.data.RecentFileEntity
 import java.io.File
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.R
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun VideoPlayer(
@@ -26,6 +28,7 @@ fun VideoPlayer(
     val context = LocalContext.current
     // AUD-008: codec failure used to leave a dead 260 dp black box. Now it flips to
     // an inline honest error with Open-with / hex fallbacks.
+    val videoDecodeFailed = stringResource(R.string.video_decode_failed)
     var videoError by remember(fileEntity) { mutableStateOf<String?>(null) }
     Column(
         modifier = modifier.padding(16.dp),
@@ -50,7 +53,7 @@ fun VideoPlayer(
                         controller.setAnchorView(this)
                         setMediaController(controller)
                         setOnErrorListener { _, _, _ ->
-                            videoError = "This video can't be decoded on this device (unsupported codec or container)."
+                            videoError = videoDecodeFailed
                             true
                         }
                         start()
@@ -67,7 +70,7 @@ fun VideoPlayer(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "Can't play this video",
+                    text = stringResource(R.string.video_playback_failed_title),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -83,10 +86,10 @@ fun VideoPlayer(
                 Spacer(modifier = Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { openWithFile(context, File(fileEntity.path), fileEntity.extension) }) {
-                        Text("Open with…")
+                        Text(stringResource(R.string.action_open_with))
                     }
                     if (onOpenHex != null) {
-                        OutlinedButton(onClick = onOpenHex) { Text("View as hex") }
+                        OutlinedButton(onClick = onOpenHex) { Text(stringResource(R.string.action_view_as_hex)) }
                     }
                 }
             }

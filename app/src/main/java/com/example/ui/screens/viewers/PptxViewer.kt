@@ -19,6 +19,8 @@ import java.io.File
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
+import com.example.R
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun PptxPreviewWebView(
@@ -37,13 +39,16 @@ fun PptxPreviewWebView(
     var pptxReloadKey by remember(base64Pptx) { mutableIntStateOf(0) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
+    val pptxWatchdogMessage = stringResource(R.string.pptx_watchdog_timeout)
+    val pptxLoadFailedGeneric = stringResource(R.string.pptx_load_failed_generic)
+    val pptxHttpErrorFormat = stringResource(R.string.pptx_http_error)
 
     // 15 s load watchdog: a wedged renderer must not spin forever (AUD-005).
     LaunchedEffect(pptxReloadKey) {
         kotlinx.coroutines.delay(15_000)
         if (isWebViewLoading) {
             isWebViewLoading = false
-            loadFailed = "The presentation renderer took too long to respond (15 s watchdog)."
+            loadFailed = pptxWatchdogMessage
         }
     }
 
@@ -101,7 +106,7 @@ fun PptxPreviewWebView(
                                 post {
                                     isWebViewLoading = false
                                     loadFailed = error?.description?.toString()?.take(180)
-                                        ?: "The presentation preview page could not be loaded."
+                                        ?: pptxLoadFailedGeneric
                                 }
                             }
                         }
@@ -111,7 +116,7 @@ fun PptxPreviewWebView(
                                 android.util.Log.e("WebViewPptx", "HTTP Error: ${errorResponse?.statusCode}")
                                 post {
                                     isWebViewLoading = false
-                                    loadFailed = "The presentation preview page failed to load (HTTP ${errorResponse?.statusCode ?: "?"})."
+                                    loadFailed = String.format(pptxHttpErrorFormat, errorResponse?.statusCode?.toString() ?: "?")
                                 }
                             }
                         }
@@ -142,7 +147,7 @@ fun PptxPreviewWebView(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "This presentation couldn't be rendered",
+                    text = stringResource(R.string.pptx_load_failed_title),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
@@ -175,7 +180,7 @@ fun PptxPreviewWebView(
                         pptxReloadKey++
                     }) { Text("Retry") }
                     OutlinedButton(onClick = { openWithFile(context, File(fileEntity.path), fileEntity.extension) }) {
-                        Text("Open with…")
+                        Text(stringResource(R.string.action_open_with))
                     }
                 }
             }

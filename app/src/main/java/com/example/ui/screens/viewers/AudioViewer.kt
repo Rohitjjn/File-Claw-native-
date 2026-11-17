@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Slider
 import kotlinx.coroutines.delay
 import androidx.compose.ui.semantics.contentDescription
+import com.example.R
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun AudioPlayer(
@@ -35,6 +37,7 @@ fun AudioPlayer(
     var duration by remember { mutableStateOf(1) }
     // AUD-007: prepare() used to block the main thread and any failure was swallowed,
     // leaving a dead 0:00 player. Now decode is async and failures surface inline.
+    val audioDecodeFailed = stringResource(R.string.audio_decode_failed)
     var audioError by remember(fileEntity) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(fileEntity) {
@@ -43,7 +46,7 @@ fun AudioPlayer(
             mp.setDataSource(fileEntity.path)
             mp.setOnErrorListener { _, _, _ ->
                 isPlaying = false
-                audioError = "This audio can't be decoded on this device."
+                audioError = audioDecodeFailed
                 true
             }
             mp.setOnCompletionListener { isPlaying = false }
@@ -54,7 +57,7 @@ fun AudioPlayer(
             mp.prepareAsync() // decode off the main thread (AUD-007)
         } catch (e: Exception) {
             try { mp.release() } catch (ignored: Exception) {}
-            audioError = "This audio can't be decoded on this device."
+            audioError = audioDecodeFailed
         }
     }
 
@@ -99,7 +102,7 @@ fun AudioPlayer(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Can't play this audio",
+                text = stringResource(R.string.audio_playback_failed_title),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
@@ -122,10 +125,10 @@ fun AudioPlayer(
             Spacer(modifier = Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = { openWithFile(context, File(fileEntity.path), fileEntity.extension) }) {
-                    Text("Open with…")
+                    Text(stringResource(R.string.action_open_with))
                 }
                 if (onOpenHex != null) {
-                    OutlinedButton(onClick = onOpenHex) { Text("View as hex") }
+                    OutlinedButton(onClick = onOpenHex) { Text(stringResource(R.string.action_view_as_hex)) }
                 }
             }
             return@Column

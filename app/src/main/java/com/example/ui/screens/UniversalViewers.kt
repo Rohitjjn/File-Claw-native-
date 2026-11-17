@@ -60,6 +60,8 @@ import kotlin.math.max
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.example.R
+import androidx.compose.ui.res.stringResource
 
 private fun humanSize(bytes: Long): String = when {
     bytes >= 1024L * 1024 * 1024 -> "%.2f GB".format(bytes / (1024.0 * 1024 * 1024))
@@ -240,11 +242,11 @@ fun FontViewer(fileEntity: RecentFileEntity, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
         )
         if (face == null) {
-            NoticeBanner("This font file could not be loaded — it may be corrupt or an unsupported format.", Modifier.padding(top = 12.dp))
+            NoticeBanner(stringResource(R.string.font_load_failed), Modifier.padding(top = 12.dp))
             return@Column
         }
         if (!glyphsOk) {
-            NoticeBanner("This font loaded but contains no usable glyphs (invalid font) — showing it anyway; glyph boxes may be blank.", Modifier.padding(top = 12.dp))
+            NoticeBanner(stringResource(R.string.font_no_usable_glyphs), Modifier.padding(top = 12.dp))
         }
         val samples = listOf(
             12f to "The quick brown fox jumps over the lazy dog",

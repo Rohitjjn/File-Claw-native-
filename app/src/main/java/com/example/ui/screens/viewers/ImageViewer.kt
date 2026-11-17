@@ -15,6 +15,8 @@ import com.example.viewmodel.MainViewModel
 import java.io.File
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
+import com.example.R
+import androidx.compose.ui.res.stringResource
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -105,7 +107,7 @@ fun ImagePreview(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "This image can't be decoded on this device (no codec for it).",
+                        text = stringResource(R.string.image_decode_failed),
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onBackground,
                         textAlign = TextAlign.Center
@@ -118,7 +120,7 @@ fun ImagePreview(
                     )
                     if (onOpenHex != null) {
                         Spacer(modifier = Modifier.height(16.dp))
-                        OutlinedButton(onClick = onOpenHex) { Text("View as hex") }
+                        OutlinedButton(onClick = onOpenHex) { Text(stringResource(R.string.action_view_as_hex)) }
                     }
                 }
                 return@HorizontalPager

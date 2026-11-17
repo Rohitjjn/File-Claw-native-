@@ -1,3 +1,23 @@
 <resources>
     <string name="app_name">Files Claw</string>
+
+    <!-- AUD-005/006/007/008/010 honest-failure surfaces (Phase 1; extracted Phase 2) -->
+    <string name="action_open_with">Open with…</string>
+    <string name="action_view_as_hex">View as hex</string>
+    <string name="audio_decode_failed">This audio can\'t be decoded on this device.</string>
+    <string name="audio_playback_failed_title">Can\'t play this audio</string>
+    <string name="video_decode_failed">This video can\'t be decoded on this device (unsupported codec or container).</string>
+    <string name="video_playback_failed_title">Can\'t play this video</string>
+    <string name="pptx_load_failed_title">This presentation couldn\'t be rendered</string>
+    <string name="pptx_watchdog_timeout">The presentation renderer took too long to respond (15 s watchdog).</string>
+    <string name="pptx_load_failed_generic">The presentation preview page could not be loaded.</string>
+    <string name="image_decode_failed">This image can\'t be decoded on this device (no codec for it).</string>
+    <string name="font_load_failed">This font file could not be loaded — it may be corrupt or an unsupported format.</string>
+    <string name="font_no_usable_glyphs">This font loaded but contains no usable glyphs (invalid font) — showing it anyway; glyph boxes may be blank.</string>
+    <string name="hex_empty_file">Empty file.</string>
+    <string name="hex_invalid_offset">Enter a hex (0x…) or decimal offset ≥ 0</string>
+    <string name="file_not_found">File not found on disk. It might have been deleted.</string>
+    <string name="no_app_can_open">No app can open this file</string>
+    <string name="unsupported_preview_notice">This viewer can\'t decode the file on this device; showing the raw bytes.</string>
+    <string name="pptx_http_error">The presentation preview page failed to load (HTTP %1$s).</string>
 </resources>

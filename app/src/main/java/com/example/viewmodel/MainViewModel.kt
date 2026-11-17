@@ -42,6 +42,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.FileInputStream
 import java.io.InputStream
+import com.example.R
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -478,7 +479,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val file = File(fileEntity.path)
                 if (!file.exists()) {
-                    _currentFileState.value = FileContentState.Error("File not found on disk. It might have been deleted.")
+                    _currentFileState.value = FileContentState.Error(getApplication<Application>().getString(R.string.file_not_found))
                     _navigationEvent.send(NavigationEvent.NavigateToPreview(_currentFileState.value))
                     return@launch
                 }
@@ -507,13 +508,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val file = File(fileEntity.path)
                 if (!file.exists()) {
-                    _currentFileState.value = FileContentState.Error("File not found on disk. It might have been deleted.")
+                    _currentFileState.value = FileContentState.Error(getApplication<Application>().getString(R.string.file_not_found))
                     return@launch
                 }
                 val detection = FormatDetector.detect(file, file.name)
                 _currentFileState.value = identifyOnly(
                     file, fileEntity, detection,
-                    "This viewer can't decode the file on this device; showing the raw bytes."
+                    getApplication<Application>().getString(R.string.unsupported_preview_notice)
                 )
             } catch (e: Exception) {
                 _currentFileState.value = FileContentState.Error("Failed to open as hex: ${e.message}")

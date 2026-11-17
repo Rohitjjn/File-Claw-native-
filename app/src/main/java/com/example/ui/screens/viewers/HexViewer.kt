@@ -28,6 +28,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import com.example.R
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun HexViewer(
@@ -42,6 +44,7 @@ fun HexViewer(
     var windowIndex by rememberSaveable(filePath) { mutableIntStateOf(0) }
     var window by remember { mutableStateOf<HexDump.HexWindow?>(null) }
     var jumpText by remember(filePath) { mutableStateOf("") }
+    val hexInvalidOffset = stringResource(R.string.hex_invalid_offset)
     var jumpError by remember(filePath) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(filePath, windowIndex) {
@@ -54,7 +57,7 @@ fun HexViewer(
     fun jumpToOffset(raw: String) {
         val target = HexDump.parseOffset(raw)
         if (target == null) {
-            jumpError = "Enter a hex (0x…) or decimal offset ≥ 0"
+            jumpError = hexInvalidOffset
             return
         }
         if (totalBytes > 0 && target >= totalBytes) {
@@ -153,7 +156,7 @@ fun HexViewer(
             if (current == null) {
                 item { Text("Reading…", color = Color(0xFF9CDCFE), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
             } else if (current.hexRows.isEmpty()) {
-                item { Text("Empty file.", color = Color(0xFF9CDCFE), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
+                item { Text(stringResource(R.string.hex_empty_file), color = Color(0xFF9CDCFE), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
             } else {
                 items(current.hexRows.size, key = { it }, contentType = { "HexRow" }) { index ->
                     Row(
