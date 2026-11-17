@@ -46,6 +46,7 @@ import com.example.ui.screens.SearchScreen
 import com.example.ui.theme.FilesClawTheme
 import com.example.viewmodel.MainViewModel
 import kotlinx.coroutines.flow.first
+import androidx.compose.ui.input.key.onKeyEvent
 
 
 /** Type-safe route check. @Serializable objects serialize to their class serial name (the FQCN). */
@@ -315,8 +316,8 @@ class MainActivity : ComponentActivity() {
                     // Phase 3a: glass-at-root — ambient glow floats behind every destination.
                     // Reading surfaces stay opaque by contract (docs/UI_FRONTIER.md §4.5/§4.6).
                     // Phase 3b: Quick Open (Ctrl/Cmd+K) — files + actions palette.
-                    androidx.compose.foundation.layout.Box(
-                        modifier = Modifier.fillMaxSize().androidx.compose.ui.input.key.onKeyEvent { event ->
+                    Box(
+                        modifier = Modifier.fillMaxSize().onKeyEvent { event ->
                             val isK = event.key == androidx.compose.ui.input.key.Key.K
                             val isShortcut = event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
                                 isK && (event.isCtrlPressed || event.isMetaPressed)
