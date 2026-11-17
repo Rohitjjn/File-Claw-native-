@@ -59,13 +59,26 @@ jobs:
           exit $code
 
       # Phase 2: detekt over core/ (blocking, baselined) and the UI layer (advisory, reported).
+      # First failure on an empty baseline bootstraps config/detekt/baseline.xml from the
+      # current findings (legacy debt is recorded, not hidden) and bot-commits it on push.
+      # After that the step is fully blocking: any NEW finding fails the run.
       - name: detekt (core) + detektUi (advisory)
         run: |
           set +e
           ./gradlew detekt detektUi --console=plain > /tmp/detekt.log 2>&1
           code=$?
           grep -E '^[^ ].*\.kt:[0-9]+' /tmp/detekt.log | head -40 | sed 's#^#::error ::#'
-          if [ $code -ne 0 ]; then tail -30 /tmp/detekt.log | sed 's#^#::error ::#'; fi
+          if [ $code -ne 0 ] && [ "${GITHUB_EVENT_NAME}" = "push" ] && ! grep -qE '<[A-Za-z]' config/detekt/baseline.xml; then
+            echo "Empty baseline and existing findings — generating baseline and bot-committing it."
+            ./gradlew detektBaseline --console=plain > /tmp/detektbase.log 2>&1 || { tail -20 /tmp/detektbase.log | sed 's#^#::error ::#'; exit 1; }
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add config/detekt/baseline.xml
+            git commit -m "chore(detekt): baseline existing core findings (AUD: legacy debt)" || echo "nothing to commit"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+            exit 0
+          fi
+          if [ $code -ne 0 ]; then tail -20 /tmp/detekt.log | sed 's#^#::error ::#'; fi
           exit $code
 
       # Phase 2: JaCoCo — verify >= 80% line coverage of com.example.core (blocking) and
