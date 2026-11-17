@@ -39,6 +39,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import com.example.ui.screens.PdfSearchSnapshot
+import com.example.ui.screens.PdfPageSearchMatch
 
 private fun isBundledPdfReaderUri(uri: android.net.Uri): Boolean {
     val path = uri.path.orEmpty()

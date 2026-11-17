@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import com.example.ui.screens.InViewerSearchCommandPolicy
+import com.example.ui.screens.DocxTextRecovery
 
 @Composable
 fun DocxPreviewWebView(

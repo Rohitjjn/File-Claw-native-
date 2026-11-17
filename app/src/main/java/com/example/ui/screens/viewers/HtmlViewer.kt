@@ -10,6 +10,7 @@ import com.example.data.RecentFileEntity
 import java.io.File
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.ui.screens.escapeHtml
 
 @Composable
 fun WebViewPreview(

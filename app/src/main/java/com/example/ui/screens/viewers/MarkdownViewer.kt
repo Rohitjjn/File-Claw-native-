@@ -13,6 +13,7 @@ import java.io.File
 import com.example.ui.component.ViewerSyntaxTheme
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import com.example.ui.screens.DocumentPreviewScript
 
 // Helper: Fast and robust code syntax highlighter
 @Composable

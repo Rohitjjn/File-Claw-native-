@@ -16,6 +16,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import com.example.ui.screens.InViewerSearchCommandPolicy
+import com.example.ui.screens.buildPlainTextPreviewHtml
 
 @Composable
 internal fun PlainTextPreview(
