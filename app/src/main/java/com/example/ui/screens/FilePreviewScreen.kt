@@ -58,7 +58,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.core.io.TextLoader
 import com.example.core.io.TextWindowReader
 import com.example.core.text.TextFileSearchEngine
 import com.example.core.text.TextFileSearchMatch
@@ -120,32 +119,8 @@ import com.example.ui.screens.viewers.DocxPreviewWebView
 import com.example.ui.screens.viewers.PptxPreviewWebView
 import com.example.ui.screens.viewers.ViewerScrollRequest
 import com.example.ui.screens.viewers.shareFile
+import com.example.ui.screens.viewers.ViewerFindBarHeader
 
-
-private const val MAX_TEXT_PRINT_CHARS = 2_000_000
-
-private suspend fun readBoundedText(file: File, charsetName: String): Result<String> =
-    withContext(Dispatchers.IO) {
-        runCatching {
-            val loaded = TextLoader.load(file, charsetName, maxChars = MAX_TEXT_PRINT_CHARS)
-            check(!loaded.truncated) { "This file exceeds the bounded $MAX_TEXT_PRINT_CHARS-character limit for this operation." }
-            loaded.text
-        }
-    }
-
-private fun copyTextToClipboard(context: android.content.Context, title: String, text: String) {
-    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(title, text))
-    android.widget.Toast.makeText(context, "Text copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
-}
-
-private fun showTextOperationError(context: android.content.Context, error: Throwable) {
-    android.widget.Toast.makeText(
-        context,
-        error.message ?: "Could not prepare the complete file",
-        android.widget.Toast.LENGTH_LONG
-    ).show()
-}
 
 /**
  * Chrome-style find bar that replaces the normal app bar while in-document search is
@@ -153,168 +128,6 @@ private fun showTextOperationError(context: android.content.Context, error: Thro
  * field, live `current / total` match badge with prev/next arrows and a clear control.
  * The filename and overflow menu stay hidden until search is closed.
  */
-@Composable
-private fun ViewerFindBarHeader(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onClose: () -> Unit,
-    onClear: () -> Unit,
-    onKeyboardSearch: () -> Unit,
-    focusRequester: FocusRequester,
-    isPdfSearch: Boolean,
-    isLargeTextSearchable: Boolean,
-    isPdfSearchLoading: Boolean,
-    isFullTextLoading: Boolean,
-    pdfSearchError: String?,
-    largeTextSearchError: String?,
-    totalMatchesCount: Int,
-    searchResultsTruncated: Boolean,
-    currentMatchIndex: Int,
-    pdfPageInfo: String,
-    navigableMatchCount: Int,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit
-) {
-    val glass = com.example.ui.theme.LocalGlass.current
-    Surface(
-        color = glass.fillStrong,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .padding(horizontal = 4.dp, vertical = 4.dp)
-                    .height(48.dp)
-            ) {
-                IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Close search",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    if (query.isEmpty()) {
-                        Text(
-                            "Find in document...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-                            maxLines = 1
-                        )
-                    }
-                    androidx.compose.foundation.text.BasicTextField(
-                        value = query,
-                        onValueChange = onQueryChange,
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { onKeyboardSearch() }),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
-                    )
-                }
-                AnimatedVisibility(
-                    visible = query.isNotEmpty(),
-                    enter = fadeIn(tween(160)),
-                    exit = fadeOut(tween(140))
-                ) {
-                    IconButton(onClick = onClear, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Clear query",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-                SearchMatchBadgeRow(
-                    isPdfSearch = isPdfSearch,
-                    isLargeTextSearchable = isLargeTextSearchable,
-                    isPdfSearchLoading = isPdfSearchLoading,
-                    isFullTextLoading = isFullTextLoading,
-                    pdfSearchError = pdfSearchError,
-                    largeTextSearchError = largeTextSearchError,
-                    totalMatchesCount = totalMatchesCount,
-                    searchResultsTruncated = searchResultsTruncated,
-                    currentMatchIndex = currentMatchIndex,
-                    pdfPageInfo = pdfPageInfo,
-                    navigableMatchCount = navigableMatchCount,
-                    onPrevious = onPrevious,
-                    onNext = onNext
-                )
-            }
-            androidx.compose.material3.HorizontalDivider(color = glass.strokeEnd)
-        }
-    }
-}
-
-/** Themed match counter + prev/next controls for the in-document search overlay (v1.3.0). */
-@Composable
-private fun SearchMatchBadgeRow(
-    isPdfSearch: Boolean,
-    isLargeTextSearchable: Boolean,
-    isPdfSearchLoading: Boolean,
-    isFullTextLoading: Boolean,
-    pdfSearchError: String?,
-    largeTextSearchError: String?,
-    totalMatchesCount: Int,
-    searchResultsTruncated: Boolean,
-    currentMatchIndex: Int,
-    pdfPageInfo: String,
-    navigableMatchCount: Int,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit
-) {
-    val hasError = (pdfSearchError != null && isPdfSearch) ||
-        (largeTextSearchError != null && isLargeTextSearchable)
-    val matchLabel = when {
-        isPdfSearchLoading -> "Searching…"
-        isFullTextLoading -> "Searching full file…"
-        hasError -> "Search unavailable"
-        totalMatchesCount > 0 && searchResultsTruncated -> "${currentMatchIndex + 1}/$navigableMatchCount of $totalMatchesCount$pdfPageInfo"
-        totalMatchesCount > 0 -> "${currentMatchIndex + 1}/$totalMatchesCount$pdfPageInfo"
-        else -> "0 / 0"
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = when {
-                hasError -> MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
-                totalMatchesCount > 0 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-            }
-        ) {
-            Text(
-                text = matchLabel,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = when {
-                    hasError -> MaterialTheme.colorScheme.error
-                    totalMatchesCount > 0 -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                },
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-            )
-        }
-        IconButton(
-            onClick = onPrevious,
-            enabled = totalMatchesCount > 0 && !isPdfSearchLoading,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous match", modifier = Modifier.size(20.dp))
-        }
-        IconButton(
-            onClick = onNext,
-            enabled = totalMatchesCount > 0 && !isPdfSearchLoading,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next match", modifier = Modifier.size(20.dp))
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FilePreviewScreen(
@@ -2481,14 +2294,6 @@ fun FilePreviewScreen(
     }
 }
 
-@Composable
-fun PropertyItem(label: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(text = label.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-    }
-}
 
 
 private fun Context.findHostActivity(): Activity? {
