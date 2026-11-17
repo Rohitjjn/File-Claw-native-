@@ -56,6 +56,46 @@ jobs:
           tail -30 /tmp/compile.log | sed 's#^#::error ::#'
           exit $code
 
+      # Phase 2: detekt over core/ (blocking, baselined) and the UI layer (advisory, reported).
+      - name: detekt (core) + detektUi (advisory)
+        run: |
+          set +e
+          ./gradlew detekt detektUi --console=plain > /tmp/detekt.log 2>&1
+          code=$?
+          grep -E '^[^ ].*\.kt:[0-9]+' /tmp/detekt.log | head -40 | sed 's#^#::error ::#'
+          if [ $code -ne 0 ]; then tail -30 /tmp/detekt.log | sed 's#^#::error ::#'; fi
+          exit $code
+
+      # Phase 2: JaCoCo — verify >= 80% line coverage of com.example.core (blocking) and
+      # publish the coverage report as a CI artifact.
+      - name: JaCoCo (core) verify + report
+        run: |
+          set +e
+          ./gradlew jacocoCoreVerify --console=plain > /tmp/jacoco.log 2>&1
+          code=$?
+          python3 - <<'PY'
+          import re, sys, glob
+          for path in glob.glob('app/build/reports/jacoco/jacocoCoreReport/*.xml'):
+              xml = open(path, encoding='utf-8').read()
+              m = re.findall(r'<counter type="LINE" missed="(\d+)" covered="(\d+)"/>', xml)
+              if m:
+                  missed, covered = map(int, m[-1])
+                  total = missed + covered
+                  pct = 100.0 * covered / total if total else 0.0
+                  print(f'::notice title=JaCoCo::core LINE coverage: {covered}/{total} = {pct:.2f}%')
+          PY
+          if [ $code -ne 0 ]; then tail -20 /tmp/jacoco.log | sed 's#^#::error ::#'; fi
+          exit $code
+
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-core-report
+          path: app/build/reports/jacoco/jacocoCoreReport/
+          retention-days: 14
+          if-no-files-found: ignore
+
       - name: Compile instrumented tests
         run: |
           set +e

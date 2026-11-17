@@ -186,13 +186,27 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
-// ---- Static analysis: gates only the pure-Kotlin core for now ------------------------------------
+// ---- Static analysis: gates only the pure-Kotlin core; UI layer is advisory for now ----------------
 detekt {
     buildUponDefaultConfig = true
     config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    baseline = rootProject.file("config/detekt/baseline.xml")
     source.setFrom("src/main/java/com/example/core")
-    // Advisory until the first green run on a machine with network access (tracked in docs/TODO.md).
+    // Phase 2: this must be green on core before merge; see docs/TODO.md.
+    ignoreFailures = false
+}
+
+// Advisory run over the Compose UI layer: findings are reported in CI but never fail the build.
+tasks.register<io.gitlab.arturbosch.detekt.Detekt>("detektUi") {
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    source.setFrom("src/main/java/com/example/ui", "src/main/java/com/example/viewmodel")
     ignoreFailures = true
+    reports {
+        xml.required.set(false)
+        html.required.set(true)
+        txt.required.set(true)
+    }
 }
 
 // ---- Coverage for the core package (target: 80% lines) --------------------------------------------
