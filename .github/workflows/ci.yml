@@ -5,8 +5,10 @@ name: CI
 # build-and-release.yml. First run is unverified; watch it and fix forward.
 on:
   push:
-    branches: [main]
+    # Round 1 (phases 0–9) lands on the feature branch first; main gets it all at the end.
+    branches: [main, arena/5100f329-file-claw-native]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
