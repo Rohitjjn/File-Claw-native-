@@ -68,7 +68,7 @@ jobs:
           ./gradlew detekt detektUi --console=plain > /tmp/detekt.log 2>&1
           code=$?
           grep -E '^[^ ].*\.kt:[0-9]+' /tmp/detekt.log | head -40 | sed 's#^#::error ::#'
-          if [ $code -ne 0 ] && [ "${GITHUB_EVENT_NAME}" = "push" ] && ! grep -qE '<[A-Za-z]' config/detekt/baseline.xml; then
+          if [ $code -ne 0 ] && [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "$(grep -cE '^\s+<[A-Za-z]' config/detekt/baseline.xml)" -eq 0 ]; then
             echo "Empty baseline and existing findings — generating baseline and bot-committing it."
             ./gradlew detektBaseline --console=plain > /tmp/detektbase.log 2>&1 || { tail -20 /tmp/detektbase.log | sed 's#^#::error ::#'; exit 1; }
             git config user.name "github-actions[bot]"
