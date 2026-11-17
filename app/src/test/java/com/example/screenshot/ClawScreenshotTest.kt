@@ -1,5 +1,6 @@
 package com.example.screenshot
 
+import android.app.Application
 import androidx.compose.runtime.Composable
 import androidx.test.core.app.ApplicationProvider
 import com.example.ui.screens.AllFilesScreen
@@ -26,7 +27,9 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34])
+// NB: a bare android.app.Application is used instead of FileClawApp on purpose:
+// FileClawApp.onCreate() enqueues WorkManager work, which is not initialized in Robolectric.
+@Config(sdk = [34], application = Application::class)
 class ClawScreenshotTest {
 
     private fun viewModel(): MainViewModel =
