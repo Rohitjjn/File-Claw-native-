@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
-import androidx.navigation.hasRoute
+import androidx.navigation.NavDestination
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.screens.AllFilesScreen
@@ -46,6 +46,11 @@ import com.example.ui.screens.SearchScreen
 import com.example.ui.theme.FilesClawTheme
 import com.example.viewmodel.MainViewModel
 import kotlinx.coroutines.flow.first
+
+
+/** Type-safe route check. @Serializable objects serialize to their class serial name (the FQCN). */
+private inline fun <reified T> NavDestination?.isDestinationOf(): Boolean =
+    this?.route == T::class.qualifiedName
 
 class MainActivity : ComponentActivity() {
 
@@ -258,8 +263,8 @@ class MainActivity : ComponentActivity() {
                     val navigateToPreviewWithEditOnOpen = {
                         val fileState = mainViewModel.currentFileState.value
                         val dest = navController.currentBackStackEntry?.destination
-                        val onPreviewOrEditor = dest?.hasRoute<ClawDestination.Preview>() == true ||
-                            dest?.hasRoute<ClawDestination.Editor>() == true
+                        val onPreviewOrEditor = dest.isDestinationOf<ClawDestination.Preview>() == true ||
+                            dest.isDestinationOf<ClawDestination.Editor>() == true
                         if (!onPreviewOrEditor) {
                             if (fileState.opensInEditor() && settings.defaultToEditOnOpen) {
                                 navController.navigate(ClawDestination.Editor) {
@@ -279,8 +284,8 @@ class MainActivity : ComponentActivity() {
                             when (event) {
                                 is MainViewModel.NavigationEvent.NavigateToPreview -> {
                                     val dest = navController.currentBackStackEntry?.destination
-                                    val onPreviewOrEditor = dest?.hasRoute<ClawDestination.Preview>() == true ||
-                                        dest?.hasRoute<ClawDestination.Editor>() == true
+                                    val onPreviewOrEditor = dest.isDestinationOf<ClawDestination.Preview>() == true ||
+                                        dest.isDestinationOf<ClawDestination.Editor>() == true
                                     if (!onPreviewOrEditor) {
                                         if (event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
                                             navController.navigate(ClawDestination.Editor) {
@@ -291,7 +296,7 @@ class MainActivity : ComponentActivity() {
                                                 launchSingleTop = true
                                             }
                                         }
-                                    } else if (dest?.hasRoute<ClawDestination.Preview>() == true && event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
+                                    } else if (dest.isDestinationOf<ClawDestination.Preview>() == true && event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
                                         navController.navigate(ClawDestination.Editor) {
                                             popUpTo(ClawDestination.Preview) { inclusive = true }
                                             launchSingleTop = true
