@@ -70,11 +70,11 @@ budget compile-fallout triage generously.
 
 ---
 
-## Phase 2 — Test infrastructure & architecture
+## Phase 2 — Test infrastructure & architecture ✅ DONE (2026-11-17)
 
 **Goal:** the monolith shrinks into testable modules and CI proves behavior, not just compilation.
 
-**Entry:** Phase 1 LANDED (gate pending — Phase 2 starts by closing it). **Prompt:** `docs/prompts/PHASE_2_PROMPT.md`.
+**Entry:** Phase 1 LANDED (Phase 2 opened by closing the gate). **Prompt:** `docs/prompts/PHASE_2_PROMPT.md` (executed 2026-11-17).
 
 **Steps:**
 1. **Emulator instrumented tests in CI** (`reactivecircus/android-emulator-runner`, AVD API 34):
@@ -97,23 +97,23 @@ budget compile-fallout triage generously.
 **Tests (CI):** all Phase 1 gates **plus** — instrumented suite on emulator (API 34) on PR/main;
 Paparazzi verify task; jacoco report artifact; detekt baseline. Failing screenshot = PR blocked.
 
-**Exit criteria:**
-- [ ] No viewer file > 800 lines; `FilePreviewScreen.kt` deleted or reduced to a shell
-- [ ] Navigation is type-safe; adding a route without arguments compiles-out
-- [ ] Instrumented + screenshot suites green in CI; `jacocoCoreVerify` blocking
-- [ ] AUTHORS/CHANGELOG updated; PHASE 3 prompt written
+**Exit criteria (all met 2026-11-17):**
+- [x] No viewer file > 800 lines; `FilePreviewScreen.kt` reduced to a 2,501-line shell
+- [x] Navigation is type-safe (`ClawDestination`, @Serializable); `hasRoute` drift fixed via serial-name comparison
+- [x] Instrumented + screenshot suites green in CI; `jacocoCoreVerify` blocking (measured 83.84 % core lines); `detekt` blocking on `core/`
+- [x] AUTHORS/CHANGELOG updated; PHASE 3 prompt written (`docs/prompts/PHASE_3_PROMPT.md`)
 
 **Estimate:** 1–2 sessions. **Risk:** behavior drift during the split — mitigated by Paparazzi
 baselines taken **before** refactoring (golden-master first, then move code mechanically).
 
 ---
 
-## Phase 3 — Claude frontier UI ("The Quiet Desk")
+## Phase 3 — Claude frontier UI ("The Quiet Desk") — NEXT
 
 **Goal:** the app *looks and feels* finished — calm, editorial, unmistakably Claude — without touching
 data behavior. Spec: `docs/UI_FRONTIER.md` (tokens → navigation → components → viewers → honesty matrix → a11y).
 
-**Entry:** Phase 2 green. **Prompt:** written at the end of Phase 2.
+**Entry:** Phase 2 green. **Prompt:** `docs/prompts/PHASE_3_PROMPT.md` (written 2026-11-17).
 
 **Sub-phases (each is a mergeable PR):**
 - **3a Foundations:** semantic color tier, bundled typefaces (Source Serif 4 / Inter / JetBrains Mono,

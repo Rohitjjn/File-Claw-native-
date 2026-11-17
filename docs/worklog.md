@@ -198,3 +198,30 @@ Work Log:
 - Verification (measured): core main + core tests compiled with Kotlin 2.4.21 targeting JVM 17; **191 tests passed, 0 failed** (includes new HexDumpTest; excludes 8 Android-coupled suites / 40 tests — they run on the CI gate). `node --check` OK for search.html (2 scripts), docx_editor.html, x-spreadsheet inline template. Both workflow files parse as YAML. **Not run:** full `./gradlew compileDebugKotlin testDebugUnitTest assembleDebug` (no Android SDK in sandbox) — CI first run pending; user push approval pending.
 
 Files changed: app/build.gradle.kts, settings.gradle.kts, .github/workflows/ci.yml, .github/workflows/build-and-release.yml, app/src/main/java/com/example/core/hex/HexDump.kt (new), app/src/main/java/com/example/ui/screens/{FilePreviewScreen.kt,ScreenOrientationPolicy.kt (moved),UniversalViewers.kt,DocumentPreviewSupport.kt}, app/src/main/java/com/example/viewmodel/MainViewModel.kt, app/src/main/java/com/example/core/format/FormatRegistry.kt, app/src/main/assets/pdfjs/search.html, app/src/main/assets/editor/docx_editor.html, app/src/test/java/com/example/core/hex/HexDumpTest.kt (new), app/src/test/java/com/example/ui/screens/ScreenOrientationPolicyTest.kt (moved), tools/local-verify/{verify-core.sh,Shim.kt,ShimRules.kt,Runner.kt}, docs/{CHANGELOG.md,TODO.md,AGENTS.md,PATCH_NOTES.md,SANITY_CHECKLIST.md,FILE_SUPPORT_AUDIT.md,FILE_FORMATS.md,worklog.md}.
+
+---
+
+Task ID: PHASE-2-TEST-INFRA-ARCH
+Agent: Arena.ai Agent Mode (single owner)
+Date: 2026-11-17
+Baseline: branch `arena/5100f329-file-claw-native`; Phase 1 landed as `0a88fa2`. Phase 2 closed on `4e1f906`.
+
+Task: Implement Phase 2 — test infrastructure & architecture (`docs/prompts/PHASE_2_PROMPT.md`): emulator instrumented CI, screenshot baselines, FilePreviewScreen split, type-safe navigation, detekt/JaCoCo gates, strings.xml governance, docs; write PHASE_3_PROMPT.md last.
+
+Work Log:
+- Mechanical split of `FilePreviewScreen.kt` (5,740 → 2,501 lines) into 25 files under `ui/screens/viewers/` (`PdfViewer.kt`, `DocxViewer.kt`, `PptxViewer.kt`, `TextViewer.kt`, `CodeViewer.kt`, `CsvViewer.kt`, `ZipViewer.kt`, `HexViewer.kt`, `ImageViewer.kt`, `AudioViewer.kt`, `VideoViewer.kt`, `HtmlViewer.kt`, `MarkdownViewer.kt`, `MediaSupport.kt`, `ReaderChrome.kt`, …) — `d39ed5d` + cross-package import fix `d4ed837`.
+- Type-safe navigation via `ClawDestination` (@Serializable) — `e50eda5`; Navigation Compose 2.8.0 has no reified `hasRoute` → serial-name comparison `isDestinationOf<T>()` — `1f84f64` (`1f84f64`/`44053027367` green).
+- Emulator instrumented CI job (`reactivecircus/android-emulator-runner`, API 34, KVM) via `tools/ci/run-instrumented.sh` — `3f200e0`/`969ae8d`: launch smoke; manifest `ACTION_VIEW` resolver checks; Room 3→4 migration through `MigrationTestHelper` against the committed schema. Green `44056165653` / `44063464989` / `44073036452`.
+- AUD-034: CI KSP step generates and bot-commits `app/schemas/com.example.data.AppDatabase/4.json` on push (`1c92712` → bot `cc4d3ec`).
+- Screenshot golden masters (Roborazzi 1.13.0 + Robolectric, `@Config(application = Application::class)` — WorkManager is not initialized under Robolectric): light/dark for NoticeBanner, PropertyItem, AllFiles / Search / Settings (empty state). Baselines bot-committed (`6521f0e`); `verifyRoborazziDebug` blocking. Mostly red-then-green cycle `8b4fc71` → `67f227e` → `44061328629`.
+- detekt (`core/` blocking, `ui/` advisory via `detektUi`): `346ccad` introduced the step; root-caused a script-compilation failure to `Detekt` being a `SourceTask` (no `source.setFrom`) → `setSource(files(...))` — `3fe2526`; `4dbee40` expanded CI compile-error annotations (they carry the `::error` tails; the sandbox cannot fetch raw job logs). First blocking run found **10 real core findings** (ComplexCondition ×7, CyclomaticComplexMethod ×3 (`TextIO.read` 45, `RtfExtractor.extract` 55), NestedBlockDepth, LongParameterList) → recorded verbatim in `config/detekt/baseline.xml` by CI bootstrap (`feaf3de` → empty-check bug → `a2cb6cb`) and committed `32f660e`; new findings stay red.
+- JaCoCo: `jacocoCoreVerify` ≥ 80 % core lines, blocking; measured **83.84 % (1816/2166)**; `jacoco-core-report` artifact uploaded; percentage printed as `::notice` annotation in CI.
+- `isBinaryFile` (MainViewModel) deleted as dead code — content-first `FormatDetector` is the only binary/text arbiter — `2d3c2dd` (`44073036452` green).
+- Strings governance: every user-visible string introduced in Phases 1–2 extracted to `strings.xml` (17 keys, `4e1f906`); legacy hardcoded strings stay for Phase 7 (i18n).
+- Node/`node --check` and brace balance re-verified for touched inline JS/Kotlin where applicable (no inline JS touched in Phase 2).
+
+Verification (all on CI — the sandbox has no Android SDK): green runs `44051142574` (split), `44053027367` (nav), `44053768163` (Room schema), `44056165653` & `44063464989` (instrumented + gate), `44061328629` (screenshots), `44070900120` (detekt bootstrap + full gate), `44073036452` (dead-code removal). Red-then-fixed runs: `44065135157`, `44066582822`, `44067756740` (detekt script compilation), `44068827446` (first blocking detekt findings), `44069879801` (empty-baseline check bug). Pending: strings-extraction run (`44085373942`, in flight at write time — see CHANGELOG verification note).
+
+Notes / scars: the workspace twice restored git HEAD to the branch base while the working tree kept branch content; one commit (`4c6ebf9`) was accidentally parented at `2f6d349`. It was **not pushed** (non-fast-forward); the identical change set was re-parented onto `2d3c2dd` as `4e1f906`. Lesson recorded: after any fetch/merge, assert `git rev-parse HEAD == origin/<branch>` before committing.
+
+Deferred (written reasons in `docs/FILE_SUPPORT_AUDIT.md` §10 and `docs/TODO.md` KNOWN ISSUES #10): corrupt-PDF instrumented test (AUD-013); archive-password flow; save round trips (text/Markdown/CSV); `currentFileState` singleton redesign (Phase 3+); HomeScreen screenshot baseline (wall-clock greeting); 10 baselined core detekt findings; `detektUi` baselining.

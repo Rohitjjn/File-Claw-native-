@@ -4,8 +4,11 @@ Priorities: **P0** data loss / crash / security · **P1** high-impact feature or
 
 ## KNOWN ISSUES (read first)
 1. **RESOLVED in Loop 7 (2026-10-15):** Loop 7 changes WERE compiled and run: `:app:compileDebugKotlin` and `:app:assembleDebug` succeeded and the full `:app:testDebugUnitTest` suite passed (134 tests, 0 failures) using Android SDK 34 + JDK 17 (jlink required — a JRE-only JVM fails `compileDebugJavaWithJavac`). Setup used: `chmod +x gradlew`, `local.properties` → SDK path, `--max-workers=1` under a 4 GB RAM sandbox. Keep this toolchain recipe for future loops. Earlier loops (02–06) remain unverified on-device; still run the Quality Gate in `docs/BUILD_GUIDE.md` before shipping.
-2. Gradle wiring for JaCoCo (`jacocoCoreReport` / `jacocoCoreVerify`), `enableUnitTestCoverage`, detekt, and Room schema export is
-   unverified. detekt is `ignoreFailures = true` until its first green run.
+2. RESOLVED (2026-11-17, Phase 2): JaCoCo `jacocoCoreVerify` (≥80 % core lines, measured **83.84 % — 1816/2166**) and
+   `detekt` on `core/` (blocking; legacy debt recorded in `config/detekt/baseline.xml`, new findings fail) run
+   blocking in CI; Room v4 schema is committed (`app/schemas/…/4.json`) and auto-committed by the build on push.
+   Remaining: `detektUi` advisory has NOT been baselined (intentional — UI debt must be triaged, not absorbed),
+   and the 10 baselined core findings are unpaid debt (tracked in `FILE_SUPPORT_AUDIT.md` §10).
 3. Edits to files opened from another app **are** written back to the source URI when one is stored (`tryWriteBackToSourceUri`): the user sees "Saved and synced back to source file." on success, or an in-app-copy fallback with the exact reason on failure. The write-back round trip is **not yet device-verified** (Phase 1 honesty rule: code path only). Files without a sourceUri (imported copies) still save in-app only and say so.
 4. WebView renderers (DOCX, PPTX, grid) still receive whole files as base64 (now capped at 25 MB, then falls back to the archive tree).
 5. Hex viewer now streams 64 KB windows with prev/next and jump-to-offset (pure `core/hex/HexDump`, 9 unit tests); only the currently visible window is in memory. DOCX preview derives pages from `docx-preview` sections, but page-count accuracy still needs device verification; legacy `.doc` remains text-extraction-only.
@@ -13,6 +16,7 @@ Priorities: **P0** data loss / crash / security · **P1** high-impact feature or
 7. Legacy `.doc` / `.xls` / `.ppt` and `.rar` are identified but not openable.
 8. Bundled JS libraries (docx-preview, pptx-preview, x-spreadsheet) have no license text in the shipped files; verify upstream licenses (JSZip is MIT/GPL dual, confirmed from its header).
 9. `applicationId` is still the AI-Studio-generated `com.aistudio.filesclaw.apxqzy`. JitPack was removed entirely (AUD-001/AUD-019, 2026-11-17): the only JitPack artifact was dead code.
+10. Phase 2 instrumented CI is deliberately narrow: it covers app launch, the manifest `ACTION_VIEW` resolver wiring, and the Room 3→4 migration on a real emulator. The promised open → edit → save → reopen round trips (text, Markdown, CSV), the archive password flow and the corrupt-PDF error path (AUD-013) are **NOT** automated — they need deterministic file provisioning plus UI-automation time; file bugs against `tools/ci/run-instrumented.sh` and extend `app/src/androidTest/` when picked up.
 
 ## P0
 - [x] Earlier project baseline Quality Gate was recorded green (`compile_applet` / `testDebugUnitTest`); **Loop 6 was not rerun** because Java/Android SDK are unavailable here (see KNOWN ISSUES #1).
