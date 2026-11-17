@@ -183,8 +183,8 @@ fun CodePreview(
                   }
                   $lineNumbersCss
                 </style>
-                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/$theme">
-                <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+                <link rel="stylesheet" href="file:///android_asset/highlight/$theme">
+                <script src="file:///android_asset/highlight/highlight.min.js"></script>
                 </head>
                 <body>
                 <pre><code class="language-${fileEntity.extension.lowercase()}">$escapedCode</code></pre>
@@ -221,7 +221,7 @@ fun CodePreview(
                 },
                 update = { webView ->
                     webViewRef = webView
-                    webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
+                    webView.loadDataWithBaseURL("file:///android_asset/", htmlContent, "text/html", "UTF-8", null)
                 }
             )
         }
