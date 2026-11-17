@@ -80,7 +80,7 @@ fun SettingsScreen(
                 navIcon = Icons.AutoMirrored.Filled.ArrowBack
             )
         },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         modifier = modifier.testTag("settings_screen")
     ) { innerPadding ->
         val scrollState = rememberScrollState()

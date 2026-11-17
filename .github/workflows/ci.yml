@@ -26,6 +26,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Contrast audit (Phase 3 tokens, WCAG AA)
+        run: python3 tools/ci/check_contrast.py
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:

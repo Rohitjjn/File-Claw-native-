@@ -30,6 +30,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import com.example.R
 import androidx.compose.ui.res.stringResource
+import com.example.ui.theme.MonoFamily
 
 @Composable
 fun HexViewer(
@@ -165,13 +166,13 @@ fun HexViewer(
                     ) {
                         Text(
                             text = current.hexRows[index],
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = MonoFamily,
                             fontSize = 11.sp,
                             color = Color(0xFFD4D4D4)
                         )
                         Text(
                             text = "| ${current.asciiRows[index]}",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = MonoFamily,
                             fontSize = 11.sp,
                             color = Color(0xFF9CDCFE),
                             modifier = Modifier.padding(start = 8.dp)

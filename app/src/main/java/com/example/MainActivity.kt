@@ -310,6 +310,9 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    // Phase 3a: glass-at-root — ambient glow floats behind every destination.
+                    // Reading surfaces stay opaque by contract (docs/UI_FRONTIER.md §4.5/§4.6).
+                    com.example.ui.theme.GlassBackdrop {
                     NavHost(
                         navController = navController,
                         startDestination = ClawDestination.Splash,
@@ -414,6 +417,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                    }
                     }
                 }
             }

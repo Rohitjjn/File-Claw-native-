@@ -80,13 +80,15 @@ Keep `background/surface/primary/onBackground/outline` (see DESIGN.md). Add:
 | `surfaceContainerHigh` | `#ECE8DE` | `#353230` | pressed cards |
 | `onSurfaceVariant` | `#57544E` | `#B9B6AE` | secondary text (replaces raw alpha hacks) |
 | `success` | `#5B7B4E` (warm sage) | `#A9C79A` | save/backup confirmations |
-| `warning` | `#B07A2A` (warm ochre) | `#E8A55A` | truncated/read-only banners |
+| `warning` | `#8F5B1C` (warm ochre, contrast-tuned 2026-11-17) | `#E8A55A` | truncated/read-only banners |
 | `danger` | `#A6492F` (terracotta-deep) | `#E08B6D` | delete/slip/unsafe |
 | `selectionFill` | `#EFE9DE` | `#242220` | selected rows/cards |
 | `link` | `#CC785C` | `#E8A55A` | links (never blue) |
 
 **Format-family tint wells** (file icon backgrounds, *iconography only*, never large surfaces):
 docs `#EBD9CF` · data `#E4E8DC` · media `#E8DFF0` · archives `#E8E3CE` · code `#E0E6EA` (light) — dark variants at 16 % alpha over onSurface. Three uses max per screen.
+
+**Contrast-tuned (2026-11-17, measured by `tools/ci/check_contrast.py`):** light `warning` is `#8F5B1C` (5.42:1 on paper); filled buttons use the palette's deeper coral `#A9583E` as `primary` (white labels 5.06:1) — terracotta `#CC785C` stays the selection/link accent (AA-large/non-text ≥ 3.0). `onSurfaceVariant` is the true secondary-text tone (light `#57544E` 7.16:1, dark `#B9B6AE` 8.84:1) and replaces raw alpha hacks.
 
 **Banned:** pure black `#000`, pure white `#FFF`, saturated blue/green/red accents, per-format rainbow badges.
 

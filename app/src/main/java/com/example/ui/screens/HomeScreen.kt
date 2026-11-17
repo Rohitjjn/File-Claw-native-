@@ -52,6 +52,7 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -351,7 +352,7 @@ fun HomeScreen(
                                 onClick = { isSearchActive = false; viewModel.updateSearchQuery("") },
                                 modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Close Search", modifier = Modifier.size(20.dp))
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close Search", modifier = Modifier.size(20.dp))
                             }
                             Spacer(modifier = Modifier.width(4.dp))
                             Surface(
@@ -435,7 +436,7 @@ fun HomeScreen(
                     )
                 }
             },
-            containerColor = MaterialTheme.colorScheme.background
+            containerColor = Color.Transparent
         ) { innerPadding ->
             Box(
                 modifier = Modifier

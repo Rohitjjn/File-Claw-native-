@@ -62,6 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.R
 import androidx.compose.ui.res.stringResource
+import com.example.ui.theme.MonoFamily
 
 private fun humanSize(bytes: Long): String = when {
     bytes >= 1024L * 1024 * 1024 -> "%.2f GB".format(bytes / (1024.0 * 1024 * 1024))
@@ -202,7 +203,7 @@ fun SqliteViewer(fileEntity: RecentFileEntity, modifier: Modifier = Modifier) {
                                 Text(
                                     text = cell,
                                     fontSize = 12.sp,
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = MonoFamily,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     color = if (cell == "NULL") MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)

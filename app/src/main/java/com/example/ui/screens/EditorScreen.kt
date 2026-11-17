@@ -13,8 +13,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.outlined.DriveFileMove
@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.component.ClaudeAppBar
 import com.example.viewmodel.MainViewModel
 import androidx.compose.foundation.lazy.rememberLazyListState
+import com.example.ui.theme.MonoFamily
 
 class TextUndoStack(private val capacity: Int = 50) {
     private val buffer = ArrayDeque<TextFieldValue>()
@@ -226,7 +227,7 @@ fun EditorScreen(
                             enabled = undoStack.isNotEmpty,
                             leadingIcon = { 
                                 Icon(
-                                    imageVector = Icons.Default.Undo, 
+                                    imageVector = Icons.AutoMirrored.Filled.Undo, 
                                     contentDescription = "Undo", 
                                     modifier = Modifier.size(13.dp)
                                 ) 
@@ -251,7 +252,7 @@ fun EditorScreen(
                             enabled = redoStack.isNotEmpty,
                             leadingIcon = { 
                                 Icon(
-                                    imageVector = Icons.Default.Redo, 
+                                    imageVector = Icons.AutoMirrored.Filled.Redo, 
                                     contentDescription = "Redo", 
                                     modifier = Modifier.size(13.dp)
                                 ) 
@@ -398,7 +399,7 @@ fun EditorScreen(
                     ) {
                         Text(
                             text = lineNumbersText,
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = MonoFamily,
                             fontSize = fontSize,
                             lineHeight = lineHeight,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f),
@@ -434,7 +435,7 @@ fun EditorScreen(
                             textValue = newValue
                         },
                         textStyle = TextStyle(
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = MonoFamily,
                             fontSize = fontSize,
                             lineHeight = lineHeight,
                             color = MaterialTheme.colorScheme.onSurface

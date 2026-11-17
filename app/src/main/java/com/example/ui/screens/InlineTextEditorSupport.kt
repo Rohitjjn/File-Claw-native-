@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.SettingEntity
+import com.example.ui.theme.MonoFamily
 
 /**
  * Pure, Compose-free text surgery helpers powering the inline MD/TXT edit mode.
@@ -150,7 +151,7 @@ fun InlineEditWorkspace(
             value = value,
             onValueChange = onValueChange,
             textStyle = TextStyle(
-                fontFamily = FontFamily.Monospace,
+                fontFamily = MonoFamily,
                 fontSize = fontSize,
                 lineHeight = lineHeight,
                 color = MaterialTheme.colorScheme.onBackground
@@ -230,7 +231,7 @@ fun EditHistoryDialog(
                                         text = "#${index + 1}",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
+                                        fontFamily = MonoFamily,
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.width(38.dp)
                                     )
@@ -242,7 +243,7 @@ fun EditHistoryDialog(
                                             ?.ifBlank { "(empty)" }
                                             ?: "(empty)",
                                         fontSize = 13.sp,
-                                        fontFamily = FontFamily.Monospace,
+                                        fontFamily = MonoFamily,
                                         maxLines = 1,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )

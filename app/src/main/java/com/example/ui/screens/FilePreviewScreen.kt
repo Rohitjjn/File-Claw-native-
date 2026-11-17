@@ -73,8 +73,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.History
@@ -1253,7 +1253,7 @@ fun FilePreviewScreen(
                                             modifier = Modifier.size(36.dp)
                                         ) {
                                             Icon(
-                                                Icons.Default.Undo,
+                                                Icons.AutoMirrored.Filled.Undo,
                                                 contentDescription = "Undo",
                                                 modifier = Modifier.size(18.dp),
                                                 tint = MaterialTheme.colorScheme.onSurface
@@ -1275,7 +1275,7 @@ fun FilePreviewScreen(
                                             modifier = Modifier.size(36.dp)
                                         ) {
                                             Icon(
-                                                Icons.Default.Redo,
+                                                Icons.AutoMirrored.Filled.Redo,
                                                 contentDescription = "Redo",
                                                 modifier = Modifier.size(18.dp),
                                                 tint = MaterialTheme.colorScheme.onSurface
@@ -1532,7 +1532,7 @@ fun FilePreviewScreen(
                 }
             }
         },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         modifier = modifier.testTag("file_preview_screen")
     ) { innerPadding ->
         val usesReaderGestures = activeFile?.extension?.lowercase() in setOf("pdf", "doc", "docx", "txt", "md")
@@ -1546,7 +1546,7 @@ fun FilePreviewScreen(
                         }
                     } else Modifier
                 )
-                .background(MaterialTheme.colorScheme.background)
+                .background(Color.Transparent)
                 // Always respect the animated scaffold insets: the padding shrinks frame-by-frame
                 // while the bars slide away, so focus mode no longer snaps the content full-bleed.
                 .padding(innerPadding)

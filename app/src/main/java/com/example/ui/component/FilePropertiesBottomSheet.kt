@@ -38,6 +38,8 @@ import java.io.FileInputStream
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.*
+import com.example.ui.theme.MonoFamily
+import com.example.ui.theme.SansFamily
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -365,7 +367,7 @@ private fun MetadataBox(
                 Text(
                     text = content,
                     fontSize = if (isMono) 11.sp else 12.sp,
-                    fontFamily = if (isMono) FontFamily.Monospace else FontFamily.Default,
+                    fontFamily = if (isMono) MonoFamily else SansFamily,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis

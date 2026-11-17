@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 data class FileNode(val file: File, val depth: Int, val isExpanded: Boolean = false)
 
@@ -644,7 +645,7 @@ private fun FolderPickerDialog(
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Go up", modifier = Modifier.size(20.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Go up", modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(".. (Parent Folder)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }

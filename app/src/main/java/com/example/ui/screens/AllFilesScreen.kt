@@ -240,7 +240,7 @@ fun AllFilesScreen(
                 )
             }
         },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         modifier = modifier.testTag("all_files_screen")
     ) { innerPadding ->
         Box(
