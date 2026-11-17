@@ -46,7 +46,13 @@ import com.example.ui.screens.SearchScreen
 import com.example.ui.theme.FilesClawTheme
 import com.example.viewmodel.MainViewModel
 import kotlinx.coroutines.flow.first
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 
 
 /** Type-safe route check. @Serializable objects serialize to their class serial name (the FQCN). */
@@ -318,8 +324,8 @@ class MainActivity : ComponentActivity() {
                     // Phase 3b: Quick Open (Ctrl/Cmd+K) — files + actions palette.
                     Box(
                         modifier = Modifier.fillMaxSize().onKeyEvent { event ->
-                            val isK = event.key == androidx.compose.ui.input.key.Key.K
-                            val isShortcut = event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
+                            val isK = event.key == Key.K
+                            val isShortcut = event.type == KeyEventType.KeyDown &&
                                 isK && (event.isCtrlPressed || event.isMetaPressed)
                             if (isShortcut) {
                                 quickOpenVisible = !quickOpenVisible
