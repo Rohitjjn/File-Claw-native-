@@ -103,6 +103,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import com.example.R
 import androidx.compose.material.icons.outlined.RotateRight
 import androidx.compose.ui.semantics.contentDescription
 import com.example.ui.screens.viewers.MarkdownPreview
@@ -181,6 +182,7 @@ fun FilePreviewScreen(
     var showJumpDialog by remember { mutableStateOf(false) }
     var showJumpToLineDialog by remember { mutableStateOf(false) }
     var showDocxZoomDialog by remember { mutableStateOf(false) }
+    var showRenderReportDialog by remember { mutableStateOf(false) }
     var showOutlineBottomSheet by remember { mutableStateOf(false) }
     var showAppearanceBottomSheet by remember { mutableStateOf(false) }
     val docxZoomSeedContext = LocalContext.current
@@ -767,6 +769,21 @@ fun FilePreviewScreen(
                                                 )
                                             }
                                         )
+                                        // §7 (PDF): "Report this page renders wrong" — feeds the
+                                        // support channel, but only what the user explicitly shares.
+                                        DropdownMenuItem(
+                                            text = { Text(androidx.compose.ui.res.stringResource(R.string.report_render_item)) },
+                                            onClick = {
+                                                showMenu = false
+                                                showRenderReportDialog = true
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = androidx.compose.material.icons.outlined.Flag,
+                                                    contentDescription = androidx.compose.ui.res.stringResource(R.string.report_render_item)
+                                                )
+                                            }
+                                        )
                                     }
                                 }
 
@@ -963,10 +980,10 @@ fun FilePreviewScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(32.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
-                            shadowElevation = 8.dp,
+                            shape = RoundedCornerShape(24.dp),
+                            color = com.example.ui.theme.LocalGlass.current.fillStrong,
+                            border = BorderStroke(1.dp, com.example.ui.theme.LocalGlass.current.strokeEnd),
+                            shadowElevation = 0.dp,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         ) {
                             Row(
@@ -1551,6 +1568,30 @@ fun FilePreviewScreen(
                 // while the bars slide away, so focus mode no longer snaps the content full-bleed.
                 .padding(innerPadding)
         ) {
+            // §6: 1.5 dp terracotta reading-progress hairline at the very top of readers.
+            // Currently computable only for PDFs (page/total from the JS bridge); other viewers
+            // hide it rather than fake a fraction.
+            val pdfProgress = if (fileState is MainViewModel.FileContentState.PdfSuccess && totalPdfPages > 0) {
+                (currentPdfPage.coerceIn(1, totalPdfPages)).toFloat() / totalPdfPages.toFloat()
+            } else {
+                null
+            }
+            pdfProgress?.let { fraction ->
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(1.5.dp)
+                        .background(com.example.ui.theme.ClaudeTerracotta.copy(alpha = 0.22f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(fraction)
+                            .background(com.example.ui.theme.ClaudeTerracotta)
+                    )
+                }
+            }
             // Subtle Floating Back & Exit Pill when !isBarsVisible (Focus mode)
             androidx.compose.animation.AnimatedVisibility(
                 visible = !isBarsVisible,
@@ -1637,6 +1678,7 @@ fun FilePreviewScreen(
                 }
                 is MainViewModel.FileContentState.ArchivePasswordRequired -> {
                     var inputPassword by remember { mutableStateOf("") }
+                    var archivePasswordVisible by remember { mutableStateOf(false) }
                     AlertDialog(
                         onDismissRequest = { onBackClick() },
                         title = { Text("Password Required") },
@@ -1649,8 +1691,20 @@ fun FilePreviewScreen(
                                     value = inputPassword,
                                     onValueChange = { inputPassword = it },
                                     singleLine = true,
-                                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                    visualTransformation = if (archivePasswordVisible) {
+                                        androidx.compose.ui.text.input.VisualTransformation.None
+                                    } else {
+                                        androidx.compose.ui.text.input.PasswordVisualTransformation()
+                                    },
                                     label = { Text("Password") },
+                                    trailingIcon = {
+                                        IconButton(onClick = { archivePasswordVisible = !archivePasswordVisible }) {
+                                            Icon(
+                                                imageVector = if (archivePasswordVisible) androidx.compose.material.icons.outlined.VisibilityOff else androidx.compose.material.icons.outlined.Visibility,
+                                                contentDescription = androidx.compose.ui.res.stringResource(if (archivePasswordVisible) R.string.hide_password else R.string.show_password)
+                                            )
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -1989,6 +2043,53 @@ fun FilePreviewScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+            }
+        )
+    }
+
+    if (showRenderReportDialog) {
+        val versionName = try {
+            @Suppress("DEPRECATION")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                ).versionName
+            } else {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            }
+        } catch (e: Exception) {
+            "?"
+        }
+        // No file contents, no path — just app version, page and file type.
+        val reportDetail = "Files Claw " + (versionName ?: "?") +
+            " — page " + currentPdfPage + "/" + totalPdfPages.coerceAtLeast(1) +
+            " — " + (activeFile?.extension?.lowercase() ?: "pdf")
+        AlertDialog(
+            onDismissRequest = { showRenderReportDialog = false },
+            title = { Text(androidx.compose.ui.res.stringResource(R.string.report_render_title)) },
+            text = { Text(androidx.compose.ui.res.stringResource(R.string.report_render_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRenderReportDialog = false
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_TEXT, reportDetail)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(send, null))
+                }) {
+                    Text(androidx.compose.ui.res.stringResource(R.string.report_render_share))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showRenderReportDialog = false
+                    val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("diagnostic", reportDetail))
+                    Toast.makeText(context, R.string.report_render_copied, Toast.LENGTH_SHORT).show()
+                }) {
+                    Text(androidx.compose.ui.res.stringResource(R.string.report_render_copy))
                 }
             }
         )

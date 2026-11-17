@@ -51,4 +51,13 @@
     <string name="shortcuts_copy_path">Ctrl/Cmd+Shift+C</string>
     <string name="shortcuts_copy_path_desc">Copy the current file path</string>
     <string name="shortcuts_footer">Hardware keyboards only. Find/save/undo shortcuts land with the reader chrome (Phase 3c); the full map lives in docs/UI_FRONTIER.md §5.3.</string>
+    <!-- Phase 3c: reader chrome v2 (§6/§7) -->
+    <string name="show_password">Show password</string>
+    <string name="hide_password">Hide password</string>
+    <string name="report_render_item">Report this page renders wrong</string>
+    <string name="report_render_title">Report a rendering problem</string>
+    <string name="report_render_body">Files Claw never sends data automatically. The diagnostic details below (app version, page, file type — no contents, no path) go wherever you choose to send them.</string>
+    <string name="report_render_copy">Copy details</string>
+    <string name="report_render_share">Share…</string>
+    <string name="report_render_copied">Diagnostic details copied</string>
 </resources>

@@ -9,6 +9,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.ui.res.stringResource
+import com.example.R
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -123,6 +127,7 @@ fun PdfPreview(
     var requirePassword by remember(fileEntity.path) { mutableStateOf(false) }
     var passwordError by remember(fileEntity.path) { mutableStateOf(false) }
     var pdfPassword by remember(fileEntity.path) { mutableStateOf("") }
+    var pdfPasswordVisible by remember(fileEntity.path) { mutableStateOf(false) }
     var pdfErrorMessage by remember(fileEntity.path) { mutableStateOf<String?>(null) }
     // Loop 12 (Bug C): bumped to force a fresh WebView after a renderer crash. The
     // crashed instance can never be reused, so recovery replaces the whole view.
@@ -433,9 +438,21 @@ fun PdfPreview(
                             value = pdfPassword,
                             onValueChange = { pdfPassword = it; passwordError = false },
                             singleLine = true,
-                            visualTransformation = PasswordVisualTransformation(),
+                            visualTransformation = if (pdfPasswordVisible) {
+                                androidx.compose.ui.text.input.VisualTransformation.None
+                            } else {
+                                PasswordVisualTransformation()
+                            },
                             isError = passwordError,
                             label = { Text("Password") },
+                            trailingIcon = {
+                                IconButton(onClick = { pdfPasswordVisible = !pdfPasswordVisible }) {
+                                    Icon(
+                                        imageVector = if (pdfPasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                        contentDescription = stringResource(if (pdfPasswordVisible) R.string.hide_password else R.string.show_password)
+                                    )
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         )
                         if (passwordError) Text("Incorrect password", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
