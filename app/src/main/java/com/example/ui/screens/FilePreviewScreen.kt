@@ -124,6 +124,8 @@ import com.example.ui.component.ViewerAppearancePrefs
 import com.example.core.format.DocxZoomPolicy
 import com.example.core.format.PdfRenderBudgetPolicy
 import com.example.core.format.PinchGestureGate
+import com.example.core.hex.HexDump
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -1236,7 +1238,7 @@ fun FilePreviewScreen(
                                             val activity = context.findHostActivity()
                                             if (activity != null) {
                                                 activity.requestedOrientation =
-                                                    com.example.core.format.ScreenOrientationPolicy.toggleOrientation(
+                                                    ScreenOrientationPolicy.toggleOrientation(
                                                         activity.resources.configuration.orientation
                                                     )
                                             }
@@ -1870,7 +1872,8 @@ fun FilePreviewScreen(
                         onDismissRequest = { onBackClick() },
                         title = { Text("Password Required") },
                         text = {
-                            Column {
+                            // BUG-005: keep the dialog above the keyboard instead of under it.
+                            Column(modifier = Modifier.imePadding()) {
                                 Text("This archive is password protected.", fontSize = 14.sp)
                                 Spacer(modifier = Modifier.height(8.dp))
                                 OutlinedTextField(
@@ -2030,7 +2033,8 @@ fun FilePreviewScreen(
                     ImagePreview(
                         fileEntity = state.file,
                         modifier = Modifier.fillMaxSize(),
-                        onTap = { isBarsVisible = !isBarsVisible }
+                        onTap = { isBarsVisible = !isBarsVisible },
+                        onOpenHex = { viewModel.openAsHex(state.file) }
                     )
                 }
                 is MainViewModel.FileContentState.PdfSuccess -> {
@@ -2122,12 +2126,14 @@ fun FilePreviewScreen(
                     if (state.isAudio) {
                         AudioPlayer(
                             fileEntity = state.file,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            onOpenHex = { viewModel.openAsHex(state.file) }
                         )
                     } else {
                         VideoPlayer(
                             fileEntity = state.file,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            onOpenHex = { viewModel.openAsHex(state.file) }
                         )
                     }
                 }
@@ -2136,8 +2142,7 @@ fun FilePreviewScreen(
                         val header = listOfNotNull(state.label?.let { "Detected: $it" }, state.note).joinToString(" \u2022 ")
                         if (header.isNotEmpty()) NoticeBanner(header)
                         HexViewer(
-                            hexRows = state.hexRows,
-                            asciiRows = state.asciiRows,
+                            filePath = state.filePath,
                             fileEntity = state.file,
                             modifier = Modifier.weight(1f).fillMaxWidth()
                         )
@@ -3382,10 +3387,19 @@ fun CsvPreview(
                             <style>
                                 body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: $bgColor; }
                                 #x-spreadsheet-demo { height: 100%; width: 100%; }
+                                /* BUG-004: right-edge fade shown while more columns are off-screen */
+                                #edge-fade {
+                                    position: fixed; top: 0; right: 0; bottom: 15px; width: 44px;
+                                    pointer-events: none; z-index: 40; opacity: 0;
+                                    transition: opacity .25s ease;
+                                    background: linear-gradient(to right, transparent, $bgColor 92%);
+                                }
+                                #edge-fade.visible { opacity: 1; }
                             </style>
                         </head>
                         <body>
                             <div id="x-spreadsheet-demo"></div>
+                            <div id="edge-fade"></div>
                             <script>
                                 var s = x_spreadsheet('#x-spreadsheet-demo', {
                                     mode: '${if (editable) "edit" else "read"}',
@@ -3397,6 +3411,29 @@ fun CsvPreview(
                                     }
                                 });
                                 
+                                // BUG-004: keep the right-edge fade in sync with the grid's
+                                // horizontal scrollbar so users can see there is more off-screen.
+                                function installEdgeFade() {
+                                    var fade = document.getElementById('edge-fade');
+                                    var tries = 0;
+                                    var tick = function () {
+                                        var sb = document.querySelector('.x-spreadsheet-scrollbar.horizontal');
+                                        if (!sb) { if (++tries < 40) setTimeout(tick, 250); return; }
+                                        var update = function () {
+                                            var max = sb.scrollWidth - sb.clientWidth;
+                                            if (max > 2 && sb.scrollLeft < max - 2) { fade.classList.add('visible'); }
+                                            else { fade.classList.remove('visible'); }
+                                        };
+                                        sb.addEventListener('scroll', update, { passive: true });
+                                        window.addEventListener('resize', update);
+                                        var n = 0;
+                                        var poll = setInterval(function () { update(); if (++n > 20) clearInterval(poll); }, 250);
+                                        update();
+                                    };
+                                    tick();
+                                }
+                                installEdgeFade();
+
                                 function loadData(base64Str) {
                                     try {
                                         var jsonStr = decodeURIComponent(escape(window.atob(base64Str)));
@@ -3673,7 +3710,8 @@ fun buildNodesList(
 fun ImagePreview(
     fileEntity: RecentFileEntity,
     modifier: Modifier = Modifier,
-    onTap: () -> Unit = {}
+    onTap: () -> Unit = {},
+    onOpenHex: (() -> Unit)? = null
 ) {
     val parentDir = remember(fileEntity) { java.io.File(fileEntity.path).parentFile }
     val imageFiles = remember(parentDir) {
@@ -3739,6 +3777,41 @@ fun ImagePreview(
             modifier = Modifier.fillMaxSize()
         ) { page ->
             val file = imageFiles[page]
+            // AUD-010: pre-flight a bounds decode so codec-less devices (HEIC/AVIF/TIFF/DNG)
+            // get an honest message instead of an empty area. inJustDecodeBounds never
+            // allocates pixels; a null/failed decode means the device has no codec.
+            val decodable = remember(file) {
+                runCatching {
+                    val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)
+                    opts.outWidth > 0 && opts.outHeight > 0
+                }.getOrDefault(false)
+            }
+            if (!decodable) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "This image can't be decoded on this device (no codec for it).",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = file.name,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    )
+                    if (onOpenHex != null) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedButton(onClick = onOpenHex) { Text("View as hex") }
+                    }
+                }
+                return@HorizontalPager
+            }
             val zoomSpec = remember {
                 me.saket.telephoto.zoomable.ZoomSpec(maxZoomFactor = 15f)
             }
@@ -4140,7 +4213,8 @@ fun PdfPreview(
                 onDismissRequest = onBackClick,
                 title = { Text("Password Required") },
                 text = {
-                    Column {
+                    // BUG-005: keep the dialog above the keyboard instead of under it.
+                    Column(modifier = Modifier.imePadding()) {
                         Text("This PDF is password protected.", fontSize = 14.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedTextField(
@@ -4463,43 +4537,48 @@ private class PdfWebAppInterface(
 @Composable
 fun AudioPlayer(
     fileEntity: RecentFileEntity,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenHex: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
     var currentPos by remember { mutableStateOf(0) }
     var duration by remember { mutableStateOf(1) }
+    // AUD-007: prepare() used to block the main thread and any failure was swallowed,
+    // leaving a dead 0:00 player. Now decode is async and failures surface inline.
+    var audioError by remember(fileEntity) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(fileEntity) {
+        val mp = MediaPlayer()
         try {
-            val mp = MediaPlayer().apply {
-                setDataSource(fileEntity.path)
-                prepare()
-                setOnCompletionListener {
-                    isPlaying = false
-                }
+            mp.setDataSource(fileEntity.path)
+            mp.setOnErrorListener { _, _, _ ->
+                isPlaying = false
+                audioError = "This audio can't be decoded on this device."
+                true
             }
-            mediaPlayer = mp
-            duration = mp.duration
-            
-            while (true) {
-                val mpActive = mediaPlayer
-                if (mpActive != null) {
-                    try {
-                        if (mpActive.isPlaying) {
-                            currentPos = mpActive.currentPosition
-                        }
-                    } catch (e: Exception) {
-                        break
-                    }
-                } else {
-                    break
-                }
-                delay(500)
+            mp.setOnCompletionListener { isPlaying = false }
+            mp.setOnPreparedListener { prepared ->
+                mediaPlayer = prepared
+                duration = prepared.duration.coerceAtLeast(1)
             }
+            mp.prepareAsync() // decode off the main thread (AUD-007)
         } catch (e: Exception) {
-            // handle error
+            try { mp.release() } catch (ignored: Exception) {}
+            audioError = "This audio can't be decoded on this device."
+        }
+    }
+
+    LaunchedEffect(mediaPlayer) {
+        while (true) {
+            delay(500)
+            val mp = mediaPlayer ?: break
+            try {
+                if (mp.isPlaying) currentPos = mp.currentPosition
+            } catch (e: Exception) {
+                break
+            }
         }
     }
 
@@ -4522,6 +4601,48 @@ fun AudioPlayer(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        if (audioError != null) {
+            // Honest failure state instead of a dead player (AUD-006/007).
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f),
+                modifier = Modifier.size(72.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Can't play this audio",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = audioError!!,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = fileEntity.name,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.45f),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = { openWithFile(context, File(fileEntity.path), fileEntity.extension) }) {
+                    Text("Open with…")
+                }
+                if (onOpenHex != null) {
+                    OutlinedButton(onClick = onOpenHex) { Text("View as hex") }
+                }
+            }
+            return@Column
+        }
+
         Icon(
             imageVector = Icons.Default.MusicNote,
             contentDescription = null,
@@ -4589,9 +4710,13 @@ fun AudioPlayer(
 @Composable
 fun VideoPlayer(
     fileEntity: RecentFileEntity,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenHex: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    // AUD-008: codec failure used to leave a dead 260 dp black box. Now it flips to
+    // an inline honest error with Open-with / hex fallbacks.
+    var videoError by remember(fileEntity) { mutableStateOf<String?>(null) }
     Column(
         modifier = modifier.padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -4606,28 +4731,96 @@ fun VideoPlayer(
             modifier = Modifier.padding(bottom = 16.dp)
         )
         
-        AndroidView(
-            factory = { ctx ->
-                android.widget.VideoView(ctx).apply {
-                    setVideoPath(fileEntity.path)
-                    val controller = android.widget.MediaController(ctx)
-                    controller.setAnchorView(this)
-                    setMediaController(controller)
-                    start()
+        if (videoError == null) {
+            AndroidView(
+                factory = { ctx ->
+                    android.widget.VideoView(ctx).apply {
+                        setVideoPath(fileEntity.path)
+                        val controller = android.widget.MediaController(ctx)
+                        controller.setAnchorView(this)
+                        setMediaController(controller)
+                        setOnErrorListener { _, _, _ ->
+                            videoError = "This video can't be decoded on this device (unsupported codec or container)."
+                            true
+                        }
+                        start()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(260.dp)
+            )
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth().height(260.dp)
+                    .background(Color.Black.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Can't play this video",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = videoError!!,
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.75f),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = { openWithFile(context, File(fileEntity.path), fileEntity.extension) }) {
+                        Text("Open with…")
+                    }
+                    if (onOpenHex != null) {
+                        OutlinedButton(onClick = onOpenHex) { Text("View as hex") }
+                    }
                 }
-            },
-            modifier = Modifier.fillMaxWidth().height(260.dp)
-        )
+            }
+        }
     }
 }
 
 @Composable
 fun HexViewer(
-    hexRows: List<String>,
-    asciiRows: List<String>,
+    filePath: String,
     fileEntity: RecentFileEntity,
     modifier: Modifier = Modifier
 ) {
+    // AUD-003: paged 64 KB windows with absolute offsets + jump-to-offset. The file
+    // is never fully loaded; one window is read at a time on Dispatchers.IO.
+    val totalBytes = remember(filePath) { runCatching { File(filePath).length() }.getOrDefault(0L) }
+    val windowCount = remember(totalBytes) { HexDump.windowCount(totalBytes) }
+    var windowIndex by rememberSaveable(filePath) { mutableIntStateOf(0) }
+    var window by remember { mutableStateOf<HexDump.HexWindow?>(null) }
+    var jumpText by remember(filePath) { mutableStateOf("") }
+    var jumpError by remember(filePath) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(filePath, windowIndex) {
+        window = null
+        window = withContext(Dispatchers.IO) {
+            runCatching { HexDump.loadWindow(File(filePath), windowIndex) }.getOrNull()
+        }
+    }
+
+    fun jumpToOffset(raw: String) {
+        val target = HexDump.parseOffset(raw)
+        if (target == null) {
+            jumpError = "Enter a hex (0x…) or decimal offset ≥ 0"
+            return
+        }
+        if (totalBytes > 0 && target >= totalBytes) {
+            jumpError = "Offset is past the end of the file"
+            return
+        }
+        jumpError = null
+        jumpText = ""
+        windowIndex = (target / HexDump.WINDOW_BYTES).toInt()
+    }
+
     Column(modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -4654,6 +4847,55 @@ fun HexViewer(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
+        // Window controls: prev / position / next + jump-to-offset
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            TextButton(onClick = { windowIndex = 0 }, enabled = windowIndex > 0) { Text("First") }
+            TextButton(onClick = { windowIndex = (windowIndex - 1).coerceAtLeast(0) }, enabled = windowIndex > 0) { Text("‹ Prev") }
+            Text(
+                text = "Window ${windowIndex + 1} of $windowCount",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center
+            )
+            TextButton(onClick = { windowIndex = (windowIndex + 1).coerceAtMost(windowCount - 1) }, enabled = windowIndex < windowCount - 1) { Text("Next ›") }
+            TextButton(onClick = { windowIndex = windowCount - 1 }, enabled = windowIndex < windowCount - 1) { Text("Last") }
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = jumpText,
+                onValueChange = { jumpText = it; jumpError = null },
+                singleLine = true,
+                placeholder = { Text("Jump to offset (0x1A00 or 6656)", fontSize = 12.sp) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { jumpToOffset(jumpText) }),
+                modifier = Modifier.weight(1f)
+            )
+            Button(onClick = { jumpToOffset(jumpText) }) { Text("Go") }
+        }
+        if (jumpError != null) {
+            Text(
+                text = jumpError!!,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+            )
+        }
+        Text(
+            text = window?.let { "Offset 0x${it.offset.toString(16).uppercase().padStart(8, '0')} • ${it.bytesShown} of $totalBytes bytes" } ?: "Reading…",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+        )
+
         LazyColumn(
             state = rememberLazyListState(),
             modifier = Modifier
@@ -4662,24 +4904,31 @@ fun HexViewer(
                 .background(Color(0xFF1E1E1E)) // Dark code editor styled background for hex contrast
                 .padding(8.dp)
         ) {
-            items(hexRows.size, key = { it }, contentType = { "HexRow" }) { index ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp).animateItemPlacement(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = hexRows[index],
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        color = Color(0xFFD4D4D4)
-                    )
-                    Text(
-                        text = "| ${if (index < asciiRows.size) asciiRows[index] else ""}",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        color = Color(0xFF9CDCFE),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+            val current = window
+            if (current == null) {
+                item { Text("Reading…", color = Color(0xFF9CDCFE), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
+            } else if (current.hexRows.isEmpty()) {
+                item { Text("Empty file.", color = Color(0xFF9CDCFE), fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
+            } else {
+                items(current.hexRows.size, key = { it }, contentType = { "HexRow" }) { index ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp).animateItemPlacement(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = current.hexRows[index],
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = Color(0xFFD4D4D4)
+                        )
+                        Text(
+                            text = "| ${current.asciiRows[index]}",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = Color(0xFF9CDCFE),
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
                 }
             }
         }
@@ -4693,6 +4942,34 @@ fun formatTime(ms: Int): String {
     return String.format("%02d:%02d", mins, secs)
 }
 
+private fun mimeForExtension(extension: String): String = when (extension.lowercase()) {
+    "pdf" -> "application/pdf"
+    "csv" -> "text/csv"
+    "zip" -> "application/zip"
+    "png", "jpg", "jpeg", "webp" -> "image/*"
+    "mp3", "wav", "m4a" -> "audio/*"
+    "mp4", "mkv" -> "video/*"
+    else -> "text/plain"
+}
+
+/** Launch an ACTION_VIEW chooser for the file (fallback for undecodable media, AUD-007/008). */
+private fun openWithFile(context: android.content.Context, file: File, extension: String) {
+    try {
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mimeForExtension(extension))
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, "Open with"))
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(context, "No app can open this file", android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
 private fun shareFile(context: android.content.Context, file: File, extension: String) {
     try {
         val uri = androidx.core.content.FileProvider.getUriForFile(
@@ -4700,15 +4977,7 @@ private fun shareFile(context: android.content.Context, file: File, extension: S
             "${context.packageName}.fileprovider",
             file
         )
-        val mimeType = when (extension.lowercase()) {
-            "pdf" -> "application/pdf"
-            "csv" -> "text/csv"
-            "zip" -> "application/zip"
-            "png", "jpg", "jpeg", "webp" -> "image/*"
-            "mp3", "wav", "m4a" -> "audio/*"
-            "mp4", "mkv" -> "video/*"
-            else -> "text/plain"
-        }
+        val mimeType = mimeForExtension(extension)
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
             type = mimeType
             putExtra(android.content.Intent.EXTRA_STREAM, uri)
@@ -5294,10 +5563,25 @@ fun PptxPreviewWebView(
 ) {
     var isWebViewLoading by remember(base64Pptx) { mutableStateOf(true) }
     var webViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
-    
+    // AUD-005: honest failure state. Any main-frame error (or a 15 s stall) flips to
+    // a labeled error card with the reason and a Retry that rebuilds the WebView —
+    // never an eternal "Loading Presentation…" spinner.
+    var loadFailed by remember(base64Pptx) { mutableStateOf<String?>(null) }
+    var pptxReloadKey by remember(base64Pptx) { mutableIntStateOf(0) }
+
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    // 15 s load watchdog: a wedged renderer must not spin forever (AUD-005).
+    LaunchedEffect(pptxReloadKey) {
+        kotlinx.coroutines.delay(15_000)
+        if (isWebViewLoading) {
+            isWebViewLoading = false
+            loadFailed = "The presentation renderer took too long to respond (15 s watchdog)."
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
+        if (loadFailed == null) key(pptxReloadKey) {
         AndroidView(
             factory = { ctx ->
                 android.webkit.WebView(ctx).apply {
@@ -5324,9 +5608,9 @@ fun PptxPreviewWebView(
                         }
                         @android.webkit.JavascriptInterface
                         fun onDocumentError(error: String) {
-                            post { 
+                            post {
                                 isWebViewLoading = false
-                                android.widget.Toast.makeText(context, "Error: $error", android.widget.Toast.LENGTH_LONG).show()
+                                loadFailed = error.take(180)
                             }
                         }
                         @android.webkit.JavascriptInterface
@@ -5343,11 +5627,26 @@ fun PptxPreviewWebView(
                         }
                         override fun onReceivedError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, error: android.webkit.WebResourceError?) {
                             super.onReceivedError(view, request, error)
-                            android.util.Log.e("WebViewPptx", "Error: ${error?.description}")
+                            // Main-frame failure ⇒ honest error card (AUD-005). Sub-resource
+                            // failures keep the spinner decision to the watchdog/onDocumentError.
+                            if (request?.isForMainFrame == true) {
+                                android.util.Log.e("WebViewPptx", "Error: ${error?.description}")
+                                post {
+                                    isWebViewLoading = false
+                                    loadFailed = error?.description?.toString()?.take(180)
+                                        ?: "The presentation preview page could not be loaded."
+                                }
+                            }
                         }
                         override fun onReceivedHttpError(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?, errorResponse: android.webkit.WebResourceResponse?) {
                             super.onReceivedHttpError(view, request, errorResponse)
-                            android.util.Log.e("WebViewPptx", "HTTP Error: ${errorResponse?.statusCode}")
+                            if (request?.isForMainFrame == true) {
+                                android.util.Log.e("WebViewPptx", "HTTP Error: ${errorResponse?.statusCode}")
+                                post {
+                                    isWebViewLoading = false
+                                    loadFailed = "The presentation preview page failed to load (HTTP ${errorResponse?.statusCode ?: "?"})."
+                                }
+                            }
                         }
                     }
                     webChromeClient = object : android.webkit.WebChromeClient() {
@@ -5364,6 +5663,57 @@ fun PptxPreviewWebView(
             },
             modifier = Modifier.fillMaxSize()
         )
+        }
+
+        if (loadFailed != null) {
+            // Labeled failure state (Loop 14-style recovery): never a silent dead screen.
+            Column(
+                modifier = Modifier.fillMaxSize()
+                    .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "This presentation couldn't be rendered",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = .5f)
+                ) {
+                    Text(
+                        text = "Reason: ${loadFailed}",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "The source file was not modified. Try Retry, or open it in another app.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = {
+                        loadFailed = null
+                        isWebViewLoading = true
+                        pptxReloadKey++
+                    }) { Text("Retry") }
+                    OutlinedButton(onClick = { openWithFile(context, File(fileEntity.path), fileEntity.extension) }) {
+                        Text("Open with…")
+                    }
+                }
+            }
+            return@Box
+        }
 
         if (isWebViewLoading) {
             Box(

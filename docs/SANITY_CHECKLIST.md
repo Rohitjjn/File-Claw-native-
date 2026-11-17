@@ -21,7 +21,7 @@ Mark each with ✅ / ❌ + notes. Items marked ★ are regressions fixed in 1.1.
 - [ ] XLSX with 2+ sheets: "View only" banner, cannot edit, file unchanged on disk.
 - [ ] Edit a text file inside a ZIP, save, reopen the ZIP: change persisted; other entries intact.
 - [ ] Kill the app during a save of a large file (adb `am force-stop`): original file is intact.
-- [ ] A file opened from another app: save shows "Saved to the in-app copy" and the original is unchanged.
+- [ ] A file opened from another app (sourceUri set): save shows "Saved and synced back to source file."; if write-back fails the message must include the reason and the app copy must hold the change. A file opened from a tree/import without sourceUri: save shows "Saved to the in-app copy. The original file was not changed."
 
 ## Archives
 - [ ] ZIP with 100k entries opens without ANR. Zip bomb sample is refused with a message, no crash/OOM.

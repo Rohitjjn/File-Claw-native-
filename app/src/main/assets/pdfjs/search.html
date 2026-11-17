@@ -682,10 +682,40 @@
       applyRecordSize(record, record.viewport);
     }
 
+    // BUG-006: mixed-orientation documents. Page 1's geometry seeds every
+    // placeholder at first paint (Loop 12), but each page's true size is patched in
+    // as soon as it resolves — before it ever approaches the viewport — so pages
+    // only ever shift by the delta between page 1 and their real size, and the
+    // shift happens off-screen. Geometry-only: each proxy is dropped right after
+    // its viewport is read (bounded memory), in-flight placeholders yield every
+    // 32 pages, and the run aborts if the document is swapped mid-pass.
+    let placeholderRefineToken = 0;
+    async function refinePlaceholderGeometry() {
+      const token = ++placeholderRefineToken;
+      for (let i = 1; i < pageRecords.length; i++) {
+        const record = pageRecords[i];
+        if (token !== placeholderRefineToken) return;
+        if (!record || record.disposed || record.page || record.rendered) continue;
+        try {
+          const page = await pdfDocument.getPage(record.pageNumber);
+          if (token !== placeholderRefineToken || record.disposed) { try { page.cleanup(); } catch (_) {} return; }
+          const baseViewport = page.getViewport({ scale: 1 });
+          record.baseWidth = baseViewport.width;
+          record.baseHeight = baseViewport.height;
+          try { page.cleanup(); } catch (_) {}
+          if (!record.page) updatePlaceholderGeometry(record);
+        } catch (_) {
+          // Keep the page-1 estimate; renderRecord syncs real geometry later.
+        }
+        if (i % 32 === 0) await new Promise(function (resolve) { setTimeout(resolve, 0); });
+      }
+    }
+
     async function prepareDocument(documentProxy) {
       // Loop 12: any previous document's records are disposed explicitly — cancel
       // in-flight renders, drop canvases and page proxies, and let ensurePage() discard
       // results that land after the swap.
+      placeholderRefineToken++; // stop any refine pass still walking the old records
       pageRecords.forEach(function (record) {
         record.disposed = true;
         if (record.renderTask) { try { record.renderTask.cancel(); } catch (_) {} }
@@ -778,6 +808,9 @@
         });
       }
       bridgeCall('onPdfDocumentLoaded', documentProxy.numPages);
+      // BUG-006: refine placeholder geometry off the critical path; first paint
+      // must not wait for it.
+      setTimeout(function () { refinePlaceholderGeometry(); }, 250);
       if (pageRecords.length) {
         currentPage = 1;
         bridgeCall('onPdfPageChanged', currentPage, pageRecords.length);

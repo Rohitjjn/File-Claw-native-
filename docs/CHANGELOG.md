@@ -4,6 +4,48 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [Unreleased] Phase 1 — Build hygiene + broken-format repairs (2026-11-17)
+
+**Verification status (read first):** the full Android gate was **not run** in this environment —
+no Android SDK and no access to Maven Central/Google for AGP; `gradlew` cannot execute here. What
+**was** run locally (measured): the **pure-Kotlin core compiled clean and 191 of 231 unit tests passed
+(0 failures)** using a Gradle-free path (`tools/local-verify/verify-core.sh` + a downloaded JDK 25 and
+Kotlin 2.4.21 distribution; the 8 Android-coupled suites — 40 tests — run only on the GitHub Actions
+gate). `node --check` passes for every inline JS touched (search.html, docx_editor.html, x-spreadsheet
+template). Workflow YAML parses. **Everything else in this entry is "code landed; not compile-verified"
+until the first green CI run.** Push + PR approval from the repo owner is pending.
+
+### Added
+- `core/hex/HexDump` — paged 64 KB-window hex renderer (pure Kotlin, `HexDumpTest` ×9: offsets, ASCII gutter, clamping, jump math, empty file).
+- `openAsHex(entity)` in `MainViewModel` — in-place swap to the hex viewer for undecodable files (audio/video/image error paths).
+- `PPTX 15 s load watchdog` + `key()` rebuild on Retry; JSON of CI schema-drift warning for Room 4.json (`.github/workflows/ci.yml`, non-fatal).
+- `tools/local-verify/ShimRules.kt` — `org.junit.rules.TemporaryFolder` stand-in (+`@Rule` handling in `Runner.kt`); `verify-core.sh` now compiles the core + core tests and documents the Android-suite exclusion.
+
+### Changed
+- **MIDI (`mid/midi/kar`) dropped FULL → identify-only** (MediaPlayer cannot decode MIDI, AUD-006); AUDIO files marked IDENTIFY route to the hex viewer with an honest notice instead of a dead 0:00 player. `docs/FILE_FORMATS.md` counts updated to **281 full / 32 partial / 86 identify** (emoji table repaired — ✅/🔄/⏳ were mangled to `?`).
+- **Save-failure strings unified** (AUD-024): write-back failure now reads "Saved, but the change could not be synced back to the source app (reason). The app's copy was updated." (was the misleading "Saved to in-app copy").
+
+### Fixed
+- **AUD-001 / AUD-019** — dead `com.github.mhiew:android-pdf-viewer` dependency and the unscoped JitPack repository removed (`app/build.gradle.kts`, `settings.gradle.kts`); APKs no longer embed the dead viewer.
+- **AUD-021** — `build-and-release.yml` fails closed when `build_type=release` and no `FILECLAW_KEYSTORE_BASE64` (+passwords/alias) secrets are configured; debug sideload fallbacks kept but now emit `::warning::`.
+- **AUD-005** — PPTX viewer: main-frame `onReceivedError`/`onReceivedHttpError` clear the loading state and show a labeled error card (reason + Retry + Open-with…); `onDocumentError` routes to the same card; 15 s watchdog replaces the infinite "Loading Presentation…" spinner.
+- **AUD-007** — Audio: `prepareAsync()` off the main thread (was blocking `prepare()`), `setOnErrorListener` + `setOnPreparedListener`; decode failure shows an inline card ("Can't play this audio" + Open-with… / View-as-hex).
+- **AUD-008** — Video: `setOnErrorListener` → inline error card with Open-with… / View-as-hex (no more dead 260 dp black box on codec failure).
+- **AUD-009** — Fonts: `Typeface.createFromFile` + `Paint.hasGlyph("AGg0")` validation; invalid fonts show a notice instead of silently rendering the system default/tofu.
+- **AUD-010** — Images: bounds-decode pre-flight (`BitmapFactory.inJustDecodeBounds`); codec-less HEIC/AVIF/TIFF/DNG now show "can't be decoded on this device" + Hex-view action instead of a blank area. (Chosen over Coil `onError` because the telephoto wrapper's error API couldn't be verified offline; the bounds decode works with the same framework decoders Coil uses.)
+- **AUD-003** — Hex viewer streams 64 KB windows with absolute offsets, prev/next, First/Last and jump-to-offset (`0x…` hex or decimal); the 4 KB cap is gone.
+- **BUG-004** (partial) — CSV grid: right-edge fade indicator synced to the x-spreadsheet horizontal scrollbar. Sticky first column deferred (canvas-rendered grid; logged in audit §9).
+- **BUG-005** — Password dialogs (archive + PDF) now use `imePadding()` — no longer hidden under the keyboard.
+- **BUG-006** — PDF placeholders refine to each page's true geometry after first paint (`refinePlaceholderGeometry` in `search.html`; mixed-orientation docs shift only by the real delta, off the critical path).
+- **BUG-007** — DOCX scroller clipped (`body.pinching` → `overflow: hidden !important`) during pinch-preview transforms; no more transient horizontal overflow.
+- `ScreenOrientationPolicy` moved `core/format` → `ui/screens` (it is Android-coupled; `core/` must stay pure Kotlin) — same for its test.
+
+### Not done / deferred (with reasons)
+- **Room 4.json (AUD-034) — BLOCKED.** KSP requires the Room compiler from Maven Central/Google, both unreachable here. Regenerate and commit on any networked machine: `./gradlew kspDebugKotlin` (emits `app/schemas/com.example.data.AppDatabase/4.json`). No test consumes 4.json today; CI now prints an explicit `::warning::` with the command when it is absent. `DatabaseMigrationTest` passes without it.
+- **Corrupt-PDF automated test (AUD-013) — DEFERRED** to the Phase 2 instrumented gate; `onPdfError` + "Try Again" remains the shipped path.
+- **AUD-022 drift** — the real number is now **231 `@Test` methods** (222 baseline + 9 new); counted statically from source (measured by grep, 2026-11-17).
+- Full quality gate (`compileDebugKotlin testDebugUnitTest assembleDebug`) — **not executed** (see Verification status). First CI run pending; Loop 6–15 code was never compile-verified, expect fallout to fix forward.
+
 ## [Unreleased] Phase plan — 10 phases documented (docs) (2026-11-17)
 
 Documentation only; no source changed; nothing compiled.

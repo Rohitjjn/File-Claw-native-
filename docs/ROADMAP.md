@@ -10,7 +10,7 @@ Full execution plan with per-phase steps, CI test ladder, and exit criteria live
 | # | Phase | Status |
 |---|---|---|
 | 0 | Audit & repo hygiene | ✅ done (2026-11-17) |
-| 1 | Quality Gate green + broken-format repairs | ⏳ next — `docs/prompts/PHASE_1_PROMPT.md` |
+| 1 | Quality Gate green + broken-format repairs | ✅ landed 2026-11-17 — `docs/prompts/PHASE_1_PROMPT.md` (CI gate pending) |
 | 2 | Test infrastructure & architecture (split monolith, typed nav, emulator CI) | ⏳ |
 | 3 | Claude frontier UI — "The Quiet Desk" | ⏳ |
 | 4 | Format depth (.ppt, .xlsb, CJK, RAR, GLB/PLY, Parquet…) | ⏳ |

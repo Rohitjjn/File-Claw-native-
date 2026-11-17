@@ -24,7 +24,7 @@ The Android layer of this patch was written in a sandbox with no Android SDK and
 
 ## Behaviour changes you will notice
 1. `.xlsx` is **view-only**. 2. CSV edits need the **Save** button (with an unsaved-changes prompt). 3. Large text files (> 250k chars) are **read-only** with a banner.
-4. HTML preview has **scripts off** until you tap "Run scripts". 5. Files opened from other apps are edited as an **in-app copy** (you're told on save).
+4. HTML preview has **scripts off** until you tap "Run scripts". 5. Files opened from other apps **sync back to the source app** on save when possible; otherwise you keep an in-app copy and the message says why.
 6. App backup is disabled. 7. Splash is shorter (500 → 150 ms).
 
 ## Files added at the root (historical v1.1.0 snapshot)

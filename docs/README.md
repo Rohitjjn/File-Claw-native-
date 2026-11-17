@@ -34,7 +34,8 @@ label every claim `measured` or `not verified`.
 - [`changelogs.md`](changelogs.md) — full loop changelog (v1.1.0 → v1.3.x, verbose)
 
 ## Prompts
-- [`prompts/PHASE_1_PROMPT.md`](prompts/PHASE_1_PROMPT.md) — **active** (build green + broken-format repairs)
+- [`prompts/PHASE_1_PROMPT.md`](prompts/PHASE_1_PROMPT.md) — shipped 2026-11-17 (build hygiene + broken-format repairs)
+- [`prompts/PHASE_2_PROMPT.md`](prompts/PHASE_2_PROMPT.md) — **active** (test infrastructure & architecture)
 - [`prompts/NEXT_LOOP_PROMPT.md`](prompts/NEXT_LOOP_PROMPT.md) — superseded (history)
 - [`prompts/README.md`](prompts/README.md) — prompt index & rules
 

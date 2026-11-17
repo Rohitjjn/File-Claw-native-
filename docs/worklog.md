@@ -164,3 +164,37 @@ Work Log:
 - Wrote `docs/PHASES.md`: 10 phases (0–9) — 0 Audit (done) · 1 Quality Gate + broken-format repairs · 2 Test infra + architecture (monolith split, typed nav, emulator instrumented CI) · 3 Claude frontier UI · 4 Format depth · 5 Performance/memory/500 MB paging · 6 Security hardening (manifest guard, SAF-first) · 7 a11y/i18n/device matrix · 8 Play release (staged rollout, rollback) · 9 post-release + 2.0 streaming renderers. Universal CI test ladder + per-phase steps and exit criteria included; phases strictly sequential from Phase 1; each phase ends by writing the next phase's prompt.
 - Updated ROADMAP.md (10-phase table + link), docs/README.md (index), docs/AGENTS.md (read order), docs/CHANGELOG.md (entry).
 - Verification: docs-only; nothing compiled. Per-phase test strategy is written against `.github/workflows/ci.yml` (unverified first run) and to be extended per phase (emulator AVDs, Paparazzi, macrobenchmarks, manifest guards).
+
+---
+
+Task ID: PHASE-1-QUALITY-GATE
+Agent: Arena.ai Agent Mode (single owner; no parallel sub-agent runtime available)
+Date: 2026-11-17
+Baseline: branch `arena/5100f329-file-claw-native`, HEAD `783cf87` (Phase 0 + PHASES.md). Working tree started clean.
+
+Task: Implement Phase 1 — Quality Gate + broken-format repairs (`docs/prompts/PHASE_1_PROMPT.md`): build hygiene, honest-failure viewers, paged hex viewer, Room schema, the four UI bugs, docs/strings reconciliation. Report with measured vs unverified labels.
+
+Work Log:
+- Environment: no JDK/Gradle/Android SDK in sandbox; Maven Central / Google / JetBrains hosts unreachable (000/SSL errors). Acquired JDK 25 via `pip install jdk4py` and a complete Kotlin 2.4.21 distribution via `npm pack kotlin-compiler` (kotlinc-jvm + stdlib); both under /tmp (not committed). Android SDK remains unavailable → full Gradle gate not run; see Verification section.
+- AUD-001/AUD-019: removed dead `com.github.mhiew:android-pdf-viewer` and the JitPack repository entirely (nothing else used it).
+- AUD-021: `build-and-release.yml` now fails closed when `build_type=release` and no signing secret is configured; debug sideload fallbacks kept with `::warning::`.
+- AUD-005: PPTX WebView — main-frame `onReceivedError`/`onReceivedHttpError` clear loading and show labeled error card (reason + Retry via `pptxReloadKey` + Open-with…); 15 s watchdog; `onDocumentError` routes to the same card.
+- AUD-006: MIDI (`mid/midi/kar`) registry FULL → IDENTIFY; AUDIO+IDENTIFY routes to hex viewer with honest notice. FILE_FORMATS regenerated counts 284→281 full / 83→86 identify; repair of mangled ✅/🔄/⏳ glyphs in the generated table.
+- AUD-007: audio switched to `prepareAsync()` + `setOnPreparedListener`/`setOnErrorListener`; inline "Can't play this audio" card with Open-with… / View-as-hex.
+- AUD-008: video `setOnErrorListener` → inline error card (Open-with… / View-as-hex).
+- AUD-009: FontViewer validates via `Typeface.createFromFile` + `Paint.hasGlyph("AGg0")`; invalid fonts show a notice.
+- AUD-010: image bounds-decode pre-flight (`BitmapFactory.inJustDecodeBounds`) + honest undecodable-image card with Hex-view action (telephoto `onError` API unverifiable offline; documented).
+- AUD-003: new pure-Kotlin `core/hex/HexDump` (64 KB windows, absolute offsets, `0x…`/decimal jump parser) + `HexDumpTest` (9 tests). `generateHexDump` (4 KB cap) deleted; `BinarySuccess` now carries `filePath`; `HexViewer` rewritten with First/Prev/Next/Last, window counter, offset input, empty-file state.
+- BUG-004: CSV grid right-edge fade (scroll-synced via `.x-spreadsheet-scrollbar.horizontal`); sticky first column deferred (canvas renderer).
+- BUG-005: `imePadding()` on both password dialogs.
+- BUG-006: `search.html` — `refinePlaceholderGeometry()` patches each placeholder to its true page geometry after first paint (bounded, aborts on document swap, keeps proxies only transiently).
+- BUG-007: `docx_editor.html` — `body.pinching` clips `#document-scroller` (`overflow: hidden !important`) during two-finger pinch.
+- AUD-002: FILE_FORMATS emoji repair + recount; AUD-022: CHANGELOG recount to 231 `@Test` methods (verified by grep on source).
+- AUD-024: save-failure strings unified around sourceUri write-back (both save paths); SANITY_CHECKLIST/TODO/AGENTS/PATCH_NOTES updated; device round trip NOT verified.
+- AUD-013: corrupt-PDF automated test deferred (needs WebView/instrumented or device).
+- AUD-034: BLOCKED — 4.json cannot be produced without Maven access (KSP needs the Room compiler); `./gradlew kspDebugKotlin` on a networked machine regenerates it. CI emits a non-fatal `::warning::` with the exact command. Nothing consumes 4.json in tests today.
+- Moved `ScreenOrientationPolicy` (+test) `core/format` → `ui/screens` — it was Android-coupled in the pure-Kotlin `core/` tree and broke the Gradle-free local verifier.
+- Extended `tools/local-verify` with `ShimRules.kt` (TemporaryFolder) + `@Rule` support in `Runner.kt`; `verify-core.sh` now scopes tests to `app/src/test/java/com/example/core` and says why.
+- Verification (measured): core main + core tests compiled with Kotlin 2.4.21 targeting JVM 17; **191 tests passed, 0 failed** (includes new HexDumpTest; excludes 8 Android-coupled suites / 40 tests — they run on the CI gate). `node --check` OK for search.html (2 scripts), docx_editor.html, x-spreadsheet inline template. Both workflow files parse as YAML. **Not run:** full `./gradlew compileDebugKotlin testDebugUnitTest assembleDebug` (no Android SDK in sandbox) — CI first run pending; user push approval pending.
+
+Files changed: app/build.gradle.kts, settings.gradle.kts, .github/workflows/ci.yml, .github/workflows/build-and-release.yml, app/src/main/java/com/example/core/hex/HexDump.kt (new), app/src/main/java/com/example/ui/screens/{FilePreviewScreen.kt,ScreenOrientationPolicy.kt (moved),UniversalViewers.kt,DocumentPreviewSupport.kt}, app/src/main/java/com/example/viewmodel/MainViewModel.kt, app/src/main/java/com/example/core/format/FormatRegistry.kt, app/src/main/assets/pdfjs/search.html, app/src/main/assets/editor/docx_editor.html, app/src/test/java/com/example/core/hex/HexDumpTest.kt (new), app/src/test/java/com/example/ui/screens/ScreenOrientationPolicyTest.kt (moved), tools/local-verify/{verify-core.sh,Shim.kt,ShimRules.kt,Runner.kt}, docs/{CHANGELOG.md,TODO.md,AGENTS.md,PATCH_NOTES.md,SANITY_CHECKLIST.md,FILE_SUPPORT_AUDIT.md,FILE_FORMATS.md,worklog.md}.

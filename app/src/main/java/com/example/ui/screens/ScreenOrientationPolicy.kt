@@ -1,4 +1,4 @@
-package com.example.core.format
+package com.example.ui.screens
 
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration

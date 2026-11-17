@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.Base64
 import android.view.ViewGroup
@@ -222,7 +223,15 @@ fun SqliteViewer(fileEntity: RecentFileEntity, modifier: Modifier = Modifier) {
 @Composable
 fun FontViewer(fileEntity: RecentFileEntity, modifier: Modifier = Modifier) {
     val textColor = MaterialTheme.colorScheme.onBackground.toArgb()
+    // AUD-009: a successfully-parsed face is not enough — prove the glyphs resolve.
+    // Paint.hasGlyph("AGg0") is false for corrupt/empty faces that still "load" and
+    // would otherwise render blank/tofu with no explanation (minSdk 26 ≥ API 23).
     val face = remember(fileEntity.path) { runCatching { Typeface.createFromFile(File(fileEntity.path)) }.getOrNull() }
+    val glyphsOk = remember(face) {
+        face != null && runCatching {
+            Paint().apply { typeface = face; textSize = 32f }.hasGlyph("AGg0")
+        }.getOrDefault(false)
+    }
 
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text(
@@ -231,8 +240,11 @@ fun FontViewer(fileEntity: RecentFileEntity, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
         )
         if (face == null) {
-            NoticeBanner("This font file could not be loaded.", Modifier.padding(top = 12.dp))
+            NoticeBanner("This font file could not be loaded — it may be corrupt or an unsupported format.", Modifier.padding(top = 12.dp))
             return@Column
+        }
+        if (!glyphsOk) {
+            NoticeBanner("This font loaded but contains no usable glyphs (invalid font) — showing it anyway; glyph boxes may be blank.", Modifier.padding(top = 12.dp))
         }
         val samples = listOf(
             12f to "The quick brown fox jumps over the lazy dog",

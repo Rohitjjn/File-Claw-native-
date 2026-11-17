@@ -349,9 +349,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         data class Model3dSuccess(val mesh: Mesh, val file: RecentFileEntity, val label: String) : FileContentState()
         data class HtmlSuccess(val html: String, val file: RecentFileEntity, val title: String) : FileContentState()
         data class BinarySuccess(
-            val hexRows: List<String>,
-            val asciiRows: List<String>,
             val file: RecentFileEntity,
+            val filePath: String,
             val label: String? = null,
             val note: String? = null
         ) : FileContentState()
@@ -470,53 +469,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return false
     }
 
-    private fun generateHexDump(file: File): Pair<List<String>, List<String>> {
-        val hexLines = mutableListOf<String>()
-        val asciiLines = mutableListOf<String>()
-        val maxBytesToDump = 4096 // Limit dump size for high UI performance and quick display
-        try {
-            FileInputStream(file).use { fis ->
-                val buffer = ByteArray(16)
-                var offset = 0
-                while (offset < maxBytesToDump) {
-                    val bytesRead = fis.read(buffer)
-                    if (bytesRead <= 0) break
-                    
-                    val hexBuilder = StringBuilder()
-                    val asciiBuilder = StringBuilder()
-                    
-                    // AddOffset address
-                    hexBuilder.append(String.format("%08X: ", offset))
-                    
-                    for (i in 0 until 16) {
-                        if (i < bytesRead) {
-                            val b = buffer[i].toInt() and 0xFF
-                            hexBuilder.append(String.format("%02X ", b))
-                            val c = b.toChar()
-                            if (c in ' '..'~') {
-                                asciiBuilder.append(c)
-                            } else {
-                                asciiBuilder.append('.')
-                            }
-                        } else {
-                            hexBuilder.append("   ")
-                        }
-                        if (i == 7) {
-                            hexBuilder.append(" ")
-                        }
-                    }
-                    hexLines.add(hexBuilder.toString())
-                    asciiLines.add(asciiBuilder.toString())
-                    offset += bytesRead
-                }
-            }
-        } catch (e: Exception) {
-            hexLines.add("Error generating hex dump")
-            asciiLines.add("")
-        }
-        return Pair(hexLines, asciiLines)
-    }
-
     fun openFile(fileEntity: RecentFileEntity, archivePassword: String = "") {
         _currentFileState.value = FileContentState.Loading
         _loadingFilePath.value = fileEntity.path
@@ -564,6 +516,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Identify-only view for a file the dedicated viewer cannot decode on this
+     * device (AUD-007/AUD-008/AUD-010). Swaps the preview state in place — the
+     * screen stays on the preview route and flips to the hex viewer.
+     */
+    fun openAsHex(fileEntity: RecentFileEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = File(fileEntity.path)
+                if (!file.exists()) {
+                    _currentFileState.value = FileContentState.Error("File not found on disk. It might have been deleted.")
+                    return@launch
+                }
+                val detection = FormatDetector.detect(file, file.name)
+                _currentFileState.value = identifyOnly(
+                    file, fileEntity, detection,
+                    "This viewer can't decode the file on this device; showing the raw bytes."
+                )
+            } catch (e: Exception) {
+                _currentFileState.value = FileContentState.Error("Failed to open as hex: ${e.message}")
+            }
+        }
+    }
+
     private fun buildContentState(
         file: File,
         entity: RecentFileEntity,
@@ -595,7 +571,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 else openArchive(file, entity, password)
             FileKind.IMAGE -> FileContentState.ImageSuccess(entity)
             FileKind.SVG -> FileContentState.SvgSuccess(entity)
-            FileKind.AUDIO -> FileContentState.MediaSuccess(entity, isAudio = true)
+            FileKind.AUDIO ->
+                if (spec.support == Support.IDENTIFY) {
+                    identifyOnly(
+                        file, entity, detection,
+                        "${spec.displayName} can't be previewed yet — no synthesizer/decoder is bundled for it. Export it to WAV/MP3 to listen here."
+                    )
+                } else {
+                    FileContentState.MediaSuccess(entity, isAudio = true)
+                }
             FileKind.VIDEO -> FileContentState.MediaSuccess(entity, isAudio = false)
             FileKind.SQLITE -> FileContentState.SqliteSuccess(entity)
             FileKind.FONT ->
@@ -695,8 +679,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun identifyOnly(file: File, entity: RecentFileEntity, detection: Detection, note: String?): FileContentState {
-        val (hex, ascii) = generateHexDump(file)
-        return FileContentState.BinarySuccess(hex, ascii, entity, detection.spec.displayName, note)
+        return FileContentState.BinarySuccess(entity, file.absolutePath, detection.spec.displayName, note)
     }
 
     fun openZipEntry(parentZipEntity: RecentFileEntity, node: FileManager.ZipNode, password: String = "") {
@@ -828,7 +811,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (writeBackError == null) {
                         _fileEvent.value = "Saved and synced back to source file."
                     } else {
-                        _fileEvent.value = "Saved to in-app copy ($writeBackError)."
+                        _fileEvent.value = "Saved, but the change could not be synced back to the source app ($writeBackError). The app's copy was updated."
                     }
                 } else if (isInAppImportedCopy(fileEntity.path)) {
                     _fileEvent.value = "Saved to the in-app copy. The original file was not changed."
@@ -903,7 +886,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     if (writeBackError == null) {
                         _fileEvent.value = "Saved and synced back to source file."
                     } else {
-                        _fileEvent.value = "Saved to in-app copy ($writeBackError)."
+                        _fileEvent.value = "Saved, but the change could not be synced back to the source app ($writeBackError). The app's copy was updated."
                     }
                 } else if (isInAppImportedCopy(fileEntity.path)) {
                     _fileEvent.value = "Saved to the in-app copy. The original file was not changed."

@@ -40,6 +40,13 @@
             overscroll-behavior: contain;
         }
 
+        /* BUG-007: while a pinch-preview transform is on the content, clip the
+           scroller — the scaled page transiently overflows the viewport and must
+           never paint outside it (horizontal scrollbar flicker during pinch). */
+        body.pinching #document-scroller {
+            overflow: hidden !important;
+        }
+
         #output {
             position: relative;
             margin: 0 auto;
@@ -313,6 +320,7 @@
         scroller.addEventListener('touchstart', function (e) {
             if (isPrintMode) return;
             if (e.touches.length === 2) {
+                document.body.classList.add('pinching');
                 isPinching = true;
                 if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
                 const t1 = e.touches[0];
@@ -343,6 +351,7 @@
         scroller.addEventListener('touchend', function (e) {
             if (isPrintMode) return;
             if (isPinching && e.touches.length < 2) {
+                document.body.classList.remove('pinching');
                 isPinching = false;
                 const transform = container.style.transform;
                 container.style.transform = "";

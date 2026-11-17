@@ -6,7 +6,8 @@ in `docs/legacy/prompts/`; superseded ones are marked in place.)
 
 | File | Status | Notes |
 |---|---|---|
-| `PHASE_1_PROMPT.md` | **Active** | Phase 1 — Quality Gate green in CI + broken-format repairs from the Phase 0 audit (`docs/FILE_SUPPORT_AUDIT.md`). |
+| `PHASE_1_PROMPT.md` | Shipped 2026-11-17 | Phase 1 — Quality Gate + broken-format repairs. CI gate run pending (first push/PR). |
+| `PHASE_2_PROMPT.md` | **Active** | Phase 2 — test infrastructure & architecture: emulator instrumented CI, Paparazzi/Roborazzi baselines, FilePreviewScreen split, type-safe navigation. |
 | `NEXT_LOOP_PROMPT.md` | Superseded | Loop 15 device-testing round; never executed as written; folded into Phase 1. Kept for history. |
 
 History: archived prompts for Loops 02/03/07 were removed in Loop 7; `loop_1.md`–`loop_6.md` were moved

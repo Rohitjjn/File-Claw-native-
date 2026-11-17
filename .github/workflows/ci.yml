@@ -51,6 +51,17 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace
 
+      # AUD-034 / Phase 1: fail visibly (but not the build) when the Room schema history is
+      # missing 4.json. room.schemaLocation makes every KSP run emit the current schema, so
+      # this step tells us the committed file was never regenerated/committed for v4.
+      - name: Room schema drift check (non-fatal)
+        run: |
+          if [ ! -f app/schemas/com.example.data.AppDatabase/4.json ]; then
+            echo "::warning title=AUD-034::app/schemas/com.example.data.AppDatabase/4.json is not committed. Run ./gradlew kspDebugKotlin on a networked machine and commit the file. Room does not consume it at runtime; it is the migration-test baseline."
+          else
+            echo "Room 4.json present."
+          fi
+
       - name: Upload test reports (on failure)
         if: failure()
         uses: actions/upload-artifact@v4

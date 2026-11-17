@@ -98,39 +98,58 @@ Status legend: **OPEN** = not fixed · severity in (P0–P3).
 | ID | Issue | Evidence | Fix hint |
 |---|---|---|---|
 | **AUD-001** | **Dead dependency `com.github.mhiew:android-pdf-viewer`** — zero imports anywhere; it is the only JitPack-sourced artifact and the unscoped JitPack repo is un-filtered. Supply-chain exposure + APK/build bloat. | `app/build.gradle.kts` vs grep of `app/src` | Remove dependency + scoped `content { includeGroup }` for JitPack (or drop JitPack entirely) |
+| |↳ **FIXED 2026-11-17** — dependency removed; JitPack removed. | | |
 | **AUD-002** | **Docs vs code drift** — `FILE_FORMATS.md` says "corrupt PDFs currently spin" and "legacy .doc/.xls = identify-only"; code surfaces `onPdfError` and extracts both. `TODO.md` #3 still says write-back missing although `MIGRATION_3_4`/`sourceUri` exist. | FILE_FORMATS.md vs `MainActivity.kt:onPdfError`, `AppDatabase.kt`, `MainViewModel.kt` | Fix docs (done in this phase for FILE_FORMATS); device-verify; regenerate generated table |
+| |↳ **PARTIAL 2026-11-17** — MIDI/registry change regenerated FILE_FORMATS (counts 281/32/86) and repaired mangled ✅/🔄/⏳ glyphs; `.doc`/`.xls` registry alignment stays a Phase 1/4 task per the existing note. | | |
 | **AUD-034** | **Room schema drift** — `AppDatabase` is version **4** with `exportSchema = true`, but `app/schemas/…/` contains only **3.json**. The v4 schema (`sourceUri`) was never committed. Migration tests rely on a stale baseline. | `app/schemas/com.example.data.AppDatabase/` | Regenerate schemas via `ksp` (`room.schemaLocation`) and commit 4.json |
+| |↳ **BLOCKED 2026-11-17** — KSP cannot run in the working sandbox (no network to Maven Central/Google); `4.json` must be generated on a networked machine (`./gradlew kspDebugKotlin`); nothing consumes 4.json in tests today; CI now emits an explicit ::warning:: with the command (see §9). | | |
 | **AUD-026** | **App has never been compile-verified in its authoring sandboxes**; Loops 02–15 mostly shipped with "not verified" stamps. Real compile fallout is unknown. | `docs/TODO.md` KNOWN ISSUES #1; worklog | Phase 1 gate: green `compileDebugKotlin` + `testDebugUnitTest` + `assembleDebug` in CI before any feature work |
 
 ### P1 / user-facing breakage
 | ID | Issue | Evidence | Fix hint |
 |---|---|---|---|
 | **AUD-003** | **Hex viewer dumps only the first 4 KB** and has no paging/offset navigation — for identify-only formats (the whole §4 list, including every `.rar`/`.iso`) this is broken-by-truncation. | `MainViewModel.kt:476`; `FilePreviewScreen.kt:4624` | Paged hex view (64 KB windows, offset input) in the shared `HexViewer` |
+| |↳ **FIXED 2026-11-17** — paged 64 KB windows + offset jump; pure `HexDump` core + 9 unit tests. | | |
 | **AUD-004** | **DOCX/PPTX whole-file base64 hand-off** — ~2.7× memory duplication, hard 25 MB cap, > cap silently degrades to archive listing; DOCX print runs a second off-screen WebView from the same base64 path. | `MainViewModel.kt:685/1312`, `DocxPreviewWebView`, `FilePrintHelper` | Stream via `HttpRange`/`PdfRangeResponder`-style local HTTP server for DOCX/PPTX bytes (Loop-15 PDF pattern) |
 | **AUD-005** | **PPTX viewer can spin forever** — `onReceivedError`/`onReceivedHttpError` only `Log.e` and never clear `isWebViewLoading`; main-frame failure ⇒ "Loading Presentation…" eternally. Loop 14 fixed the same class of bug for DOCX only. | `PptxPreviewWebView` (`FilePreviewScreen.kt:5288`) | Clear loading on error + show honest error screen w/ retry (port `DocxTextRecovery` policy); add timeout watchdog |
+| |↳ **FIXED 2026-11-17** — main-frame errors + 15 s watchdog flip to labeled error card (reason + Retry); `onDocumentError` routes to the same card. | | |
 | **AUD-006** | **MIDI advertised FULL but `MediaPlayer` can't decode MIDI** — `prepare()` throws, the catch block swallows (`// handle error`), screen shows a dead player (0:00 / 0:01) with no message. | FormatRegistry `mid/midi/kar` FULL; `AudioPlayer` catch swallow | Detect unsupported games via `MediaPlayer.OnErrorListener`; show "MIDI preview isn't supported — export as audio" notice; drop MIDI to identify-only until a synth ships |
+| |↳ **FIXED 2026-11-17** — MIDI dropped to identify-only (`mid/midi/kar`); AUDIO+IDENTIFY routes to hex view with honest notice. | | |
 | **AUD-007** | **Audio `prepare()` blocks the main thread** (`LaunchedEffect` default dispatcher) — ANR risk on slow decodes; also no error listener at all. | `AudioPlayer` | `Dispatchers.IO` + `prepareAsync()` + `setOnErrorListener` + error UI |
+| |↳ **FIXED 2026-11-17** — `prepareAsync()` + `setOnErrorListener` + Dispatchers-based ticker; inline "can't decode" card with Open-with / View-as-hex. | | |
 | **AUD-008** | **Video black-box on codec failure** — `VideoView` with no `setOnErrorListener`; unsupported `.mkv`/`.avi` ⇒ 260 dp black rectangle, zero feedback. | `VideoPlayer` | OnErrorListener → inline "can't decode on this device" + share/open-with fallback |
+| |↳ **FIXED 2026-11-17** — `setOnErrorListener` → inline error card (Open-with / View-as-hex) instead of dead black box. | | |
 | **AUD-009** | **Invalid fonts silently fall back** — bad TTF/OTF shows the system default with no indication; "FULL" is a lie for corrupt files. | `FileKind.FONT` branch never validates | Verify glyph load (`Typeface` paint test); show "invalid font — showing system default" notice |
+| |↳ **FIXED 2026-11-17** — `Typeface.createFromFile` validated via `Paint.hasGlyph("AGg0")`; honest invalid-font banner. | | |
 | **AUD-010** | **HEIF/AVIF/TIFF/DNG blank-image failure mode** — device decoder absent ⇒ empty area, no message. | `IMAGE` branch via Coil; no error fallback | Coil `onError` → honest notice + offer hex view |
+| |↳ **FIXED 2026-11-17** — bounds-decode pre-flight (`inJustDecodeBounds`); undecodable images render an honest error card with Hex-view action instead of a blank area. | | |
 | **AUD-011** | **PPTX feature desert** — no find-in-document, no zoom UI parity, no print path, night mode rudimentary; feature gap vs DOCX despite same WebView stack. | `PptxPreviewWebView` | Port DOCX pipeline (search bridge, `PrintHelper`, zoom policy) or scope PPTX down honestly in the registry |
 | **AUD-012** | **HTML preview find has no next/prev** (BUG-008 carried); highlight-only `findAllAsync`. | known-issues BUG-008 | Add match navigation bridge or drop the find affordance for HTML |
 | **AUD-013** | **Corrupt-PDF behaviour unverified** — code has `onPdfError` + "Try again" affordance but FILE_FORMATS.md still documented infinite spin; no unit/UI test covers the corrupt path. | `PdfPreview`; docs drift | Device/CI test with truncated/corrupt PDF; keep docs in sync |
+| |↳ **DEFERRED 2026-11-17** — corrupt-PDF path exists (`onPdfError` + "Try Again"); no automated corruption test yet (needs WebView/CI or device); tracked in Phase 2. | | |
 
 ### P2 / correctness, security, polish
 | ID | Issue | Evidence | Fix hint |
 |---|---|---|---|
 | **AUD-014** | **CSV wide grids clip** (BUG-004) — no horizontal summary/fade for > screen width. | known-issues BUG-004 | Edge fade + sticky first column option |
+| |↳ **PARTIAL 2026-11-17** — right-edge fade indicator added to the grid WebView (scroll-synced via the x-spreadsheet scrollbar element); sticky first column deferred (canvas-rendered grid; would need renderer patch). | | |
 | **AUD-015** | **Password dialog keyboard overlap** (BUG-005). | known-issues BUG-005 | `imePadding()` on dialog content |
+| |↳ **FIXED 2026-11-17** — `imePadding()` on both password dialogs. | | |
 | **AUD-016** | **PDF placeholder geometry from page 1** (BUG-006) — mixed-orientation docs shift on first paint. | known-issues BUG-006 | Per-page placeholder sizing as sizes resolve |
+| |↳ **FIXED 2026-11-17** — placeholders refine to each page's real geometry off the critical path after first paint (search.html `refinePlaceholderGeometry`); zoom/rotation paths unchanged. | | |
 | **AUD-017** | **DOCX pinch transient horizontal overflow** (BUG-007). | known-issues BUG-007 | Clip during preview transform |
+| |↳ **FIXED 2026-11-17** — scroller clipped (`overflow: hidden !important` via `body.pinching`) during pinch-preview transforms. | | |
 | **AUD-018** | **`MANAGE_EXTERNAL_STORAGE` requested** — needed for the file-manager role, but Play-policy restricted; no SAF-only mode. | Manifest; security-audit #17 | SAF-first browse path; keep all-files behind explicit "file manager mode" |
 | **AUD-019** | **JitPack unscoped** repo declaration (`FAIL_ON_PROJECT_REPOS` with bare jitpack). | `settings.gradle.kts` | Scoped `content {}` (or remove with AUD-001) |
+| |↳ **FIXED 2026-11-17** — JitPack repository removed from `settings.gradle.kts`. | | |
 | **AUD-020** | **`applicationId = com.aistudio.filesclaw.apxqzy`** — AI-Studio-generated; changing post-release orphans updates/signing continuity. | gradle | Decide + document before Play; not ad hoc |
 | **AUD-021** | **Release signing fails open** — falls back to the debug key silently; Play requires real keystore (env plumbing exists, fail-open defeats it). | build-and-release.yml | Fail closed when `build_type=release` and no keystore present |
+| |↳ **FIXED 2026-11-17** — build-and-release.yml fails closed when `build_type=release` and no keystore secret is configured; debug fallbacks kept for sideloading with `::warning::`. | | |
 | **AUD-022** | **Test-count drift** — docs cite 134/146/167/199/225 `@Test` methods at various loops; no single source of truth. | TODO/worklog/changelog | Phase 1: recount and write one number into CHANGELOG |
+| |↳ **ADDRESSED 2026-11-17** — CHANGELOG/PHASES/audit recount to 231 `@Test` methods (this run); drift watch moved to Phase 2 (JaCoCo gate). | | |
 | **AUD-023** | **detekt advisory** (`ignoreFailures = true`), JaCoCo gate unverified, `lint abortOnError=true` never run clean in-sandbox. | build.gradle.kts | Baseline on CI; ratchet gradually |
 | **AUD-024** | **Write-back vs in-app-copy dual messaging** — code implements source-URI write-back (Room `MIGRATION_3_4`); UI strings/sanity checklist still say "saved to the in-app copy". Verify + unify copy. | MainViewModel vs SANITY_CHECKLIST | Reconcile strings; device-verify round trip |
+| |↳ **ADDRESSED 2026-11-17** — code strings already write-back-aware; docs (SANITY_CHECKLIST/TODO/AGENTS/PATCH_NOTES) reconciled; **device round trip NOT verified**. | | |
 | **AUD-025** | **Archive unsafe-entry UX** — slip-flagged entries render indistinguishable from safe ones; no distinct archive-bomb refusal state. | P1 TODO item | Warning icon + distinct refusal dialog (wire existing `ArchiveSafety` flags) |
 | **AUD-027** | **No Compose UI tests** — open→edit→save→reopen round trip untested; Robolectric CUJs absent. | TODO P1 | Add for text/CSV/markdown save paths |
 | **AUD-028** | **English-only hard-coded strings** — `strings.xml` has only `app_name`; every label is literal Kotlin. | res/values/strings.xml | Extract (Phase 2+; i18n-ready) |
@@ -196,3 +215,36 @@ hand-off of any kind, `MANAGE_EXTERNAL_STORAGE` removal without an SAF-first UX 
 6. AUD-002/AUD-024 → docs/strings reconciliation.
 7. AUD-014…AUD-017 → the four known UI bugs (BUG-004/005/006/007).
 8. AUD-027/AUD-028 → tests before features.
+
+
+## 9. Phase 1 resolution log (2026-11-17)
+
+Scope per `docs/prompts/PHASE_1_PROMPT.md`. Status legend: **FIXED** (code landed; not device-verified unless said), **DEFERRED** (with reason), **BLOCKED** (environment). Nothing here is claimed device-verified — the app still requires the device SANITY_CHECKLIST.
+
+| ID | Phase 1 outcome |
+|---|---|
+| AUD-001 | FIXED — `com.github.mhiew:android-pdf-viewer` removed from `app/build.gradle.kts` (zero imports). |
+| AUD-002 | PARTIAL — FILE_FORMATS regenerated (281 full / 32 partial / 86 identify; MIDI moved); emojis repaired; `.doc`/`.xls` note stands. |
+| AUD-003 | FIXED — paged 64 KB hex windows (`core/hex/HexDump`), prev/next, jump-to-offset; unit-tested (9 tests, run green locally). |
+| AUD-005 | FIXED — main-frame `onReceivedError`/`onReceivedHttpError` now clear loading and show a labeled card (reason + Retry); 15 s watchdog; `onDocumentError` included. |
+| AUD-006 | FIXED — MIDI identify-only; AUDIO+IDENTIFY → hex viewer with notice; no more dead MIDI player. |
+| AUD-007 | FIXED — async prepare, error listener, inline error UI with Open-with / View-as-hex; main thread no longer blocks on decode. |
+| AUD-008 | FIXED — video codec failure → inline error card (Open-with / View-as-hex). |
+| AUD-009 | FIXED — font validity proven with `Paint.hasGlyph("AGg0")` before specimen render; invalid → banner. |
+| AUD-010 | FIXED — bounds-decode pre-flight; honest undecodable-image card + Hex view. |
+| AUD-013 | DEFERRED — still no automated corrupt-PDF test; `onPdfError` + Try Again is the shipped path; Phase 2/device. |
+| AUD-014 | PARTIAL — edge fade added (scroll-synced); sticky first column deferred (canvas grid). |
+| AUD-015 | FIXED — `imePadding()` both password dialogs. |
+| AUD-016 | FIXED — per-page placeholder refine after first paint (mixed-orientation PDFs). |
+| AUD-017 | FIXED — scroller clipped during pinch transforms. |
+| AUD-019 | FIXED — JitPack removed. |
+| AUD-021 | FIXED — release fails closed without signing secrets. |
+| AUD-022 | ADDRESSED — real count is 231 `@Test` methods as of this phase. |
+| AUD-024 | ADDRESSED — strings/docs unified around sourceUri write-back; device round trip unverified. |
+| AUD-034 | BLOCKED — see table note; regeneration command: `./gradlew kspDebugKotlin` (emits `app/schemas/com.example.data.AppDatabase/4.json`). |
+| AUD-026 (quality gate) | PARTIAL — core compiles and **191 pure-JVM tests pass** (local, Gradle-free path); full Android gate (`compileDebugKotlin testDebugUnitTest assembleDebug`) must run in CI — not executed here (no Android SDK in sandbox). |
+
+### Deferred with written reasons
+- **Sticky first column (BUG-004 tail)** — x-spreadsheet renders to canvas; pinning col 0 means patching the minified renderer. Revisit with the Phase 3 grid work.
+- **Corrupt-PDF automated test (AUD-013)** — needs a WebView/instrumented test or device; scheduled under Phase 2 (test infrastructure) instrumented gate.
+- **Room 4.json (AUD-034)** — cannot be produced without Maven access to the Room compiler; `./gradlew kspDebugKotlin` on any networked machine generates and commits it. No test consumes it today (`DatabaseMigrationTest` uses a proxied `SupportSQLiteDatabase`).

@@ -29,12 +29,14 @@ final gate and are recorded in `docs/SANITY_CHECKLIST.md`. Nothing is claimed wi
 
 ---
 
-## Phase 1 — Quality Gate green + broken-format repairs ⏳ NEXT
+## Phase 1 — Quality Gate green + broken-format repairs ✅ LANDED (2026-11-17, CI gate pending)
 
 **Goal:** the project **compiles, tests and assembles in CI**; every known broken viewer fails
 *honestly* (notice + retry, never a crash/eternal spinner/blank screen).
 
-**Entry:** Phase 0 done. **Prompt:** `docs/prompts/PHASE_1_PROMPT.md` (paste to next run).
+**Entry:** Phase 0 done. **Prompt:** `docs/prompts/PHASE_1_PROMPT.md` (executed 2026-11-17; see CHANGELOG + audit §9).
+**Outcome:** all P1 silent-failure paths fixed; 191/191 pure-JVM tests measured green; the Android gate
+was not runnable in the working sandbox — first CI run is the verification step (push approval pending).
 
 **Steps:**
 1. Preflight: JDK 17 + SDK 34 (or rely on CI). Fix **all** compile fallout before features.
@@ -61,7 +63,7 @@ SANITY_CHECKLIST): open PDF/DOCX/PPTX/MIDI/hex fixtures; corrupt-file cases boun
 - [ ] AUD-001, AUD-005…AUD-010, AUD-013, AUD-021, AUD-034 closed; BUG-004…007 closed
 - [ ] Zero silent-failure paths remain in media viewers (checklist in PR description)
 - [ ] CHANGELOG carries the **measured** test count and build result
-- [ ] Last step: write `PHASE_2_PROMPT.md`
+- [x] Last step: write `PHASE_2_PROMPT.md` (done 2026-11-17)
 
 **Estimate:** 1 focused session (compile duty dominates). **Risk:** Loop 6–15 code never compiled —
 budget compile-fallout triage generously.
@@ -72,7 +74,7 @@ budget compile-fallout triage generously.
 
 **Goal:** the monolith shrinks into testable modules and CI proves behavior, not just compilation.
 
-**Entry:** Phase 1 green. **Prompt:** written at the end of Phase 1.
+**Entry:** Phase 1 LANDED (gate pending — Phase 2 starts by closing it). **Prompt:** `docs/prompts/PHASE_2_PROMPT.md`.
 
 **Steps:**
 1. **Emulator instrumented tests in CI** (`reactivecircus/android-emulator-runner`, AVD API 34):
