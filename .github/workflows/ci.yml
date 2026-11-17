@@ -180,14 +180,7 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-snapshot -no-audio -no-boot-anim
           disable-animations: true
-          script: |
-            set +e
-            ./gradlew connectedDebugAndroidTest --console=plain > /tmp/it.log 2>&1
-            code=$?
-            grep -E '^e: ' /tmp/it.log | head -40 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
-            grep -E 'FAILED|failing tests|> [A-Za-z].*(Error|error|failed)' /tmp/it.log | head -30 | sed 's#^#::error ::#'
-            [ $code -ne 0 ] && tail -30 /tmp/it.log | sed 's#^#::error ::#'
-            exit $code
+          script: bash tools/ci/run-instrumented.sh
 
       - name: Upload instrumented test reports (on failure)
         if: failure()
