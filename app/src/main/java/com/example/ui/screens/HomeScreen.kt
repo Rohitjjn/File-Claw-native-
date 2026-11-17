@@ -542,9 +542,9 @@ fun HomeScreen(
                                         Spacer(modifier = Modifier.height(16.dp)) // Safe top margin buffer to prevent overlapping under header bar
                                         Text(
                                             text = greeting,
-                                            fontSize = 28.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onBackground
+                                            style = MaterialTheme.typography.displayLarge,
+                                            color = MaterialTheme.colorScheme.onBackground,
+                                            maxLines = 2
                                         )
                                         Text(
                                             text = "What would you like to open today?",

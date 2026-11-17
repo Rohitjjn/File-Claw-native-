@@ -32,4 +32,23 @@
     <string name="action_open_search">Open Search</string>
     <string name="action_open_all_files">Open All Files</string>
     <string name="action_clear_recents">Clear recent files</string>
+    <string name="path_copied">Path copied to clipboard</string>
+    <!-- Phase 3b: navigation rail + keyboard shortcut map (docs/UI_FRONTIER.md §5.2/§5.3) -->
+    <string name="nav_rail_home">Home</string>
+    <string name="nav_rail_all_files">All files</string>
+    <string name="nav_rail_search">Search</string>
+    <string name="nav_rail_settings">Settings</string>
+
+    <string name="shortcuts_section">KEYBOARD SHORTCUTS</string>
+    <string name="shortcuts_palette">Ctrl/Cmd+K&#160;·&#160;Ctrl/Cmd+P</string>
+    <string name="shortcuts_palette_desc">Open or close Quick Open</string>
+    <string name="shortcuts_settings">Ctrl/Cmd+,</string>
+    <string name="shortcuts_settings_desc">Open Settings</string>
+    <string name="shortcuts_back">Alt+Left</string>
+    <string name="shortcuts_back_desc">Back</string>
+    <string name="shortcuts_recents">Ctrl/Cmd+1…9</string>
+    <string name="shortcuts_recents_desc">Open the 1st…9th recent file</string>
+    <string name="shortcuts_copy_path">Ctrl/Cmd+Shift+C</string>
+    <string name="shortcuts_copy_path_desc">Copy the current file path</string>
+    <string name="shortcuts_footer">Hardware keyboards only. Find/save/undo shortcuts land with the reader chrome (Phase 3c); the full map lives in docs/UI_FRONTIER.md §5.3.</string>
 </resources>

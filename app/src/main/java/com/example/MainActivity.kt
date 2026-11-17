@@ -35,6 +35,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.NavDestination
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.compose.ui.platform.LocalConfiguration
+import com.example.ui.component.ClawNavRail
 import com.example.ui.screens.AllFilesScreen
 import com.example.ui.screens.EditorScreen
 import com.example.ui.screens.FilePreviewScreen
@@ -49,7 +52,9 @@ import kotlinx.coroutines.flow.first
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
@@ -322,18 +327,86 @@ class MainActivity : ComponentActivity() {
                     // Phase 3a: glass-at-root — ambient glow floats behind every destination.
                     // Reading surfaces stay opaque by contract (docs/UI_FRONTIER.md §4.5/§4.6).
                     // Phase 3b: Quick Open (Ctrl/Cmd+K) — files + actions palette.
-                    Box(
-                        modifier = Modifier.fillMaxSize().onKeyEvent { event ->
-                            val isK = event.key == Key.K
-                            val isShortcut = event.type == KeyEventType.KeyDown &&
-                                isK && (event.isCtrlPressed || event.isMetaPressed)
-                            if (isShortcut) {
+                    val isExpandedLayout = LocalConfiguration.current.screenWidthDp >= 840
+                    val railBackStackEntry by navController.currentBackStackEntryAsState()
+                    val railDestination = railBackStackEntry?.destination
+                    val digitKeys = mapOf(
+                        Key.One to 0, Key.Two to 1, Key.Three to 2, Key.Four to 3, Key.Five to 4,
+                        Key.Six to 5, Key.Seven to 6, Key.Eight to 7, Key.Nine to 8
+                    )
+                    val onShortcutKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = shortcut@{ event ->
+                        if (event.type != KeyEventType.KeyDown) return@shortcut false
+                        val isMod = event.isCtrlPressed || event.isMetaPressed
+                        when {
+                            // Quick Open — Ctrl/Cmd+K or Ctrl/Cmd+P
+                            isMod && (event.key == Key.K || event.key == Key.P) -> {
                                 quickOpenVisible = !quickOpenVisible
                                 true
-                            } else {
-                                false
                             }
+                            // Settings — Ctrl/Cmd+,
+                            isMod && event.key == Key.Comma -> {
+                                quickOpenVisible = false
+                                navController.navigate(ClawDestination.Settings) { launchSingleTop = true }
+                                true
+                            }
+                            // Back — Alt+Left
+                            event.isAltPressed && event.key == Key.DirectionLeft -> {
+                                if (quickOpenVisible) {
+                                    quickOpenVisible = false
+                                } else {
+                                    navController.popBackStack()
+                                }
+                                true
+                            }
+                            // Copy current file path — Ctrl/Cmd+Shift+C
+                            isMod && event.isShiftPressed && event.key == Key.C -> {
+                                val path = mainViewModel.currentFileState.value.fileOrNull?.path
+                                if (path == null) {
+                                    false
+                                } else {
+                                    val clip = android.content.ClipData.newPlainText("path", path)
+                                    val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    cm.setPrimaryClip(clip)
+                                    Toast.makeText(applicationContext, R.string.path_copied, Toast.LENGTH_SHORT).show()
+                                    true
+                                }
+                            }
+                            // Open 1st…9th recent file — Ctrl/Cmd+1…9
+                            isMod && !event.isShiftPressed && digitKeys.containsKey(event.key) -> {
+                                val idx = digitKeys.getValue(event.key)
+                                if (idx < recentFilesForPalette.size) {
+                                    quickOpenVisible = false
+                                    mainViewModel.openFile(recentFilesForPalette[idx])
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            else -> false
                         }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                    if (isExpandedLayout) {
+                        ClawNavRail(
+                            isHome = railDestination.isDestinationOf<ClawDestination.Home>() == true,
+                            isAllFiles = railDestination.isDestinationOf<ClawDestination.AllFiles>() == true,
+                            isSearch = railDestination.isDestinationOf<ClawDestination.Search>() == true,
+                            isSettings = railDestination.isDestinationOf<ClawDestination.Settings>() == true,
+                            onHome = {
+                                navController.navigate(ClawDestination.Home) {
+                                    popUpTo(ClawDestination.Splash) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            },
+                            onAllFiles = { navController.navigate(ClawDestination.AllFiles) { launchSingleTop = true } },
+                            onSearch = { navController.navigate(ClawDestination.Search) { launchSingleTop = true } },
+                            onSettings = { navController.navigate(ClawDestination.Settings) { launchSingleTop = true } }
+                        )
+                    }
+                    Box(
+                        modifier = Modifier.weight(1f).onKeyEvent { event -> onShortcutKey(event) }
                     ) {
                     com.example.ui.theme.GlassBackdrop {
                     NavHost(
@@ -466,6 +539,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onDismiss = { quickOpenVisible = false }
                         )
+                    }
                     }
                     }
                 }

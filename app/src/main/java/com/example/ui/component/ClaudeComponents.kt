@@ -58,7 +58,10 @@ fun ClaudeAppBar(
                 title = {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleLarge,
+                        fontFamily = com.example.ui.theme.SerifFamily,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Normal,
+                        fontSize = 18.sp,
+                        letterSpacing = (-0.2).sp,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
