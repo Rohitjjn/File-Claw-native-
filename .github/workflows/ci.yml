@@ -45,7 +45,15 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Compile Kotlin
-        run: ./gradlew compileDebugKotlin --stacktrace
+        # Emit compiler errors as workflow annotations so they are visible via the Checks API
+        # (raw job logs are not readable from the agent sandbox).
+        run: |
+          set +e
+          ./gradlew compileDebugKotlin --console=plain > /tmp/compile.log 2>&1
+          code=$?
+          grep -E '^e: ' /tmp/compile.log | head -60 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
+          tail -20 /tmp/compile.log
+          exit $code
 
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
