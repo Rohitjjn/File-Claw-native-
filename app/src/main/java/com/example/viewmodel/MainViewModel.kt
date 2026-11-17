@@ -450,25 +450,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentFileState.value = FileContentState.Idle
     }
 
-    private fun isBinaryFile(file: File): Boolean {
-        if (!file.exists()) return false
-        try {
-            FileInputStream(file).use { fis ->
-                val buffer = ByteArray(1024)
-                val bytesRead = fis.read(buffer)
-                if (bytesRead <= 0) return false
-                for (i in 0 until bytesRead) {
-                    if (buffer[i] == 0.toByte()) {
-                        return true
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            // default to text if unreadable/error
-        }
-        return false
-    }
-
     fun openFile(fileEntity: RecentFileEntity, archivePassword: String = "") {
         _currentFileState.value = FileContentState.Loading
         _loadingFilePath.value = fileEntity.path
