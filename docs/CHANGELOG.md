@@ -4,6 +4,55 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [Unreleased] Phase 3 — Claude frontier UI ("The Quiet Desk") — IN PROGRESS (3a + 3b landed 2026-11-17)
+
+**Verification status (read first):** all gates above ran in **GitHub Actions** on branch
+`arena/5100f329-file-claw-native` (workflow `CI`, jobs "Quality Gate" and "Instrumented tests (emulator
+API 34)"). Measured green runs: `44128246714` (3a foundations, both jobs), `44135800812` (3b Quick Open
+compile fix, both jobs), `44140293225` (3b shortcut map / nav rail / wordmark, both jobs). Failed runs that
+were fixed forward: `44132429688` (3b compile — invalid fully-qualified `androidx.…` call in a Modifier
+chain) and `44133924754` (3b compile — missing imports for the `KeyEvent` extension properties
+`key`/`type`/`isCtrlPressed`/`isMetaPressed`); both are kept, not hidden. Roborazzi baselines were
+re-recorded by the CI bot in `85a9423` (3a token/primary swap) and `5f1a149` (3b visual commit).
+Nothing is claimed from the working sandbox beyond the contrast audit (no Android SDK/Maven there).
+
+### Added (3a — foundations)
+- **Semantic color tier** per §4.1 (`surfaceContainer`, `surfaceContainerHigh`, `onSurfaceVariant`, `success`,
+  `warning`, `danger`, `selectionFill`, `link`) + format-family tint wells; terracotta demoted to accent-only;
+  filled button re-pointed to `ClaudeSoftTomato` (**measured 4.80:1** on both schemes); light warning
+  darkened to `#8F5B1C` (**measured 5.42:1** on paper / 5.06:1 on container).
+- **Bundled OFL typefaces in APK** — Source Serif 4 (reading/editorial), Inter (UI), JetBrains Mono (code/hex);
+  OFL 1.1 license texts ship in `app/src/main/assets/licenses/`. `displayLarge`, tracked-caps `Eyebrow`,
+  `ReadingBody` (17/28 serif) per §4.2. `FontFamily.Serif`/`Default` eliminated from the UI tree.
+- **`Motion.kt`** (§4.4: fast/base/slow/hero, emphasized easings, haptics map) and
+  **`ClawExtendedColors`** (§4.1 semantic slots + glass tints) wired via `FilesClawTheme`.
+- **Glass-at-root NavHost** inside transparent Scaffolds (opaque reading surfaces keep opacity, §4.5/4.6).
+- **Contrast audit committed and enforced in CI** (`tools/ci/check_contrast.py`, WCAG 2.x relative-luminance;
+  **measured 21 token pairs ≥ 4.5:1 body / ≥ 3:1 large**; runs as a blocking step before the JDK 17 setup).
+- `Icons.Default.*` → `Icons.AutoMirrored.*` sweep; zero new deprecations (CI-verified).
+
+### Added (3b — navigation & chrome; partial)
+- **Quick Open / Command Palette** (`Ctrl/Cmd+K` or `Ctrl/Cmd+P`; `ui/component/CommandPalette.kt`): files
+  (name match, capped at 12) + actions (theme toggle, open Settings/Search/All Files, clear recents) via the
+  existing `FileSearchRanker`; keyboard-first glass overlay; blind query shows 8 recents + all actions.
+- **Full in-app shortcut map (implemented subset only, documented honestly):** `Ctrl/Cmd+K|P` palette,
+  `Ctrl/Cmd+,` Settings, `Alt+Left` back, `Ctrl/Cmd+1…9` open 1st…9th recent, `Ctrl/Cmd+Shift+C` copy current
+  file path (real `ClipData` + toast). Settings → ABOUT now has a **KEYBOARD SHORTCUTS** card listing exactly
+  these; reader shortcuts (`Ctrl+F/S/A/Z/Y`), `Ctrl/Cmd+Shift+D` and `Alt+Right` are **not** wired and are
+  labeled as pending on the card.
+- **Expanded-width (≥ 840 dp) navigation rail** (`ui/component/ClawNavRail.kt`, 72 dp, §5.2): Home / All
+  files / Search / Settings with the active stop highlighted; hidden below 840 dp.
+- **Slim top chrome wordmark** in Source Serif 4 18 sp across all `ClaudeAppBar` surfaces; **Home hero** in
+  `displayLarge` serif (§5.1); **predictive back enabled** (`android:enableOnBackInvokedCallback="true"`).
+
+### Explicitly NOT done in 3b (not verified / absent)
+- **Medium-width (600–840 dp) list–detail two-pane** — the reader is a full-screen destination, not a
+  pane-embeddable surface yet; needs the §7 chrome refactor.
+- **Macrobenchmark smoke** — no macrobenchmark module exists; ≥ 55 fps recents scroll is *not* measured.
+- **TalkBack sweep / font-scale 2.0 pass** — no a11y session ran here; instrumented suite is launch-smoke only.
+- **Empty-state generative illustrations**, **predictive-back ordering inside readers** (find bar → chrome →
+  viewer), **screenshot matrix at 1.3/2.0 scale and medium/expanded widths** — pending.
+
 ## [Unreleased] Phase 2 — Test infrastructure & architecture (2026-11-17)
 
 **Verification status (read first):** every Android gate below ran in **GitHub Actions** on branch

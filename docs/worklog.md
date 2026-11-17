@@ -229,3 +229,37 @@ Deferred (written reasons in `docs/FILE_SUPPORT_AUDIT.md` §10 and `docs/TODO.md
 ### PHASE-2 close-out addendum (2026-11-17, later same day)
 - `1b9a901` — extracted the in-document find-bar header (`ViewerFindBarHeader`, 162 lines, now `internal` in `ui/screens/viewers/ReaderChrome.kt`) and the clipboard/bounded-text helpers + `PropertyItem` (`FilePreviewSupport.kt`); `FilePreviewScreen.kt` 5,740 → **2,306 lines**; largest viewer is `PdfViewer.kt` (747 lines). CI green: run `44089497288` (both jobs; screenshot baselines for `PropertyItem` unchanged and passing).
 - Docs synchronized to the final numbers (CHANGELOG, §10 audit, PHASES exit criteria, ROADMAP, this worklog).
+Task ID: PHASE-3A-FOUNDATIONS
+Agent: Arena Agent (Claude)
+Date: 2026-11-17
+Baseline: branch `arena/5100f329-file-claw-native` @ `85a9423`-descendant (post Phase 2).
+
+Work Log:
+- Implemented the §4 foundations: semantic color tier in `Color.kt` (with measured WCAG ratios recorded in `docs/UI_FRONTIER.md`),
+  terracotta demoted to accent-only, filled button → SoftTomato (measured 4.80:1 both schemes), light warning → #8F5B1C (5.42:1 on paper).
+- Authored `ui/theme/Motion.kt` (durations, emphasized easings, haptics map, reduced-motion contract) and `ui/theme/ClawExtendedColors.kt`; wired
+  `Theme.kt` (container slots, LocalClawColors); extended `Type.kt` (displayLarge, Eyebrow, ReadingBody 17/28 serif) with bundled
+  Source Serif 4 / Inter / JetBrains Mono (+ OFL 1.1 license texts under `assets/licenses/`).
+- Glass-at-root `GlassBackdrop` at the NavHost (transparent Scaffolds); `Icons.*` → `Icons.AutoMirrored.*` sweep; 5 Scaffolds transparent.
+- `tools/ci/check_contrast.py`: fixed 8-hex parsing (`0x(?:FF)?…`); **measured 21 token pairs AA-pass**; committed as a blocking CI step
+  before the JDK 17 setup in `.github/workflows/ci.yml`.
+- Roborazzi baselines re-recorded by the CI bot (`85a9423`); CI run `44128246714` both jobs green. Goldens remain compact/1.0-scale only.
+
+Task ID: PHASE-3B-NAV-CHROME
+Agent: Arena Agent (Claude)
+Date: 2026-11-17
+Baseline: branch `arena/5100f329-file-claw-native` @ 3a-green (`5f1a149` descendant after re-record).
+
+Work Log:
+- Added Quick Open / Command Palette (`ui/component/CommandPalette.kt` + root Ctrl/Cmd+K|P toggle): files ranked with `FileSearchRanker`
+  (cap 12) and actions (theme toggle, Settings/Search/All Files navigation, clear recents); glass overlay; blind query = 8 recents + actions.
+  Two failed CI runs fixed forward (`44132429688` invalid FQ Modifier call; `44133924754` missing `KeyEvent` extension-property imports) —
+  final green `44135800812`.
+- Expanded the root key handler into the honest shortcut map: K/P palette, comma → Settings, Alt+Left → back, Ctrl+Shift+C → `ClipData`
+  path copy (+ toast), Ctrl/Cmd+1…9 → open nth recent. `docs/UI_FRONTIER.md §5.3` reader shortcuts deliberately not wired; Settings shows
+  only what works (new KEYBOARD SHORTCUTS card in the ABOUT group, all strings in `strings.xml`).
+- Added expanded-width (≥ 840 dp) `ClawNavRail` (72 dp, §5.2) hidden below 840 dp; Source Serif wordmark across `ClaudeAppBar`; Home greeting
+  → `displayLarge` serif; `android:enableOnBackInvokedCallback="true"` (manifest, not yet per-reader ordered).
+- Visual changes re-baselined with the commit (CI bot `5f1a149`, 10/10 PNGs). CI run `44140293225` both jobs green.
+- NOT done (documented, TODO KNOWN ISSUES #11): medium list–detail two-pane (reader not pane-embeddable), Macrobenchmark, TalkBack /
+  font-scale 2.0 passes, palette instrumented test, empty-state illustrations, predictive-back ordering inside readers, 1.3/2.0-scale matrix.
