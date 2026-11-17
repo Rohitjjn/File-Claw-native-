@@ -4,6 +4,42 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [Unreleased] Phase 0 — Audit & repo hygiene (2026-11-17)
+
+**Verification status:** documentation and file-structure changes only. **No Kotlin/JS/assets were
+modified; nothing was compiled** (no Android SDK/JDK in the authoring sandbox). Counts re-derived
+statically from source are labelled (static). CI workflow added but its first run is unverified.
+
+### Changed (repository structure)
+- **Unwanted files removed:** 9 root-level duplicates of `docs/legacy/*` (PERFORMANCE.md, backup-manager.md,
+  project-blueprint/chart/mindmap.md, rules.md, security-protocol.md, tech-specs.md, testing-checklist.md),
+  stale `NEXT_LOOP_PROMPT_v3/v4/v5.md` + `NEXT_PROMPT.md` (kept in git history; successor is
+  `docs/prompts/PHASE_1_PROMPT.md`), and `build.log` (84 KB build artifact).
+- **`.gradle/` untracked** (16 cache files, ~9.6 MB) and `.gitignore` added (Gradle/local.properties/keystores/logs/IDE/AI-Studio artifacts).
+- **Live loop docs moved into `docs/`:** `changelogs.md`, `known-issues.md`, `worklog.md`, `BUILD_GUIDE.md`,
+  `PATCH_NOTES.md`. Historical entries referencing root paths are annotated.
+- **Loop prompts 1–6 moved** `app/docs/prompts/` → `docs/legacy/prompts/`; AI Studio implementation plan → `docs/legacy/aistudio/`.
+- **Root is now clean:** README.md, THIRD_PARTY_NOTICES.md, metadata.json, gradle files, `app/`, `docs/`, `tools/`, `config/`, `.github/`.
+
+### Added (docs)
+- **`docs/PRD.md`** — product requirements (vision, scope, FR/NFR, metrics, phase plan).
+- **`docs/FILE_SUPPORT_AUDIT.md`** — honest per-format audit: re-derived counts (69 groups / **399** extensions,
+  **284** full / **32** partial / **83** identify — static), the AUD-001…034 issue register (dead `android-pdf-viewer`
+  dependency, PPTX infinite-spinner path, MIDI-can't-decode, hex viewer 4 KB cap, Room 4.json missing,
+  docs-vs-code drift, and more), candidate formats to add, Phase 1 fix order.
+- **`docs/UI_FRONTIER.md`** — Claude-frontier UI plan ("The Quiet Desk"): token/typography/motion frontier,
+  navigation + adaptive two-pane, component v2 spec, per-viewer direction, a11y gates, Phase 3 rollout. **Design doc only — no code changed.**
+- **`docs/prompts/PHASE_1_PROMPT.md`** — next-run prompt (build-green Quality Gate + broken-format repairs).
+- **`docs/README.md`** — documentation index; **`.github/workflows/ci.yml`** — Quality Gate on push/PR (unverified).
+- `README.md` rewritten (accurate build steps; removed stale AI-Studio "remove signingConfig" and unused `GEMINI_API_KEY` instructions).
+
+### Fixed (docs)
+- `docs/FILE_FORMATS.md` parser notes: PDF corrupt-file row (error surface exists; device re-verify),
+  `.doc`/`.xls` hand-corrected (extractors shipped in Loop 3; registry label stale), audit pointer added.
+- `docs/ARCHITECTURE.md` line-count claim updated (FilePreviewScreen ≈ 5,390 lines).
+- `docs/SANITY_CHECKLIST.md`: `.doc`/`.xls` note aligned with shipped extractors.
+- `docs/AGENTS.md`, `docs/TODO.md`, `docs/BUILD_GUIDE.md`, `docs/prompts/*`: references updated to new doc locations.
+
 ## [Unreleased] Loop 15 (v4) — DOCX Pinch/Print, Sensor Orientation, Large File Streaming & Claude Settings
 
 ### Added

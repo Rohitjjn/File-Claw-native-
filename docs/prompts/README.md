@@ -1,9 +1,14 @@
-# Loop prompts
+# Loop prompts & phase prompts
 
-One prompt per loop. Old prompts are deleted once their loop ships — the repo keeps ONLY the current next-loop prompt so agents never work from stale instructions.
+One active prompt per phase. Old prompts are deleted once their phase ships — the repo keeps ONLY the
+current next-phase prompt so agents never work from stale instructions. (Historical loop prompts live
+in `docs/legacy/prompts/`; superseded ones are marked in place.)
 
 | File | Status | Notes |
 |---|---|---|
-| `NEXT_LOOP_PROMPT.md` | **Active** | Loop 9 — v1.3.0 device-test round: search polish 2, PDF zoom/dark-mode tuning, DOCX zoom round 2, repo hygiene, quality gate (patch-zip delivery). |
+| `PHASE_1_PROMPT.md` | **Active** | Phase 1 — Quality Gate green in CI + broken-format repairs from the Phase 0 audit (`docs/FILE_SUPPORT_AUDIT.md`). |
+| `NEXT_LOOP_PROMPT.md` | Superseded | Loop 15 device-testing round; never executed as written; folded into Phase 1. Kept for history. |
 
-History: archived prompts for Loops 02/03/07 were removed in Loop 7; their outcomes are recorded in `changelogs.md`.
+History: archived prompts for Loops 02/03/07 were removed in Loop 7; `loop_1.md`–`loop_6.md` were moved
+to `docs/legacy/prompts/` in Phase 0 (2026-11-17). Outcomes are recorded in `docs/changelogs.md`.
+Phase plan and phase exit criteria live in `docs/ROADMAP.md`.

@@ -9,7 +9,8 @@ Mark each with ✅ / ❌ + notes. Items marked ★ are regressions fixed in 1.1.
 - [ ] Open the same file twice from outside: one copy, no `name (1)` clutter unless sizes differ.
 - [ ] Rename a PNG to `.jpg`, open it: shows as an image. A text file renamed `.pdf` opens as text. A binary renamed `.txt` shows hex with a note.
 - [ ] Sample of new formats: `.sqlite`, `.svg`, `.rtf`, `.odt`, `.epub`, `.ttf`, `.stl`, `.obj`, `.tar.xz`, `.deb`, `.apk` (as archive), `.gz` (single file).
-- [ ] `.rar` / `.doc` / `.xls` show a clear "not supported" notice plus hex, never an empty screen. ★
+- [ ] `.rar` shows a clear "not supported" notice plus hex, never an empty screen. ★
+- [ ] `.doc` / `.xls` open read-only with recovered text / grid (BIFF8 + legacy-doc extractors); `.ppt` / `.xlsb` / `.msg` show the not-supported notice. ★
 
 ## Edit and save (the data-loss checks) ★
 - [ ] Open a 1 MB text file: banner says truncated + read-only; Edit button hidden; nothing can be saved.

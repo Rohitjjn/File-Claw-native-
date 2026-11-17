@@ -1,0 +1,61 @@
+name: CI
+
+# Phase 0 addition (2026-11-17): Quality Gate for every push/PR.
+# Kept deliberately small — compile + JVM unit tests + debug APK. Release signing/publishing lives in
+# build-and-release.yml. First run is unverified; watch it and fix forward.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    name: Quality Gate (compile · test · assembleDebug)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # ubuntu-latest ships with the Android SDK in $ANDROID_HOME; accept licenses so Gradle can resolve.
+      - name: Accept Android SDK licenses
+        run: |
+          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          fi
+
+      - name: Set up Gradle (cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Compile Kotlin
+        run: ./gradlew compileDebugKotlin --stacktrace
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload test reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
+          if-no-files-found: ignore

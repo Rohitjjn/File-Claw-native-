@@ -2,6 +2,20 @@
 
 Full support matrix: `FILE_FORMATS.md` (generated from the code).
 
+## Phase plan (set in Phase 0, 2026-11-17)
+
+Phases supersede the loop-numbering era. Each phase has written exit criteria; Phase 1+ is executed
+by pasting the matching prompt from `docs/prompts/`.
+
+| Phase | Theme | Exit criteria | Status |
+|---|---|---|---|
+| **Phase 0** | Audit & repo hygiene | Unwanted files removed; structure organised; PRD created; `FILE_SUPPORT_AUDIT.md`; `UI_FRONTIER.md`; Phase 1 prompt written; docs index | ✅ done (2026-11-17) |
+| **Phase 1** | Quality Gate + broken-format repairs | CI green (compile/tests/assemble); AUD-001/005–010/013/034 fixed; four open UI bugs (BUG-004/005/006/007); honest MIDI/PPTX/media states | ⏳ next — see `docs/prompts/PHASE_1_PROMPT.md` |
+| **Phase 2** | Architecture | `FilePreviewScreen.kt` split per-viewer; type-safe navigation (remove singleton route-without-args); Compose UI round-trip tests; detekt baseline green | ⏳ |
+| **Phase 3** | Claude frontier UI (per `docs/UI_FRONTIER.md` §11) | Tokens + bundled typefaces; glass-at-root; Quick Open palette; adaptive two-pane; reader chrome v2; a11y/RTL/reduced-motion gates | ⏳ |
+| **Phase 4** | Format depth | Legacy `.ppt` text recovery, `.xlsb`, CJK charsets, MIDI decision, RAR revisit, GLB/PLY, WOFF→TTF, sheet picker, Parquet preview | ⏳ |
+| **Phase 5** | Performance & release | Macrobenchmark gates; cold start < 1.5 s; applicationId decision; Play listing; crash-free ≥ 99.9 % | ⏳ |
+
 ## Milestones
 | Version | Theme | Status |
 |---|---|---|

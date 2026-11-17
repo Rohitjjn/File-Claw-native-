@@ -3,7 +3,7 @@
 Priorities: **P0** data loss / crash / security · **P1** high-impact feature or correctness · **P2** quality · **P3** polish.
 
 ## KNOWN ISSUES (read first)
-1. **RESOLVED in Loop 7 (2026-10-15):** Loop 7 changes WERE compiled and run: `:app:compileDebugKotlin` and `:app:assembleDebug` succeeded and the full `:app:testDebugUnitTest` suite passed (134 tests, 0 failures) using Android SDK 34 + JDK 17 (jlink required — a JRE-only JVM fails `compileDebugJavaWithJavac`). Setup used: `chmod +x gradlew`, `local.properties` → SDK path, `--max-workers=1` under a 4 GB RAM sandbox. Keep this toolchain recipe for future loops. Earlier loops (02–06) remain unverified on-device; still run the Quality Gate in `BUILD_GUIDE.md` before shipping.
+1. **RESOLVED in Loop 7 (2026-10-15):** Loop 7 changes WERE compiled and run: `:app:compileDebugKotlin` and `:app:assembleDebug` succeeded and the full `:app:testDebugUnitTest` suite passed (134 tests, 0 failures) using Android SDK 34 + JDK 17 (jlink required — a JRE-only JVM fails `compileDebugJavaWithJavac`). Setup used: `chmod +x gradlew`, `local.properties` → SDK path, `--max-workers=1` under a 4 GB RAM sandbox. Keep this toolchain recipe for future loops. Earlier loops (02–06) remain unverified on-device; still run the Quality Gate in `docs/BUILD_GUIDE.md` before shipping.
 2. Gradle wiring for JaCoCo (`jacocoCoreReport` / `jacocoCoreVerify`), `enableUnitTestCoverage`, detekt, and Room schema export is
    unverified. detekt is `ignoreFailures = true` until its first green run.
 3. Edits to files opened from another app are saved to the in-app copy only (the user is told). Write-back is P1 below.
@@ -111,3 +111,10 @@ Priorities: **P0** data loss / crash / security · **P1** high-impact feature or
 - [x] **Claude-Style Settings Redesign**: Redesigned `SettingsScreen.kt` with warm paper / charcoal aesthetics, grouped glass cards (`ClaudeCard`), 3-segment theme picker, font/tab sliders, live cache readout with clear confirmation, history clear dialog, and one-tap benchmark test files generator.
 - [x] **Unit Tests & Verification**: All unit tests (`HttpRangeTest`, `ScreenOrientationPolicyTest`, `DocxZoomPolicyTest`, etc.) passing 100% green; `compile_applet` passed.
 
+
+## Phase 0 — Audit & repo hygiene (COMPLETED 2026-11-17)
+- [x] Unwanted files removed: 9 root docs duplicated in `docs/legacy/`, stale `NEXT_LOOP_PROMPT_v3/v4/v5.md` + `NEXT_PROMPT.md`, `build.log`, 16 tracked `.gradle/` cache files (~9.6 MB) + `.gitignore` added.
+- [x] Structure: live loop docs moved to `docs/` (`changelogs.md`, `known-issues.md`, `worklog.md`, `BUILD_GUIDE.md`, `PATCH_NOTES.md`); loop prompts 1–6 → `docs/legacy/prompts/`; AI Studio artifacts → `docs/legacy/aistudio/`.
+- [x] Audit docs written: `docs/PRD.md`, `docs/FILE_SUPPORT_AUDIT.md` (AUD-001…034: dead android-pdf-viewer dep, PPTX/MIDI/media silent-failure paths, 4 KB hex dump, Room 4.json missing, docs-vs-code drift), `docs/UI_FRONTIER.md` (Phase 3 spec — no code changed).
+- [x] `.github/workflows/ci.yml` added (compile + test + assembleDebug on push/PR; **unverified** until first run).
+- [ ] **Phase 1** — execute `docs/prompts/PHASE_1_PROMPT.md`: Quality Gate green, then AUD-001/005–010/013/034 + BUG-004/005/006/007.

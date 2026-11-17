@@ -1,4 +1,7 @@
 # File Claw - Changelog
+
+> **Moved 2026-11-17 (Phase 0):** this file lived at the repository root before; historical entries that reference root paths mean the same file at its new location.
+
 Last Updated: October 16, 2026
 Document Version: 1.4
 Next Review Date: January 15, 2027

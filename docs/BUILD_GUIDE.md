@@ -32,6 +32,9 @@ export FILECLAW_KEYSTORE=/path/to/release.jks FILECLAW_STORE_PASSWORD=... FILECL
 ```
 Without those variables the release APK is signed with the debug key (sideloading only).
 
+## Automated GitHub Actions
+A fast Quality Gate (`compileDebugKotlin` + `testDebugUnitTest` + `assembleDebug`) runs on every push/PR via `.github/workflows/ci.yml` (added in Phase 0; watch its first run — it is unverified). The manual release workflow is below.
+
 ## Automated GitHub Actions Release Workflow
 A manual GitHub Actions workflow is provided in `.github/workflows/build-and-release.yml`.
 

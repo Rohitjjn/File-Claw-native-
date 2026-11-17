@@ -1,5 +1,8 @@
 # File Claw — Worklog
 
+> **Moved 2026-11-17 (Phase 0):** this file lived at the repository root before; historical entries that reference root paths mean the same file at its new location.
+
+
 Append-only multi-agent log. Newest entries at the bottom.
 
 ---
@@ -131,3 +134,21 @@ Residual risk: WebView Chromium CSS zoom and scroll anchoring need runtime verif
 - Rewired the existing PDF tray rotation icon to request portrait/landscape screen orientation from the host Activity; it no longer changes the PDF page's rotation state.
 - Removed four tracked Kotlin `.bak` files from app source/theme folders. They were editor backups, not source inputs; canonical Kotlin files remain unchanged.
 - Verification: GitHub source updates committed. Android compile/tests, CI and device orientation/gesture checks are NOT RUN in this environment.
+
+---
+
+Task ID: PHASE0-AUDIT-REPO-HYGIENE
+Agent: Arena Agent (Phase 0, single session) · Date: 2026-11-17 · Branch: `arena/5100f329-file-claw-native` (branched from 2f6d349 of main)
+
+Task: Phase 0 — unwanted-file removal, repo structure organisation, PRD create/update, file-support audit (supported/broken/candidates), UI-frontier design plan (docs-only), and the Phase 1 prompt. No Kotlin/JS/asset code changes; nothing was compiled (no Android SDK/JDK in this environment) — all verification is static.
+
+Work Log:
+
+- Preflight: read `docs/AGENTS.md`, `docs/TODO.md`, `docs/FILE_FORMATS.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, full source tree; re-derived registry counts statically (69 groups / 399 ext / 284 FULL / 32 PARTIAL / 83 IDENTIFY — FILE_FORMATS.md was accurate).
+- File ops: deleted 13 stale/duplicate root files (9 identical to `docs/legacy/*`; stale v3/v4/v5 prompts + NEXT_PROMPT; `build.log`); `git rm -r --cached .gradle` (16 files); `.gitignore` created.
+- Moves: `BUILD_GUIDE.md`, `PATCH_NOTES.md`, `changelogs.md`, `known-issues.md`, `worklog.md` → `docs/`; `app/docs/prompts/loop_*.md` → `docs/legacy/prompts/`; `.aistudio/` implementation plan → `docs/legacy/aistudio/`. Root now holds only README/THIRD_PARTY_NOTICES/metadata.json + build files.
+- New docs: `docs/PRD.md`, `docs/FILE_SUPPORT_AUDIT.md` (AUD-001…034), `docs/UI_FRONTIER.md`, `docs/prompts/PHASE_1_PROMPT.md`, `docs/README.md` (index). `README.md` rewritten (stale Gemini/signing instructions removed — no Gemini code path exists; app is 100 % offline).
+- Fixes (docs): FILE_FORMATS.md PDF/.doc/.xls rows; ARCHITECTURE.md line count; SANITY_CHECKLIST .doc/.xls; AGENTS.md read order; ROADMAP.md Phase plan; prompts/README.md re-indexed (NEXT_LOOP_PROMPT marked superseded, banner added in place); CHANGELOG entry added.
+- CI: `.github/workflows/ci.yml` added (unverified first run — call this out in the Phase 1 preflight).
+- Honesty notes: `android-pdf-viewer` dependency is dead code (zero imports) — not removed yet (Phase 1, AUD-001) because this phase changes no build files. MIDI is listed FULL by the registry but MediaPlayer cannot decode it — documented (AUD-006), not yet re-labelled. `app/schemas/…/4.json` missing for Room v4 — documented (AUD-034). Everything device-behaviour-related in the audit is unverified on hardware.
+- Branch note: user asked for a new branch; the session is pinned to `arena/5100f329-file-claw-native`, so all work landed there (no other branch was created or pushed).

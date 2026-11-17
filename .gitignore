@@ -1,0 +1,47 @@
+# ---- Gradle -----------------------------------------------------------------
+.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# ---- Local machine / secrets -------------------------------------------------
+local.properties
+.env
+.env.*
+!.env.example
+debug.keystore
+debug.keystore.base64
+*.jks
+*.keystore
+!debug.keystore.example
+
+# ---- Build outputs & logs ----------------------------------------------------
+*.log
+*.hprof
+captures/
+.externalNativeBuild/
+.cxx/
+
+# ---- IDE ----------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- Test / coverage -----------------------------------------------------------
+coverage/
+jacoco/
+*.exec
+
+# ---- AI Studio / agent session artifacts (not project sources) ----------------
+.aistudio/
+.cursor/
+.arena/
+
+# ---- Misc ----------------------------------------------------------------------
+*.tmp
+*.bak
+*.orig
