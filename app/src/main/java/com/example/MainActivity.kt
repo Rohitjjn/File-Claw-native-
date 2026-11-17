@@ -172,6 +172,8 @@ class MainActivity : ComponentActivity() {
                     )
                 } else {
                     val navController = rememberNavController()
+                    val recentFilesForPalette by mainViewModel.recentFilesState.collectAsState()
+                    var quickOpenVisible by androidx.compose.runtime.mutableStateOf(false)
 
                     // Dynamic Shortcuts Registration
                     LaunchedEffect(Unit) {
@@ -312,6 +314,20 @@ class MainActivity : ComponentActivity() {
 
                     // Phase 3a: glass-at-root — ambient glow floats behind every destination.
                     // Reading surfaces stay opaque by contract (docs/UI_FRONTIER.md §4.5/§4.6).
+                    // Phase 3b: Quick Open (Ctrl/Cmd+K) — files + actions palette.
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier.fillMaxSize().androidx.compose.ui.input.key.onKeyEvent { event ->
+                            val isK = event.key == androidx.compose.ui.input.key.Key.K
+                            val isShortcut = event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown &&
+                                isK && (event.isCtrlPressed || event.isMetaPressed)
+                            if (isShortcut) {
+                                quickOpenVisible = !quickOpenVisible
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                    ) {
                     com.example.ui.theme.GlassBackdrop {
                     NavHost(
                         navController = navController,
@@ -417,6 +433,32 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                    }
+                    }
+                    if (quickOpenVisible) {
+                        com.example.ui.component.CommandPalette(
+                            recentFiles = recentFilesForPalette,
+                            onOpenFile = { entity ->
+                                quickOpenVisible = false
+                                mainViewModel.openFile(entity)
+                            },
+                            onAction = { action ->
+                                quickOpenVisible = false
+                                when (action) {
+                                    com.example.ui.component.CommandPaletteAction.TOGGLE_THEME ->
+                                        mainViewModel.updateSettings(settings.copy(theme = if (settings.theme == "Dark") "Light" else "Dark"))
+                                    com.example.ui.component.CommandPaletteAction.OPEN_SETTINGS ->
+                                        navController.navigate(ClawDestination.Settings)
+                                    com.example.ui.component.CommandPaletteAction.OPEN_SEARCH ->
+                                        navController.navigate(ClawDestination.Search)
+                                    com.example.ui.component.CommandPaletteAction.OPEN_ALL_FILES ->
+                                        navController.navigate(ClawDestination.AllFiles)
+                                    com.example.ui.component.CommandPaletteAction.CLEAR_RECENTS ->
+                                        mainViewModel.clearRecentFiles()
+                                }
+                            },
+                            onDismiss = { quickOpenVisible = false }
+                        )
                     }
                     }
                 }

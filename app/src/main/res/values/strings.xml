@@ -20,4 +20,16 @@
     <string name="no_app_can_open">No app can open this file</string>
     <string name="unsupported_preview_notice">This viewer can\'t decode the file on this device; showing the raw bytes.</string>
     <string name="pptx_http_error">The presentation preview page failed to load (HTTP %1$s).</string>
+
+    <!-- Phase 3b: Quick Open / Command Palette -->
+    <string name="palette_placeholder">Quick Open — files and actions</string>
+    <string name="palette_section_files">Files</string>
+    <string name="palette_section_actions">Actions</string>
+    <string name="palette_no_matches">No matches</string>
+    <string name="palette_show_more">Showing first 12 matches</string>
+    <string name="action_toggle_theme">Toggle dark mode</string>
+    <string name="action_open_settings">Open Settings</string>
+    <string name="action_open_search">Open Search</string>
+    <string name="action_open_all_files">Open All Files</string>
+    <string name="action_clear_recents">Clear recent files</string>
 </resources>
