@@ -197,7 +197,7 @@ detekt {
 }
 
 // Advisory run over the Compose UI layer: findings are reported in CI but never fail the build.
-tasks.register<io.gitlab.arturbosch.detekt.Detekt>("detektUi") {
+tasks.register("detektUi", io.gitlab.arturbosch.detekt.Detekt::class.java) {
     buildUponDefaultConfig = true
     config.setFrom(rootProject.file("config/detekt/detekt.yml"))
     source.setFrom("src/main/java/com/example/ui", "src/main/java/com/example/viewmodel")

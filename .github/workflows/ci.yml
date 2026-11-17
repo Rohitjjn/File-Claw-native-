@@ -53,7 +53,7 @@ jobs:
           ./gradlew compileDebugKotlin --console=plain > /tmp/compile.log 2>&1
           code=$?
           grep -E '^e: ' /tmp/compile.log | head -60 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
-          tail -30 /tmp/compile.log | sed 's#^#::error ::#'
+          grep -iE 'what went wrong|could not|script .*compil|exception|failed with an exception' /tmp/compile.log | head -30 | sed 's#^#::error ::#'
           exit $code
 
       # Phase 2: detekt over core/ (blocking, baselined) and the UI layer (advisory, reported).
