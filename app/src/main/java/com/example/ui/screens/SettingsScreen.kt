@@ -458,6 +458,16 @@ fun SettingsScreen(
                 ShortcutRow(stringResource(R.string.shortcuts_recents), stringResource(R.string.shortcuts_recents_desc))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ShortcutRow(stringResource(R.string.shortcuts_copy_path), stringResource(R.string.shortcuts_copy_path_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_find), stringResource(R.string.shortcuts_find_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_save), stringResource(R.string.shortcuts_save_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_select_all), stringResource(R.string.shortcuts_select_all_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_undo_redo), stringResource(R.string.shortcuts_undo_redo_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_properties), stringResource(R.string.shortcuts_properties_desc))
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.shortcuts_footer),

@@ -53,7 +53,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -495,6 +504,79 @@ fun FilePreviewScreen(
         }
     }
 
+    // Phase 3c (docs/UI_FRONTIER.md §5.3): reader-scoped shortcuts. onPreviewKeyEvent so the
+    // combos are seen before the WebView or text field can consume them; anything unhandled
+    // falls through to the viewer and then the root shortcut map in MainActivity.
+    val onReaderShortcutKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = shortcut@{ event ->
+        if (event.type != KeyEventType.KeyDown) return@shortcut false
+        val isMod = event.isCtrlPressed || event.isMetaPressed
+        when {
+            // Ctrl/Cmd+F — in-viewer find. Same toggle as the toolbar button; not while
+            // editing, because the editing tray owns the header then.
+            isMod && !event.isShiftPressed && event.key == Key.F -> {
+                if (!isEditMode) {
+                    toggleInViewerSearch()
+                    true
+                } else {
+                    false
+                }
+            }
+            // Ctrl/Cmd+Shift+D — file properties sheet (same one the ⋮ menu opens).
+            isMod && event.isShiftPressed && event.key == Key.D -> {
+                if (activeFile != null) {
+                    showPropertiesDialog = true
+                    true
+                } else {
+                    false
+                }
+            }
+            // Ctrl/Cmd+S — save edits. Only meaningful while editing; the confirm
+            // dialog is the same one the Save tray button opens.
+            isMod && !event.isShiftPressed && event.key == Key.S -> {
+                if (isEditMode) {
+                    showSaveConfirmDialog = true
+                    true
+                } else {
+                    false
+                }
+            }
+            // Ctrl/Cmd+A — select all of the draft (edit mode).
+            isMod && !event.isShiftPressed && event.key == Key.A -> {
+                if (isEditMode) {
+                    editTextValue = editTextValue.copy(selection = TextRange(0, editTextValue.text.length))
+                    true
+                } else {
+                    false
+                }
+            }
+            // Ctrl/Cmd+Z — undo, through the same stack the tray Undo button uses.
+            isMod && !event.isShiftPressed && event.key == Key.Z -> {
+                if (isEditMode && editUndoStack.isNotEmpty) {
+                    editUndoStack.pop()?.let { prevState ->
+                        editRedoStack.push(editTextValue)
+                        editTextValue = prevState
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+            // Ctrl/Cmd+Y — redo, through the same stack the tray Redo button uses.
+            isMod && !event.isShiftPressed && event.key == Key.Y -> {
+                if (isEditMode && editRedoStack.isNotEmpty) {
+                    editRedoStack.pop()?.let { nextState ->
+                        editUndoStack.push(editTextValue)
+                        editTextValue = nextState
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+            else -> false
+        }
+    }
+
     val activity = context as? android.app.Activity
     val originalWindowBars = remember(activity) {
         activity?.window?.let { window ->
@@ -574,6 +656,7 @@ fun FilePreviewScreen(
     }
 
     Scaffold(
+        modifier = Modifier.onPreviewKeyEvent { event -> onReaderShortcutKey(event) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             androidx.compose.animation.AnimatedVisibility(

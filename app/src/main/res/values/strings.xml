@@ -50,7 +50,17 @@
     <string name="shortcuts_recents_desc">Open the 1st…9th recent file</string>
     <string name="shortcuts_copy_path">Ctrl/Cmd+Shift+C</string>
     <string name="shortcuts_copy_path_desc">Copy the current file path</string>
-    <string name="shortcuts_footer">Hardware keyboards only. Find/save/undo shortcuts land with the reader chrome (Phase 3c); the full map lives in docs/UI_FRONTIER.md §5.3.</string>
+    <string name="shortcuts_find">Ctrl/Cmd+F</string>
+    <string name="shortcuts_find_desc">Find in the open document</string>
+    <string name="shortcuts_save">Ctrl/Cmd+S</string>
+    <string name="shortcuts_save_desc">Save edits (while editing)</string>
+    <string name="shortcuts_select_all">Ctrl/Cmd+A</string>
+    <string name="shortcuts_select_all_desc">Select all text (while editing)</string>
+    <string name="shortcuts_undo_redo">Ctrl/Cmd+Z&#160;·&#160;Ctrl/Cmd+Y</string>
+    <string name="shortcuts_undo_redo_desc">Undo / redo (while editing)</string>
+    <string name="shortcuts_properties">Ctrl/Cmd+Shift+D</string>
+    <string name="shortcuts_properties_desc">Open file properties (in a viewer)</string>
+    <string name="shortcuts_footer">Hardware keyboards only. Reader shortcuts apply inside an open viewer; forward navigation (Alt+Right) is not implemented yet. The full map lives in docs/UI_FRONTIER.md §5.3.</string>
     <!-- Phase 3c: reader chrome v2 (§6/§7) -->
     <string name="show_password">Show password</string>
     <string name="hide_password">Hide password</string>
