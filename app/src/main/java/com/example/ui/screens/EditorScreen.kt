@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.activity.compose.BackHandler
@@ -462,9 +461,9 @@ fun EditorScreen(
 
     // Unsaved Warning Prompt
     if (showUnsavedDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showUnsavedDialog = false },
-            title = { Text("Unsaved Changes", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error) },
+            title = "Unsaved Changes",
             text = { Text("You modified this file. Exit without saving your changes?") },
             dismissButton = {
                 TextButton(onClick = { showUnsavedDialog = false }) {
@@ -480,9 +479,7 @@ fun EditorScreen(
                 ) {
                     Text("Exit", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
-            },
-            shape = RoundedCornerShape(16.dp),
-            containerColor = MaterialTheme.colorScheme.surface
+            }
         )
     }
 
@@ -497,15 +494,9 @@ fun EditorScreen(
         }
         var copyFileNameInput by remember { mutableStateOf(defaultName) }
 
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showSaveAsDialog = false },
-            title = {
-                Text(
-                    text = "Export Modified Copy",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            },
+            title = "Export Modified Copy",
             text = {
                 Column {
                     Text(
@@ -540,9 +531,7 @@ fun EditorScreen(
                 ) {
                     Text("Export Copy")
                 }
-            },
-            shape = RoundedCornerShape(16.dp),
-            containerColor = MaterialTheme.colorScheme.surface
+            }
         )
     }
 }

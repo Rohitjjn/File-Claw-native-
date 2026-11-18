@@ -42,9 +42,9 @@ fun CsvPreview(
     androidx.activity.compose.BackHandler(enabled = pendingRows != null) { showDiscardDialog = true }
 
     if (showDiscardDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showDiscardDialog = false },
-            title = { Text("Unsaved changes") },
+            title = "Unsaved changes",
             text = { Text("Save your edits to ${fileEntity.name} before leaving?") },
             confirmButton = {
                 TextButton(onClick = {
@@ -85,7 +85,7 @@ fun CsvPreview(
             }
             Text(
                 text = "${formatFileSize(fileEntity.size)} • Modified ${formatElapsedTime(fileEntity.lastOpened)}",
-                fontSize = 12.sp,
+                style = com.example.ui.theme.TabularMeta,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
             )
             Spacer(modifier = Modifier.weight(1f))
@@ -178,7 +178,7 @@ fun CsvPreview(
                             <link rel="stylesheet" href="file:///android_asset/xspreadsheet/xspreadsheet.css">
                             <script src="file:///android_asset/xspreadsheet/xspreadsheet.js"></script>
                             <style>
-                                body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: $bgColor; }
+                                body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: $bgColor; font-variant-numeric: tabular-nums; }
                                 #x-spreadsheet-demo { height: 100%; width: 100%; }
                                 /* BUG-004: right-edge fade shown while more columns are off-screen */
                                 #edge-fade {

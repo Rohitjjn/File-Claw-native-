@@ -549,9 +549,9 @@ fun FileTreeComponent(
         val sampleNames = selectedPaths.take(3).map { File(it).name }
         val remainingCount = count - sampleNames.size
 
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
-            title = { Text("Delete $count item(s)?") },
+            title = "Delete $count item(s)?",
             text = {
                 Column {
                     Text("Are you sure you want to delete these files? This operation permanently deletes them from disk.")
@@ -622,9 +622,9 @@ private fun FolderPickerDialog(
         currentDir.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.sortedBy { it.name.lowercase() } ?: emptyList()
     }
 
-    AlertDialog(
+    com.example.ui.component.ClawAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select Destination Folder") },
+        title = "Select Destination Folder",
         text = {
             Column(modifier = Modifier.fillMaxWidth().height(320.dp)) {
                 Text(

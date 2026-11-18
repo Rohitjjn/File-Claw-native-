@@ -1609,9 +1609,9 @@ fun FilePreviewScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
-                    shadowElevation = 6.dp
+                    color = com.example.ui.theme.LocalGlass.current.fillStrong,
+                    border = BorderStroke(1.dp, com.example.ui.theme.LocalGlass.current.strokeEnd),
+                    shadowElevation = 0.dp
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -2002,8 +2002,23 @@ fun FilePreviewScreen(
             val content = (fileState as? MainViewModel.FileContentState.TextSuccess)?.content
             content?.count { it == '\n' }?.plus(1) ?: 1000
         }
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showJumpToLineDialog = false },
+            title = "Go to Line",
+            text = {
+                Column {
+                    Text("Enter line number (1 to $textLinesCount):")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = lineInput,
+                        onValueChange = { lineInput = it.filter { char -> char.isDigit() } },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
@@ -2032,21 +2047,6 @@ fun FilePreviewScreen(
                 TextButton(onClick = { showJumpToLineDialog = false }) {
                     Text("Cancel")
                 }
-            },
-            title = { Text("Go to Line") },
-            text = {
-                Column {
-                    Text("Enter line number (1 to $textLinesCount):")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = lineInput,
-                        onValueChange = { lineInput = it.filter { char -> char.isDigit() } },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
             }
         )
     }
@@ -2069,9 +2069,9 @@ fun FilePreviewScreen(
         val reportDetail = "Files Claw " + (versionName ?: "?") +
             " — page " + currentPdfPage + "/" + totalPdfPages.coerceAtLeast(1) +
             " — " + (activeFile?.extension?.lowercase() ?: "pdf")
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showRenderReportDialog = false },
-            title = { Text(androidx.compose.ui.res.stringResource(R.string.report_render_title)) },
+            title = androidx.compose.ui.res.stringResource(R.string.report_render_title),
             text = { Text(androidx.compose.ui.res.stringResource(R.string.report_render_body)) },
             confirmButton = {
                 TextButton(onClick = {
@@ -2100,8 +2100,23 @@ fun FilePreviewScreen(
 
     if (showJumpDialog) {
         var pageInput by remember { mutableStateOf("") }
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showJumpDialog = false },
+            title = "Go to Page",
+            text = {
+                Column {
+                    Text("Enter page number (1 to $totalPdfPages):")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pageInput,
+                        onValueChange = { pageInput = it.filter { char -> char.isDigit() } },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
@@ -2122,29 +2137,14 @@ fun FilePreviewScreen(
                 TextButton(onClick = { showJumpDialog = false }) {
                     Text("Cancel")
                 }
-            },
-            title = { Text("Go to Page") },
-            text = {
-                Column {
-                    Text("Enter page number (1 to $totalPdfPages):")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = pageInput,
-                        onValueChange = { pageInput = it.filter { char -> char.isDigit() } },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
             }
         )
     }
 
     if (showDocxZoomDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showDocxZoomDialog = false },
-            title = { Text("Document zoom") },
+            title = "Document zoom",
             text = {
                 Column {
                     Text("${(docxZoomFactor * 100).toInt()}%", style = MaterialTheme.typography.titleLarge)
@@ -2192,8 +2192,10 @@ fun FilePreviewScreen(
     }
 
     if (pendingLinkToOpen != null) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { pendingLinkToOpen = null },
+            title = "Open Link",
+            text = { Text("Do you want to open this link in your browser?\n\n$pendingLinkToOpen") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -2215,9 +2217,7 @@ fun FilePreviewScreen(
                 TextButton(onClick = { pendingLinkToOpen = null }) {
                     Text("Cancel")
                 }
-            },
-            title = { Text("Open Link") },
-            text = { Text("Do you want to open this link in your browser?\n\n$pendingLinkToOpen") }
+            }
         )
     }
 
@@ -2258,15 +2258,9 @@ fun FilePreviewScreen(
 
     // X (top bar) confirmation: discard unsaved changes?
     if (showDiscardEditsDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showDiscardEditsDialog = false },
-            title = {
-                Text(
-                    "Discard changes?",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.error
-                )
-            },
+            title = "Discard changes?",
             text = { Text("Your edits to this file have not been saved yet. Discard them?") },
             dismissButton = {
                 TextButton(onClick = { showDiscardEditsDialog = false }) {
@@ -2282,23 +2276,15 @@ fun FilePreviewScreen(
                 ) {
                     Text("Discard", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
-            },
-            shape = RoundedCornerShape(16.dp),
-            containerColor = MaterialTheme.colorScheme.surface
+            }
         )
     }
 
     // Save confirmation: writes the draft through the charset-safe save pipeline.
     if (showSaveConfirmDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showSaveConfirmDialog = false },
-            title = {
-                Text(
-                    "Save changes?",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            },
+            title = "Save changes?",
             text = { Text("Save your edits to \"${activeFile?.name ?: "this file"}\"? A .bak backup of the original is kept automatically.") },
             dismissButton = {
                 TextButton(onClick = { showSaveConfirmDialog = false }) {
@@ -2319,9 +2305,7 @@ fun FilePreviewScreen(
                 ) {
                     Text("Save")
                 }
-            },
-            shape = RoundedCornerShape(16.dp),
-            containerColor = MaterialTheme.colorScheme.surface
+            }
         )
     }
 
@@ -2349,15 +2333,9 @@ fun FilePreviewScreen(
             }
         }
         var copyNameInput by remember { mutableStateOf(defaultCopyName) }
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showEditSaveAsDialog = false },
-            title = {
-                Text(
-                    text = "Export Modified Copy",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            },
+            title = "Export Modified Copy",
             text = {
                 Column {
                     Text(
@@ -2391,9 +2369,7 @@ fun FilePreviewScreen(
                 ) {
                     Text("Export Copy")
                 }
-            },
-            shape = RoundedCornerShape(16.dp),
-            containerColor = MaterialTheme.colorScheme.surface
+            }
         )
     }
 }

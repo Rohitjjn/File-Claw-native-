@@ -55,6 +55,19 @@ val Eyebrow = TextStyle(
     letterSpacing = 0.8.sp,
 )
 
+/**
+ * Numeric metadata (file sizes, counts, timestamps) — Inter with tabular figures so
+ * columns of changing numbers don't jitter (§4.2 "tabular numerals for sizes/page counts").
+ */
+val TabularMeta = TextStyle(
+    fontFamily = SansFamily,
+    fontWeight = FontWeight.Normal,
+    fontSize = 12.sp,
+    lineHeight = 16.sp,
+    letterSpacing = 0.sp,
+    fontFeatureSettings = "tnum",
+)
+
 // Set of Material typography styles to start with
 val Typography = Typography(
     // Source Serif 4 display headers (regular weight, negative tracking)

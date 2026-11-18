@@ -178,15 +178,9 @@ fun EditHistoryDialog(
     onDismissRequest: () -> Unit,
     onRestore: (TextFieldValue) -> Unit
 ) {
-    AlertDialog(
+    com.example.ui.component.ClawAlertDialog(
         onDismissRequest = onDismissRequest,
-        title = {
-            Text(
-                text = "Edit History",
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        },
+        title = "Edit History",
         text = {
             if (entries.isEmpty()) {
                 Text(
@@ -258,8 +252,6 @@ fun EditHistoryDialog(
             TextButton(onClick = onDismissRequest) {
                 Text("Close")
             }
-        },
-        shape = RoundedCornerShape(16.dp),
-        containerColor = MaterialTheme.colorScheme.surface
+        }
     )
 }

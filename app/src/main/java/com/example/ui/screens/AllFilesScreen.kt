@@ -579,9 +579,9 @@ fun AllFilesScreen(
     if (showBatchDeleteDialog) {
         val selectedEntities = files.filter { selectedIds.contains(it.id) }
 
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showBatchDeleteDialog = false },
-            title = { Text("Delete ${selectedEntities.size} File(s)?") },
+            title = "Delete ${selectedEntities.size} File(s)?",
             text = {
                 Column {
                     Text("Select how you want to remove the selected files:")
@@ -627,9 +627,9 @@ fun AllFilesScreen(
     }
 
     if (showConfirmDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showConfirmDialog = false },
-            title = { Text(text = "Clear History?") },
+            title = "Clear History?",
             text = { Text(text = "Are you sure you want to delete all files from your recent history? This action cannot be undone.") },
             confirmButton = {
                 TextButton(
