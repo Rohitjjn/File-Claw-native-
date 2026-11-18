@@ -301,3 +301,13 @@ Environment note (2026-11-18): the authoring sandbox was rebuilt mid-phase (fres
 `main` @ `2f6d349`); recovered by `git fetch origin arena/5100f329-file-claw-native` + mixed reset onto
 `4927612` — worktree and full history verified intact (only the in-flight step-3 edits were unstaged).
 No work lost; pushes before and after reconcile exactly.
+- Step 4 (`c8d2074` + fix `f7d3b00`, green `44271726453`): reader keyboard shortcuts (§5.3) — Ctrl/Cmd+F
+  in-viewer find, Ctrl/Cmd+S save, Ctrl/Cmd+A select-all, Ctrl/Cmd+Z/Y undo/redo, Ctrl/Cmd+Shift+D
+  properties, via onPreviewKeyEvent chained onto the reader Scaffold's pre-existing modifier (testTag
+  preserved; unhandled keys fall through to the root map). First push failed compile (`44270564728`,
+  FilePreviewScreen.kt:1639 — duplicate `modifier` named argument: the Scaffold already ended with
+  `modifier = modifier.testTag("file_preview_screen")`; lesson: read the END of long composable argument
+  lists before inserting at the head). Settings KEYBOARD SHORTCUTS card +5 rows + honest footer (Alt+Right
+  forward still unimplemented — Navigation Compose has no forward stack); strings.xml 64 entries. Goldens
+  deleted in the visual commit; CI bootstrap re-recorded 10/10 (bot `459974a`; settings PNGs grew with the
+  new rows). Device verification of the key map remains pending (instrumented suite is launch-smoke only).

@@ -4,20 +4,21 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
-## [Unreleased] Phase 3 — Claude frontier UI ("The Quiet Desk") — IN PROGRESS (3a + 3b landed 2026-11-17; 3c steps 1–3 landed 2026-11-17/18)
+## [Unreleased] Phase 3 — Claude frontier UI ("The Quiet Desk") — IN PROGRESS (3a + 3b landed 2026-11-17; 3c steps 1–4 landed 2026-11-17/18)
 
 **Verification status (read first):** all gates above ran in **GitHub Actions** on branch
 `arena/5100f329-file-claw-native` (workflow `CI`, jobs "Quality Gate" and "Instrumented tests (emulator
 API 34)"). Measured green runs: `44128246714` (3a foundations, both jobs), `44135800812` (3b Quick Open
 compile fix, both jobs), `44140293225` (3b shortcut map / nav rail / wordmark, both jobs), `44150911227`
 (3c step 1, both jobs), `44154177670` (3c step 2, both jobs), `44157789487` (AUD-035 offline fix, both
-jobs), `44236906638` (3c step 3, both jobs). Failed runs that were fixed forward: `44132429688` (3b
-compile — invalid fully-qualified `androidx.…` call in a Modifier chain), `44133924754` (3b compile —
-missing imports for the `KeyEvent` extension properties `key`/`type`/`isCtrlPressed`/`isMetaPressed`)
-and `44148240751` (3c step 1 compile — Material icons invoked as functions instead of used as extension
-properties); all are kept, not hidden. Roborazzi baselines were re-recorded by the CI bot in `85a9423`
-(3a token/primary swap) and `5f1a149` (3b visual commit); the 3c steps changed no captured surface, so no
-re-record was needed. Nothing is claimed from the working sandbox beyond the contrast audit (no Android
+jobs), `44236906638` (3c step 3, both jobs), `44271726453` (3c step 4, both jobs). Failed runs that
+were fixed forward: `44132429688` (3b compile — invalid fully-qualified `androidx.…` call in a Modifier
+chain), `44133924754` (3b compile — missing imports for the `KeyEvent` extension properties
+`key`/`type`/`isCtrlPressed`/`isMetaPressed`), `44148240751` (3c step 1 compile — Material icons
+invoked as functions instead of used as extension properties) and `44270564728` (3c step 4 compile —
+duplicate `modifier` named argument on the reader Scaffold); all are kept, not hidden. Roborazzi
+baselines were re-recorded by the CI bot in `85a9423` (3a token/primary swap), `5f1a149` (3b visual
+commit) and `459974a` (3c step 4 — the Settings shortcuts card grew five rows). Nothing is claimed from the working sandbox beyond the contrast audit (no Android
 SDK/Maven there).
 
 ### Added (3a — foundations)
@@ -57,7 +58,7 @@ SDK/Maven there).
 - **Empty-state generative illustrations**, **predictive-back ordering inside readers** (find bar → chrome →
   viewer), **screenshot matrix at 1.3/2.0 scale and medium/expanded widths** — pending.
 
-### Added (3c — reader chrome v2; steps 1–3)
+### Added (3c — reader chrome v2; steps 1–4)
 - **Step 1 — viewer honesty details:** password fields in the PDF and archive password dialogs gained
   show/hide visibility toggles; the PDF viewer gained a **"Report this page renders wrong"** action whose
   diagnostics line carries **app version, page number and file type only** — no file contents, no paths
@@ -76,6 +77,16 @@ SDK/Maven there).
   tabular numerals** (§7): grid page CSS sets `font-variant-numeric: tabular-nums`; the banner uses the
   new `TabularMeta` style (Inter + `fontFeatureSettings "tnum"`, §4.2).
 
+- **Step 4 — reader keyboard shortcuts (§5.3):** `Ctrl/Cmd+F` in-viewer find (the same toggle the
+  toolbar button uses; not while editing — the editing tray owns the header then), `Ctrl/Cmd+S`
+  save-edits, `Ctrl/Cmd+A` select-all, `Ctrl/Cmd+Z/Y` undo/redo (through the same `TextUndoStack`s
+  the tray buttons use) and `Ctrl/Cmd+Shift+D` file-properties sheet — wired with
+  `onPreviewKeyEvent` chained onto the reader Scaffold's existing modifier, so the combos are seen
+  before the WebView/text field can consume them and unhandled keys still fall through to the root
+  map. The Settings KEYBOARD SHORTCUTS card gained the five rows (`strings.xml` now 64 entries) and
+  an honest footer. **`Alt+Right` forward remains unwired** — Navigation Compose has no forward
+  stack; it needs a custom popped-destination tracker and stays on the pending list.
+
 ### Fixed (3c)
 - **AUD-035 — code viewer fetched syntax-highlight assets from a CDN at open time.** `CodeViewer.kt`
   loaded `highlight.min.js` and `vs(2015).min.css` from `cdnjs.cloudflare.com` on every code-file open,
@@ -87,12 +98,12 @@ SDK/Maven there).
   cdnjs/cloudflare/jsdelivr/unpkg references remain under `app/src/main`. Full entry in
   `docs/FILE_SUPPORT_AUDIT.md` §11.
 
-### Explicitly NOT done in 3c steps 1–3 (honesty matrix)
+### Explicitly NOT done in 3c steps 1–4 (honesty matrix)
 - **Reading-progress fraction for non-PDF viewers** — the text/Markdown viewers expose no honest
   scroll-fraction source yet; it will not be faked (3c remainder owns this).
-- **Auto-hide chrome on scroll (120 dp velocity)**, **reader keyboard shortcuts `Ctrl+F/S/A/Z/Y`**
-  (+ `Ctrl/Cmd+Shift+D` properties, `Alt+Right` forward), **DOCX line-spacing toggle**, **find-bar
-  auto-hide**, **ZIP tree breadcrumb** — pending (3c remainder).
+- **Auto-hide chrome on scroll (120 dp velocity)**, **`Alt+Right` forward navigation** (needs a
+  custom popped-destination stack), **DOCX line-spacing toggle**, **find-bar auto-hide**,
+  **ZIP tree breadcrumb** — pending (3c remainder).
 - All 3b NOT-done items above still stand (two-pane, Macrobenchmark, TalkBack/font-scale,
   illustrations, predictive-back ordering, screenshot matrix).
 
