@@ -656,7 +656,6 @@ fun FilePreviewScreen(
     }
 
     Scaffold(
-        modifier = Modifier.onPreviewKeyEvent { event -> onReaderShortcutKey(event) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             androidx.compose.animation.AnimatedVisibility(
@@ -1636,7 +1635,9 @@ fun FilePreviewScreen(
             }
         },
         containerColor = Color.Transparent,
-        modifier = modifier.testTag("file_preview_screen")
+        modifier = modifier
+            .testTag("file_preview_screen")
+            .onPreviewKeyEvent { event -> onReaderShortcutKey(event) }
     ) { innerPadding ->
         val usesReaderGestures = activeFile?.extension?.lowercase() in setOf("pdf", "doc", "docx", "txt", "md")
         Box(
