@@ -263,3 +263,41 @@ Work Log:
 - Visual changes re-baselined with the commit (CI bot `5f1a149`, 10/10 PNGs). CI run `44140293225` both jobs green.
 - NOT done (documented, TODO KNOWN ISSUES #11): medium list–detail two-pane (reader not pane-embeddable), Macrobenchmark, TalkBack /
   font-scale 2.0 passes, palette instrumented test, empty-state illustrations, predictive-back ordering inside readers, 1.3/2.0-scale matrix.
+
+Task ID: PHASE-3C-READER-CHROME (steps 1–3 + AUD-035)
+Agent: Arena Agent (Claude)
+Date: 2026-11-17/18
+Baseline: branch `arena/5100f329-file-claw-native` @ 3b docs tail (`1d57cf2`).
+
+Work Log:
+- Step 1 (`02f43f0`, fix `92da32a`): show/hide toggles on the PDF + archive password dialogs; PDF-only
+  "Report this page renders wrong" dialog (diagnostics = app version + page + file type only; Share/Copy);
+  new strings in `strings.xml` (54 entries). CI `44148240751` FAILED (compile: Compose Material icons are
+  extension properties, were invoked like functions), fixed forward `92da32a`; green `44150911227` (both jobs).
+- Step 2 (`93ea45b`): MarkdownViewer body CSS → serif reading voice, 68ch measure, line-height 1.65
+  (background moved to `html`, §7); Appearance/Outline/Properties sheets unified on `LocalGlass.fillStrong`
+  + 16 dp top radius (§6); `ClawAlertDialog` (24 dp glass, Source Serif 20 sp title, tonalElevation 0) added
+  to ClaudeComponents.kt, migrated into both password dialogs + Settings Clear Cache/History.
+  CI green `44154177670` (both jobs).
+- AUD-035 (`4927612`): CodeViewer loaded highlight.min.js + vs(2015).min.css from cdnjs.cloudflare.com at
+  open time — undocumented violation of the README "100 % offline, no analytics" claim. Bundled highlight.js
+  11.9.0 (npm pack → esbuild IIFE from `package/lib/common.js`; 36 common languages; 145 KB) + vs/vs2015 CSS
+  + BSD-3 LICENSE under `app/src/main/assets/{highlight,licenses}/`; viewer now loads
+  `file:///android_asset/highlight/…` with `loadDataWithBaseURL("file:///android_asset/")`. Grep-verified zero
+  cdnjs/cloudflare/jsdelivr/unpkg refs left under `app/src/main`. CI green `44157789487` (both jobs).
+  Audit entry: `docs/FILE_SUPPORT_AUDIT.md` §11.
+- Step 3 (`6b04113`): focus-mode pill → hairline glass (fillStrong + 1 dp strokeEnd border, 0 elevation);
+  every remaining stock AlertDialog migrated app-wide to ClawAlertDialog (13 sites: jump-to-page/line,
+  render report, docx zoom, open-link, discard/save/export edits, edit history, batch delete, clear history,
+  tree delete, folder picker, CSV discard — FilePreviewScreen/AllFilesScreen/EditorScreen/FileTreeComponent/
+  InlineTextEditorSupport/CsvViewer; EditorScreen's now-unused RoundedCornerShape import removed); CSV
+  tabular numerals (§7): page CSS `font-variant-numeric: tabular-nums` + new `TabularMeta` Inter/tnum style
+  in Type.kt (§4.2). CI `44236906638` green (both jobs). No Roborazzi surface captured changed → no re-record.
+- Not done in 3c yet (TODO KNOWN ISSUES #11): reading-progress fraction for non-PDF viewers (no honest
+  source; never faked), auto-hide chrome on scroll, Ctrl+F/S/A/Z/Y reader keys, DOCX line-spacing toggle,
+  find-bar auto-hide, ZIP breadcrumb.
+
+Environment note (2026-11-18): the authoring sandbox was rebuilt mid-phase (fresh single-branch clone of
+`main` @ `2f6d349`); recovered by `git fetch origin arena/5100f329-file-claw-native` + mixed reset onto
+`4927612` — worktree and full history verified intact (only the in-flight step-3 edits were unstaged).
+No work lost; pushes before and after reconcile exactly.

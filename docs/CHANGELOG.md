@@ -4,17 +4,21 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
-## [Unreleased] Phase 3 — Claude frontier UI ("The Quiet Desk") — IN PROGRESS (3a + 3b landed 2026-11-17)
+## [Unreleased] Phase 3 — Claude frontier UI ("The Quiet Desk") — IN PROGRESS (3a + 3b landed 2026-11-17; 3c steps 1–3 landed 2026-11-17/18)
 
 **Verification status (read first):** all gates above ran in **GitHub Actions** on branch
 `arena/5100f329-file-claw-native` (workflow `CI`, jobs "Quality Gate" and "Instrumented tests (emulator
 API 34)"). Measured green runs: `44128246714` (3a foundations, both jobs), `44135800812` (3b Quick Open
-compile fix, both jobs), `44140293225` (3b shortcut map / nav rail / wordmark, both jobs). Failed runs that
-were fixed forward: `44132429688` (3b compile — invalid fully-qualified `androidx.…` call in a Modifier
-chain) and `44133924754` (3b compile — missing imports for the `KeyEvent` extension properties
-`key`/`type`/`isCtrlPressed`/`isMetaPressed`); both are kept, not hidden. Roborazzi baselines were
-re-recorded by the CI bot in `85a9423` (3a token/primary swap) and `5f1a149` (3b visual commit).
-Nothing is claimed from the working sandbox beyond the contrast audit (no Android SDK/Maven there).
+compile fix, both jobs), `44140293225` (3b shortcut map / nav rail / wordmark, both jobs), `44150911227`
+(3c step 1, both jobs), `44154177670` (3c step 2, both jobs), `44157789487` (AUD-035 offline fix, both
+jobs), `44236906638` (3c step 3, both jobs). Failed runs that were fixed forward: `44132429688` (3b
+compile — invalid fully-qualified `androidx.…` call in a Modifier chain), `44133924754` (3b compile —
+missing imports for the `KeyEvent` extension properties `key`/`type`/`isCtrlPressed`/`isMetaPressed`)
+and `44148240751` (3c step 1 compile — Material icons invoked as functions instead of used as extension
+properties); all are kept, not hidden. Roborazzi baselines were re-recorded by the CI bot in `85a9423`
+(3a token/primary swap) and `5f1a149` (3b visual commit); the 3c steps changed no captured surface, so no
+re-record was needed. Nothing is claimed from the working sandbox beyond the contrast audit (no Android
+SDK/Maven there).
 
 ### Added (3a — foundations)
 - **Semantic color tier** per §4.1 (`surfaceContainer`, `surfaceContainerHigh`, `onSurfaceVariant`, `success`,
@@ -52,6 +56,45 @@ Nothing is claimed from the working sandbox beyond the contrast audit (no Androi
 - **TalkBack sweep / font-scale 2.0 pass** — no a11y session ran here; instrumented suite is launch-smoke only.
 - **Empty-state generative illustrations**, **predictive-back ordering inside readers** (find bar → chrome →
   viewer), **screenshot matrix at 1.3/2.0 scale and medium/expanded widths** — pending.
+
+### Added (3c — reader chrome v2; steps 1–3)
+- **Step 1 — viewer honesty details:** password fields in the PDF and archive password dialogs gained
+  show/hide visibility toggles; the PDF viewer gained a **"Report this page renders wrong"** action whose
+  diagnostics line carries **app version, page number and file type only** — no file contents, no paths
+  (Share or Copy). All new user-visible strings in `strings.xml` (54 entries total).
+- **Step 2 — reading voice + unified chrome:** Markdown body CSS switched to a serif reading voice
+  (`Georgia, "Noto Serif", "Times New Roman", serif`), `line-height: 1.65`, **68ch measure**
+  (`max-width: 68ch; margin: 0 auto`) with the page background moved to `html` (§7). The three reader
+  sheets (Appearance / Document Outline / File Properties) now share one shell — `LocalGlass.fillStrong`
+  container, 16 dp top radius, standard drag handle (§6). **`ClawAlertDialog`** landed in
+  `ClaudeComponents.kt` (24 dp radius, glass `fillStrong`, `tonalElevation = 0`, Source Serif 20 sp
+  title) and was migrated into both password dialogs and Settings' Clear Cache / Clear History.
+- **Step 3 — chrome tail:** the focus-mode pill is hairline glass (`fillStrong` + 1 dp `strokeEnd`
+  border, no elevation). **Every remaining stock `AlertDialog` in the app now uses `ClawAlertDialog`**
+  (13 further call sites: jump-to-page/line, render report, document zoom, open-link, discard/save/export
+  edits, edit history, batch delete, clear history, tree delete, folder picker, CSV discard). **CSV
+  tabular numerals** (§7): grid page CSS sets `font-variant-numeric: tabular-nums`; the banner uses the
+  new `TabularMeta` style (Inter + `fontFeatureSettings "tnum"`, §4.2).
+
+### Fixed (3c)
+- **AUD-035 — code viewer fetched syntax-highlight assets from a CDN at open time.** `CodeViewer.kt`
+  loaded `highlight.min.js` and `vs(2015).min.css` from `cdnjs.cloudflare.com` on every code-file open,
+  contradicting the README's "100 % offline — no analytics" claim. Fixed in `4927612`: highlight.js
+  **11.9.0** is bundled under `app/src/main/assets/highlight/` (esbuild IIFE bundle from
+  `lib/common.js`, 36 common languages, 145 KB; both VS theme CSS files) with the BSD-3 license in
+  `app/src/main/assets/licenses/`; the viewer resolves `file:///android_asset/highlight/…` and loads
+  with `loadDataWithBaseURL("file:///android_asset/")`. Grep-verified **zero**
+  cdnjs/cloudflare/jsdelivr/unpkg references remain under `app/src/main`. Full entry in
+  `docs/FILE_SUPPORT_AUDIT.md` §11.
+
+### Explicitly NOT done in 3c steps 1–3 (honesty matrix)
+- **Reading-progress fraction for non-PDF viewers** — the text/Markdown viewers expose no honest
+  scroll-fraction source yet; it will not be faked (3c remainder owns this).
+- **Auto-hide chrome on scroll (120 dp velocity)**, **reader keyboard shortcuts `Ctrl+F/S/A/Z/Y`**
+  (+ `Ctrl/Cmd+Shift+D` properties, `Alt+Right` forward), **DOCX line-spacing toggle**, **find-bar
+  auto-hide**, **ZIP tree breadcrumb** — pending (3c remainder).
+- All 3b NOT-done items above still stand (two-pane, Macrobenchmark, TalkBack/font-scale,
+  illustrations, predictive-back ordering, screenshot matrix).
 
 ## [Unreleased] Phase 2 — Test infrastructure & architecture (2026-11-17)
 

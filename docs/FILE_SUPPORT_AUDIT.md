@@ -271,3 +271,13 @@ Branch `arena/5100f329-file-claw-native`; every claim below is anchored to a Git
 - `currentFileState` ViewModel singleton — removing it requires state-management redesign (Phase 3+).
 - AUD-013 corrupt-PDF instrumented test; archive-password flow test; save-round-trip tests (emulator work, needs provisioning).
 - HomeScreen screenshot baseline (wall-clock greeting is non-deterministic under Robolectric).
+
+## 11. Phase 3 in-flight fixes (2026-11-17/18)
+
+Phase 3 is UI-scoped, but touching every viewer re-audits shipped behavior. One new issue was found and
+fixed mid-3c; it is logged here because it contradicted a documented claim (not because it changed format
+support). Status legend as §9/§10: **FIXED** = code landed and CI-green.
+
+| ID | Issue (as found) | Outcome |
+|---|---|---|
+| **AUD-035** | **Code viewer fetched syntax-highlight assets from the network at open time.** `CodeViewer.kt` referenced `cdnjs.cloudflare.com` for `highlight.min.js` and `vs(2015).min.css` and loaded them on every code-file open (`loadDataWithBaseURL(null, …)`), contradicting the README's "**100 % offline** — bundled PDF.js / docx-preview / x-spreadsheet renderers; no analytics" claim. Found 2026-11-18 during the 3c code-viewer pass; never previously documented (the Phase 0 audit predates the code viewer's CDN wiring). | **FIXED** — `4927612`, CI run `44157789487` (both jobs green). highlight.js **11.9.0** is now bundled at `app/src/main/assets/highlight/` (esbuild IIFE bundle built from the npm package's `lib/common.js`; 36 common languages; 145 KB) plus `vs.min.css` / `vs2015.min.css`, with the BSD-3 license at `app/src/main/assets/licenses/highlight.js_LICENSE.txt`. The viewer resolves `file:///android_asset/highlight/…` and loads with `loadDataWithBaseURL("file:///android_asset/")`; grep-verified **zero** cdnjs/cloudflare/jsdelivr/unpkg references remain under `app/src/main`. The `appassets.androidplatform.net` URLs (pdf.js, DOCX editor) are WebView's local-asset proxy, not network fetches — unchanged. |

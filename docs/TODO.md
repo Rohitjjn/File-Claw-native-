@@ -16,8 +16,9 @@ Priorities: **P0** data loss / crash / security · **P1** high-impact feature or
 7. Legacy `.doc` / `.xls` / `.ppt` and `.rar` are identified but not openable.
 8. Bundled JS libraries (docx-preview, pptx-preview, x-spreadsheet) have no license text in the shipped files; verify upstream licenses (JSZip is MIT/GPL dual, confirmed from its header).
 9. `applicationId` is still the AI-Studio-generated `com.aistudio.filesclaw.apxqzy`. JitPack was removed entirely (AUD-001/AUD-019, 2026-11-17): the only JitPack artifact was dead code.
-11. Phase 3 is in flight. **3a (foundations) and 3b (partial) are CI-green** (runs `44128246714`, `44135800812`,
-   `44140293225`; baselines re-recorded `85a9423` / `5f1a149`). Outstanding for 3b: (a) medium-width
+11. Phase 3 is in flight. **3a (foundations), 3b (partial) and 3c steps 1–3 are CI-green** (runs `44128246714`,
+   `44135800812`, `44140293225`; 3c: `44150911227`, `44154177670`, `44157789487` = AUD-035, `44236906638`;
+   baselines re-recorded `85a9423` / `5f1a149`). Outstanding for 3b: (a) medium-width
    (600–840 dp) list–detail two-pane (§5.2) — reader is not pane-embeddable yet, needs the §7 chrome refactor;
    (b) Macrobenchmark smoke (no module; recents-scroll fps unmeasured); (c) TalkBack sweep and font-scale 2.0
    pass (no a11y session executed); (d) reader keyboard shortcuts `Ctrl+F/S/A/Z/Y`, `Ctrl/Cmd+Shift+D`
@@ -25,6 +26,10 @@ Priorities: **P0** data loss / crash / security · **P1** high-impact feature or
    implemented shortcuts; (e) empty-state generative illustrations; (f) predictive-back ordering inside readers;
    (g) screenshot matrix at 1.3/2.0 scale and medium/expanded widths (10 goldens are compact, 1.0 scale only);
    (h) Quick Open palette interactions are compile- and launch-smoke-verified only — no instrumented palette test.
+   Outstanding for 3c (reader chrome): (i) reading-progress fraction for non-PDF viewers — no honest scroll
+   fraction source exists yet, and it will not be faked; (j) auto-hide chrome on scroll (120 dp velocity);
+   (k) `Ctrl+F/S/A/Z/Y` + `Ctrl/Cmd+Shift+D` + `Alt+Right` wiring inside readers; (l) DOCX line-spacing
+   toggle; (m) `ViewerFindBarHeader` auto-hide; (n) ZIP tree breadcrumb (ZipViewer is a flat tree list today).
 10. Phase 2 instrumented CI is deliberately narrow: it covers app launch, the manifest `ACTION_VIEW` resolver wiring, and the Room 3→4 migration on a real emulator. The promised open → edit → save → reopen round trips (text, Markdown, CSV), the archive password flow and the corrupt-PDF error path (AUD-013) are **NOT** automated — they need deterministic file provisioning plus UI-automation time; file bugs against `tools/ci/run-instrumented.sh` and extend `app/src/androidTest/` when picked up.
 
 ## P0
