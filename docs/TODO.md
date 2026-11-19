@@ -27,11 +27,12 @@ Priorities: **P0** data loss / crash / security · **P1** high-impact feature or
    (g) screenshot matrix at 1.3/2.0 scale and medium/expanded widths (10 goldens are compact, 1.0 scale only);
    (h) Quick Open palette interactions are compile- and launch-smoke-verified only — no instrumented palette test.
    Outstanding for 3c (reader chrome): (i) reading-progress fraction for non-PDF viewers — no honest scroll
-   fraction source exists yet, and it will not be faked; (j) auto-hide chrome on scroll (120 dp velocity);
-   (k) `Alt+Right` forward — the reader keys
-   (`Ctrl/Cmd+F/S/A/Z/Y`, `Ctrl/Cmd+Shift+D`) landed in step 4 (`f7d3b00`, run `44271726453`); forward
-   needs a custom popped-destination stack (Navigation Compose has none) and stays pending; (l) DOCX line-spacing
-   toggle; (m) `ViewerFindBarHeader` auto-hide; (n) ZIP tree breadcrumb (ZipViewer is a flat tree list today).
+   fraction source exists yet, and it will not be faked; (j) auto-hide chrome + find-bar on scroll (120 dp
+   velocity) — gesture behavior needs device validation. Landed in step 5 (`53a2e7f`, run `44448030978`,
+   green first push): `Alt+Right` forward (custom forward stack; system-back clears it — documented
+   deviation), DOCX line-spacing toggle, ZIP breadcrumb. 3d (Settings groups, splash, themed icon) and 3e
+   (font-scale matrix, TalkBack, RTL, SANITY_CHECKLIST on device) are **not started** — 3e requires a
+   physical-device session.
 10. Phase 2 instrumented CI is deliberately narrow: it covers app launch, the manifest `ACTION_VIEW` resolver wiring, and the Room 3→4 migration on a real emulator. The promised open → edit → save → reopen round trips (text, Markdown, CSV), the archive password flow and the corrupt-PDF error path (AUD-013) are **NOT** automated — they need deterministic file provisioning plus UI-automation time; file bugs against `tools/ci/run-instrumented.sh` and extend `app/src/androidTest/` when picked up.
 
 ## P0

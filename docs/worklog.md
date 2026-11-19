@@ -311,3 +311,11 @@ No work lost; pushes before and after reconcile exactly.
   forward still unimplemented — Navigation Compose has no forward stack); strings.xml 64 entries. Goldens
   deleted in the visual commit; CI bootstrap re-recorded 10/10 (bot `459974a`; settings PNGs grew with the
   new rows). Device verification of the key map remains pending (instrumented suite is launch-smoke only).
+- Step 5 (`53a2e7f`, green first push `44448030978`): Alt+Right forward navigation (custom forward stack —
+  Alt+Left records the route, Alt+Right replays; any other navigation clears it; documented deviation:
+  system-back gesture clears too), ZIP breadcrumb (deepest expanded chain, tap a segment to collapse
+  deeper folders), DOCX comfortable line-spacing toggle (body.relaxed CSS, setLineSpacing bridge, toolbar
+  button, applied in onPageFinished so it survives reloads/retry). Settings card +Forward row; strings 67.
+  Deliberately NOT done and why: chrome/find-bar auto-hide on scroll (gesture feel needs a device),
+  non-PDF reading-progress fraction (no honest source; never faked), 3d/3e (device session required for
+  TalkBack / font-scale / SANITY_CHECKLIST).

@@ -108,14 +108,15 @@ baselines taken **before** refactoring (golden-master first, then move code mech
 
 ---
 
-## Phase 3 — Claude frontier UI ("The Quiet Desk") — IN PROGRESS (3a, 3b landed 2026-11-17; 3c steps 1–4 landed 2026-11-17/18; 3c tail, 3d, 3e pending)
+## Phase 3 — Claude frontier UI ("The Quiet Desk") — IN PROGRESS (3a, 3b landed 2026-11-17; 3c steps 1–5 landed 2026-11-17/18; 3c scroll-behavior tail, 3d, 3e pending)
 
 **Goal:** the app *looks and feels* finished — calm, editorial, unmistakably Claude — without touching
 data behavior. Spec: `docs/UI_FRONTIER.md` (tokens → navigation → components → viewers → honesty matrix → a11y).
 
 **Entry:** Phase 2 green (runs `44087482731` etc.). **Prompt:** `docs/prompts/PHASE_3_PROMPT.md` (written 2026-11-17).
 Green evidence so far: 3a `44128246714`; 3b palette `44135800812`; 3b nav `44140293225`; 3c steps 1–4 +
-AUD-035 `44150911227` / `44154177670` / `44157789487` / `44236906638` / `44271726453`. Open items: TODO KNOWN ISSUES #11.
+AUD-035 `44150911227` / `44154177670` / `44157789487` / `44236906638` / `44271726453` / `44448030978`.
+Open items: TODO KNOWN ISSUES #11.
 
 **Sub-phases (each is a mergeable PR):**
 - **3a Foundations:** semantic color tier, bundled typefaces (Source Serif 4 / Inter / JetBrains Mono,

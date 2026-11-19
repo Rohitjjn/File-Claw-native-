@@ -4,14 +4,15 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
-## [Unreleased] Phase 3 — Claude frontier UI ("The Quiet Desk") — IN PROGRESS (3a + 3b landed 2026-11-17; 3c steps 1–4 landed 2026-11-17/18)
+## [Unreleased] Phase 3 — Claude frontier UI ("The Quiet Desk") — IN PROGRESS (3a + 3b landed 2026-11-17; 3c steps 1–5 landed 2026-11-17/18; 3d/3e pending)
 
 **Verification status (read first):** all gates above ran in **GitHub Actions** on branch
 `arena/5100f329-file-claw-native` (workflow `CI`, jobs "Quality Gate" and "Instrumented tests (emulator
 API 34)"). Measured green runs: `44128246714` (3a foundations, both jobs), `44135800812` (3b Quick Open
 compile fix, both jobs), `44140293225` (3b shortcut map / nav rail / wordmark, both jobs), `44150911227`
 (3c step 1, both jobs), `44154177670` (3c step 2, both jobs), `44157789487` (AUD-035 offline fix, both
-jobs), `44236906638` (3c step 3, both jobs), `44271726453` (3c step 4, both jobs). Failed runs that
+jobs), `44236906638` (3c step 3, both jobs), `44271726453` (3c step 4, both jobs), `44448030978`
+(3c step 5, both jobs). Failed runs that
 were fixed forward: `44132429688` (3b compile — invalid fully-qualified `androidx.…` call in a Modifier
 chain), `44133924754` (3b compile — missing imports for the `KeyEvent` extension properties
 `key`/`type`/`isCtrlPressed`/`isMetaPressed`), `44148240751` (3c step 1 compile — Material icons
@@ -58,7 +59,7 @@ SDK/Maven there).
 - **Empty-state generative illustrations**, **predictive-back ordering inside readers** (find bar → chrome →
   viewer), **screenshot matrix at 1.3/2.0 scale and medium/expanded widths** — pending.
 
-### Added (3c — reader chrome v2; steps 1–4)
+### Added (3c — reader chrome v2; steps 1–5)
 - **Step 1 — viewer honesty details:** password fields in the PDF and archive password dialogs gained
   show/hide visibility toggles; the PDF viewer gained a **"Report this page renders wrong"** action whose
   diagnostics line carries **app version, page number and file type only** — no file contents, no paths
@@ -87,6 +88,15 @@ SDK/Maven there).
   an honest footer. **`Alt+Right` forward remains unwired** — Navigation Compose has no forward
   stack; it needs a custom popped-destination tracker and stays on the pending list.
 
+- **Step 5 — reader-chrome remainder (automatable subset):** **`Alt+Right` forward navigation** — a
+  custom forward stack: Alt+Left records the route it leaves, Alt+Right replays it, and any other
+  navigation (rail, palette, file open, system back) clears it; the documented deviation from browser
+  semantics is that the system-back gesture clears the stack too. **ZIP breadcrumb** — the archive
+  tree shows the deepest expanded folder chain; tapping a segment collapses everything strictly below
+  it. **DOCX comfortable line-spacing toggle** — toolbar button toggling a `body.relaxed` CSS class
+  (1.6 line-height for paragraphs/list items); pure presentation, applied on load and live, document
+  bytes untouched. Settings shortcuts card gained the Forward row (`strings.xml` 67 entries).
+
 ### Fixed (3c)
 - **AUD-035 — code viewer fetched syntax-highlight assets from a CDN at open time.** `CodeViewer.kt`
   loaded `highlight.min.js` and `vs(2015).min.css` from `cdnjs.cloudflare.com` on every code-file open,
@@ -101,9 +111,11 @@ SDK/Maven there).
 ### Explicitly NOT done in 3c steps 1–4 (honesty matrix)
 - **Reading-progress fraction for non-PDF viewers** — the text/Markdown viewers expose no honest
   scroll-fraction source yet; it will not be faked (3c remainder owns this).
-- **Auto-hide chrome on scroll (120 dp velocity)**, **`Alt+Right` forward navigation** (needs a
-  custom popped-destination stack), **DOCX line-spacing toggle**, **find-bar auto-hide**,
-  **ZIP tree breadcrumb** — pending (3c remainder).
+- **Auto-hide chrome on scroll (120 dp velocity)** and **find-bar auto-hide** — pending (gesture
+  behavior needs device validation). **Non-PDF reading-progress fraction** — no honest scroll
+  source yet; it will not be faked. **3d/3e are not started** (Settings v2 groups, splash animation,
+  themed icon; font-scale matrix, TalkBack, RTL, on-device SANITY_CHECKLIST — the 3e items require a
+  physical-device session and cannot be honestly closed from the sandbox).
 - All 3b NOT-done items above still stand (two-pane, Macrobenchmark, TalkBack/font-scale,
   illustrations, predictive-back ordering, screenshot matrix).
 
