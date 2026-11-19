@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.FormatLineSpacing
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Image
@@ -35,7 +36,6 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Print
-import androidx.compose.material.icons.outlined.FormatLineSpacing
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material.icons.outlined.FullscreenExit
@@ -185,6 +185,7 @@ fun FilePreviewScreen(
     var pdfViewRotation by remember(activeFile?.path) { mutableIntStateOf(0) }
 
     var isDocxNightMode by remember(activeFile?.path) { mutableStateOf(isDarkTheme) }
+    var docxLineSpacingRelaxed by remember(activeFile?.path) { mutableStateOf(false) }
     var scrollToPage by remember { mutableStateOf<Int?>(null) }
     // Loop 14: bumped on every explicit jump (scrubber release, Go-to-Page dialog) so
     // re-navigating to the SAME page number still re-fires the WebView navigation
@@ -1234,6 +1235,19 @@ fun FilePreviewScreen(
                                         )
                                     }
 
+                                    // Comfortable line spacing toggle (§7 DOCX reading aid)
+                                    IconButton(
+                                        onClick = { docxLineSpacingRelaxed = !docxLineSpacingRelaxed },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.FormatLineSpacing,
+                                            contentDescription = androidx.compose.ui.res.stringResource(R.string.docx_line_spacing_desc),
+                                            modifier = Modifier.size(18.dp),
+                                            tint = if (docxLineSpacingRelaxed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
                                     // DOCX Night Mode toggle
                                     IconButton(
                                         onClick = { isDocxNightMode = !isDocxNightMode },
@@ -1988,6 +2002,7 @@ fun FilePreviewScreen(
                         base64Docx = state.base64Data,
                         fileEntity = state.file,
                         isNightMode = isDocxNightMode,
+                        lineSpacingRelaxed = docxLineSpacingRelaxed,
                         viewModel = viewModel,
                         modifier = Modifier.fillMaxSize(),
                         onPageChanged = { page, total ->

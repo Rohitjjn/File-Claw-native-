@@ -187,6 +187,22 @@ class MainActivity : ComponentActivity() {
                     val recentFilesForPalette by mainViewModel.recentFilesState.collectAsState()
                     var quickOpenVisible by androidx.compose.runtime.mutableStateOf(false)
 
+                    // Phase 3c (docs/UI_FRONTIER.md §5.3): forward navigation. Navigation Compose
+                    // has no forward stack, so Alt+Left records the route it leaves and Alt+Right
+                    // replays it. Any navigation that is neither of those (rail, palette, file
+                    // open, system back) clears the recorded stack — the one deviation from
+                    // browser semantics is that the system back gesture clears it too.
+                    val forwardStack = androidx.compose.runtime.mutableStateListOf<String>()
+                    val navCause = androidx.compose.runtime.mutableStateOf("other")
+                    androidx.compose.runtime.DisposableEffect(navController) {
+                        val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, _, _ ->
+                            if (navCause.value == "other") forwardStack.clear()
+                            navCause.value = "other"
+                        }
+                        navController.addOnDestinationChangedListener(listener)
+                        onDispose { navController.removeOnDestinationChangedListener(listener) }
+                    }
+
                     // Dynamic Shortcuts Registration
                     LaunchedEffect(Unit) {
                         try {
@@ -354,9 +370,26 @@ class MainActivity : ComponentActivity() {
                                 if (quickOpenVisible) {
                                     quickOpenVisible = false
                                 } else {
+                                    val currentRoute = navController.currentBackStackEntry?.destination?.route
+                                    if (currentRoute != null && navController.previousBackStackEntry != null) {
+                                        forwardStack.add(currentRoute)
+                                        navCause.value = "back"
+                                    }
                                     navController.popBackStack()
                                 }
                                 true
+                            }
+                            // Forward — Alt+Right (replays the route Alt+Left recorded)
+                            event.isAltPressed && event.key == Key.DirectionRight -> {
+                                val route = forwardStack.lastOrNull()
+                                if (route != null) {
+                                    forwardStack.removeAt(forwardStack.size - 1)
+                                    navCause.value = "forward"
+                                    navController.navigate(route) { launchSingleTop = true }
+                                    true
+                                } else {
+                                    false
+                                }
                             }
                             // Copy current file path — Ctrl/Cmd+Shift+C
                             isMod && event.isShiftPressed && event.key == Key.C -> {

@@ -1,7 +1,9 @@
 package com.example.ui.screens.viewers
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -18,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -86,6 +89,51 @@ fun ZipPreview(
         }
         
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+
+        // Phase 3c: breadcrumb of the deepest expanded folder chain — tapping a segment
+        // collapses every expanded folder strictly below it. Hidden until a folder is open.
+        val deepestExpanded = remember(expandedPaths) {
+            expandedPaths.filter { it.isNotEmpty() }
+                .maxByOrNull { it.count { c -> c == '/' } }
+        }
+        if (deepestExpanded != null) {
+            val segments = deepestExpanded.split('/')
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                segments.forEachIndexed { index, segment ->
+                    if (index > 0) {
+                        Text(
+                            text = "›",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        )
+                    }
+                    val isLast = index == segments.lastIndex
+                    Text(
+                        text = segment,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        fontWeight = if (isLast) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isLast) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable {
+                                val targetPath = segments.subList(0, index + 1).joinToString("/")
+                                expandedPaths
+                                    .filter { it.length > targetPath.length && it.startsWith("$targetPath/") }
+                                    .forEach { onToggleExpand(it) }
+                            }
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+        }
 
         LazyColumn(
             state = listState,

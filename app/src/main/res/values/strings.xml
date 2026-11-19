@@ -46,6 +46,8 @@
     <string name="shortcuts_settings_desc">Open Settings</string>
     <string name="shortcuts_back">Alt+Left</string>
     <string name="shortcuts_back_desc">Back</string>
+    <string name="shortcuts_forward">Alt+Right</string>
+    <string name="shortcuts_forward_desc">Forward (after Alt+Left)</string>
     <string name="shortcuts_recents">Ctrl/Cmd+1…9</string>
     <string name="shortcuts_recents_desc">Open the 1st…9th recent file</string>
     <string name="shortcuts_copy_path">Ctrl/Cmd+Shift+C</string>
@@ -60,8 +62,9 @@
     <string name="shortcuts_undo_redo_desc">Undo / redo (while editing)</string>
     <string name="shortcuts_properties">Ctrl/Cmd+Shift+D</string>
     <string name="shortcuts_properties_desc">Open file properties (in a viewer)</string>
-    <string name="shortcuts_footer">Hardware keyboards only. Reader shortcuts apply inside an open viewer; forward navigation (Alt+Right) is not implemented yet. The full map lives in docs/UI_FRONTIER.md §5.3.</string>
+    <string name="shortcuts_footer">Hardware keyboards only. Reader shortcuts apply inside an open viewer. The full map lives in docs/UI_FRONTIER.md §5.3.</string>
     <!-- Phase 3c: reader chrome v2 (§6/§7) -->
+    <string name="docx_line_spacing_desc">Comfortable line spacing</string>
     <string name="show_password">Show password</string>
     <string name="hide_password">Hide password</string>
     <string name="report_render_item">Report this page renders wrong</string>

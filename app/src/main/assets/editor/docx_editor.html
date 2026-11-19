@@ -17,6 +17,11 @@
             --text-primary: #f5f5f3;
             --border: #2d2b28;
         }
+        /* Phase 3c: comfortable line-spacing reading aid, toggled from Kotlin via setLineSpacing(). */
+        body.relaxed .docx p,
+        body.relaxed .docx li {
+            line-height: 1.6 !important;
+        }
         html, body {
             margin: 0;
             padding: 0;
@@ -405,6 +410,11 @@
             if (isPrintMode) return;
             document.body.classList.toggle('dark', Boolean(isDark));
             document.documentElement.classList.toggle('dark', Boolean(isDark));
+        }
+
+        function setLineSpacing(mode) {
+            if (isPrintMode) return;
+            document.body.classList.toggle('relaxed', mode === 'relaxed');
         }
 
         function scrollToPage(pageNumber) {

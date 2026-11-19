@@ -455,6 +455,8 @@ fun SettingsScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ShortcutRow(stringResource(R.string.shortcuts_back), stringResource(R.string.shortcuts_back_desc))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_forward), stringResource(R.string.shortcuts_forward_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ShortcutRow(stringResource(R.string.shortcuts_recents), stringResource(R.string.shortcuts_recents_desc))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ShortcutRow(stringResource(R.string.shortcuts_copy_path), stringResource(R.string.shortcuts_copy_path_desc))

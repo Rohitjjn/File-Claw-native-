@@ -26,6 +26,9 @@ fun DocxPreviewWebView(
     base64Docx: String,
     fileEntity: RecentFileEntity,
     isNightMode: Boolean,
+    // Phase 3c (§7): comfortable line-spacing reading aid — pure presentation, the
+    // document bytes are never touched.
+    lineSpacingRelaxed: Boolean = false,
     viewModel: MainViewModel,
     modifier: Modifier = Modifier,
     onPageChanged: (Int, Int) -> Unit = { _, _ -> },
@@ -86,6 +89,7 @@ fun DocxPreviewWebView(
     // the document finishes loading (Loop 10).
     val latestZoomForPageLoad = androidx.compose.runtime.rememberUpdatedState(zoomFactor)
     val latestNightModeForPageLoad = androidx.compose.runtime.rememberUpdatedState(isNightMode)
+    val latestLineSpacingForPageLoad = androidx.compose.runtime.rememberUpdatedState(lineSpacingRelaxed)
 
     // Loop 12 (Bug B): query changes search exactly once; arrow presses issue only
     // next/prev deltas, so all N matches stay reachable in both directions.
@@ -116,6 +120,14 @@ fun DocxPreviewWebView(
     LaunchedEffect(webViewRef, isWebViewLoading, isNightMode, pureKotlinFallback) {
         if (webViewRef != null && !isWebViewLoading && pureKotlinFallback == null) {
             webViewRef?.evaluateJavascript("setDarkMode($isNightMode);", null)
+        }
+    }
+    LaunchedEffect(webViewRef, isWebViewLoading, lineSpacingRelaxed, pureKotlinFallback) {
+        if (webViewRef != null && !isWebViewLoading && pureKotlinFallback == null) {
+            webViewRef?.evaluateJavascript(
+                "setLineSpacing(${if (lineSpacingRelaxed) "'relaxed'" else "'document'"});",
+                null
+            )
         }
     }
     // Loop 12 (Bug A): two-phase zoom pipeline.
@@ -343,8 +355,9 @@ fun DocxPreviewWebView(
                                     // the bridge base64 path is only the in-page fallback.
                                     val freshZoom = latestZoomForPageLoad.value
                                     val freshNightMode = latestNightModeForPageLoad.value
+                                    val freshLineSpacing = latestLineSpacingForPageLoad.value
                                     view?.evaluateJavascript(
-                                        "setZoom($freshZoom); loadDocx(null, $freshNightMode);",
+                                        "setLineSpacing(${if (freshLineSpacing) "'relaxed'" else "'document'"}); setZoom($freshZoom); loadDocx(null, $freshNightMode);",
                                         null
                                     )
                                 }
