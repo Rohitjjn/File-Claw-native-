@@ -155,6 +155,13 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace
 
+      # Every green Quality Gate leaves a downloadable debug APK on the run page (sideload testing).
+      - name: Upload debug APK (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: fileclaw-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+
       # AUD-034 / Phase 1: fail visibly (but not the build) when the Room schema history is
       # missing 4.json. room.schemaLocation makes every KSP run emit the current schema, so
       # this step tells us the committed file was never regenerated/committed for v4.
