@@ -4,6 +4,40 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [v1.3.1-arena] — 2026-11-18 · device-test round 1 fixes (from v1.3.0-arena on-device feedback)
+
+**Verification status:** compile/test/assembleDebug + instrumented emulator tests green in GitHub
+Actions run `44689845228` (both jobs); release APK built by run `44690844628` from tag
+`v1.3.1-arena`. All four fixes are structural changes reasoned from the reported symptoms —
+**they are not yet re-verified on the reporting device**; the next test round decides.
+
+### Fixed
+- **PDF preview: "could not open pdf, failed to fetch" on devices.** pdf.js fetched the document
+  from inside its worker thread, and worker-side `fetch()` is not routed through
+  `shouldInterceptRequest` on Android WebView — so `/search-pdf/document.pdf` never reached the
+  bundled asset loader on a real phone (CI's emulator never opens a PDF, which is why the gate
+  stayed green). The page now imports `pdf.worker.min.mjs` and publishes it on
+  `globalThis.pdfjsWorker` (pdf.js's supported main-thread "fake worker" mechanism) and passes
+  `useWorkerFetch: false` + `disableRange: true`, so the document fetch runs on the main thread
+  where `WebViewAssetLoader` intercepts it. **(not verified on device)**
+- **DOCX preview: blank white screen while printing the same file worked.** The native print path
+  uses its own WebView, so the bytes and the parser were fine; the preview page could die silently
+  if any statement in the one-shot init script threw (skipping `loadDocx` entirely) or if
+  `renderAsync` never settled — the skeleton would just sit there. Each init statement is now
+  individually guarded so `loadDocx` always runs, and a 25 s render watchdog reports through
+  `onDocumentError` into the existing honest recovery UI instead of a silent white screen.
+  **(not verified on device)**
+- **Focus-mode chrome animations replaced** (§4.4): top bar and bottom tray now enter with
+  `EmphasizedDecelerate` at `SLOW_MS` — a partial slide (one third of the bar) + fade + a 0.98
+  scale anchored to the screen edge — and leave with `EmphasizedAccelerate` at `BASE_MS`; the
+  focus pill enters with a 0.9 → 1 scale. The old full-height `FastOutSlowInEasing` slides are
+  gone. **(not verified on device)**
+- **Photo viewer pinch-zoom glitch:** telephoto 0.7.1 does not coordinate with `HorizontalPager`,
+  so panning a zoomed-in image tugged the whole page sideways. The pager's `userScrollEnabled` is
+  now locked while the visible image is zoomed (> 1.02×, observed via `snapshotFlow` on
+  `contentTransformation`) and re-enabled at 1× / when the page settles. Swiping between photos at
+  1× is unchanged. **(not verified on device)**
+
 ## [Unreleased] Phase 3 — Claude frontier UI ("The Quiet Desk") — IN PROGRESS (3a + 3b landed 2026-11-17; 3c steps 1–5 landed 2026-11-17/18; 3d/3e pending)
 
 **Verification status (read first):** all gates above ran in **GitHub Actions** on branch
