@@ -46,8 +46,11 @@ jobs:
       - name: Make wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build release APK
-        run: ./gradlew assembleRelease -PversionName="${GITHUB_REF_NAME#v}" --stacktrace
+      - name: Build release + debug APKs
+        # Device round 3: BOTH variants ship. Release is the primary test build; the debug
+        # APK is the bisect control if anything misbehaves (v1.3.2 was the first R8 build —
+        # a release-only regression would otherwise be indistinguishable from a code bug).
+        run: ./gradlew assembleRelease assembleDebug -PversionName="${GITHUB_REF_NAME#v}" --stacktrace
 
       - name: Publish prerelease with APK
         env:
@@ -62,6 +65,10 @@ jobs:
             exit 1
           fi
           cp "$APK_SRC" "release-artifacts/FileClaw-${GITHUB_REF_NAME}-release.apk"
+          DEBUG_SRC=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          if [ -n "$DEBUG_SRC" ] && [ -f "$DEBUG_SRC" ]; then
+            cp "$DEBUG_SRC" "release-artifacts/FileClaw-${GITHUB_REF_NAME}-debug.apk"
+          fi
           cd release-artifacts
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
@@ -71,6 +78,6 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" release-artifacts/* \
               --title "File Claw ${GITHUB_REF_NAME} (test build)" \
-              --notes "Automated release build (R8, release build type) of ${GITHUB_REF_NAME} for sideload testing. Signed with the debug key (no signing secrets in CI) — not for Play. SHA-256 checksums are in SHA256SUMS.txt." \
+              --notes "Automated build of ${GITHUB_REF_NAME} for sideload testing. The -release APK is the R8 release build (primary); the -debug APK is the bisect control. Both are signed with the debug key (no signing secrets in CI) — not for Play. SHA-256 checksums are in SHA256SUMS.txt." \
               --prerelease
           fi
