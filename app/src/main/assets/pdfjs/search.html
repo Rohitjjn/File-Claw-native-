@@ -128,6 +128,13 @@
   </script>
   <script type="module">
     import * as pdfjsLib from './pdf.min.mjs';
+    // Device fix (2026-11-18): fetch() issued from inside the real worker thread is NOT
+    // routed through WebViewClient.shouldInterceptRequest on Android WebView, so the
+    // /search-pdf/document.pdf stream never reached the asset loader and pdf.js failed
+    // with "Failed to fetch" on real devices. Importing the worker module and publishing
+    // it on globalThis.pdfjsWorker makes pdf.js run its worker on the MAIN thread, where
+    // fetch IS intercepted by WebViewAssetLoader.
+    import * as pdfjsWorkerModule from './pdf.worker.min.mjs';
 
     const assetBase = '/assets/pdfjs/';
     const pdfUrl = '/search-pdf/document.pdf';
@@ -157,6 +164,7 @@
     const minRenderRatio = 0.05;
     let renderScaleHint = 1;
     pdfjsLib.GlobalWorkerOptions.workerSrc = assetBase + 'pdf.worker.min.mjs';
+    window.pdfjsWorker = pdfjsWorkerModule;
 
     let pdfDocument = null;
     let loadingPromise = null;
@@ -827,8 +835,9 @@
         cMapPacked: true,
         standardFontDataUrl: assetBase + 'standard_fonts/',
         isEvalSupported: false,
-        useWorkerFetch: true,
-        disableRange: false,
+        // Main-thread (fake-worker) mode: fetch goes through shouldInterceptRequest.
+        useWorkerFetch: false,
+        disableRange: true,
         disableStream: true,
         disableAutoFetch: true
       });

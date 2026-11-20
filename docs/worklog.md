@@ -319,3 +319,30 @@ No work lost; pushes before and after reconcile exactly.
   Deliberately NOT done and why: chrome/find-bar auto-hide on scroll (gesture feel needs a device),
   non-PDF reading-progress fraction (no honest source; never faked), 3d/3e (device session required for
   TalkBack / font-scale / SANITY_CHECKLIST).
+
+Task ID: DEVICE-TEST-ROUND-1 (2026-11-18, from v1.3.0-arena device feedback)
+Agent: Arena Agent (Claude)
+Baseline: branch `arena/5100f329-file-claw-native` @ `64e1add` (release tag `v1.3.0-arena`).
+
+Work Log (4 device-reported bugs):
+- PDF "Failed to fetch": pdf.js fetched the document from INSIDE its worker thread; worker-side
+  fetch() is not routed through shouldInterceptRequest on Android WebView, so /search-pdf/ never
+  reached the asset loader on real devices (CI emulator never opens a PDF, so this was never seen).
+  Fix: import pdf.worker.min.mjs and publish it on globalThis.pdfjsWorker (pdf.js main-thread
+  "fake worker" — official mechanism) + useWorkerFetch:false, disableRange:true. Fetch now happens
+  on the main thread where WebViewAssetLoader intercepts it.
+- DOCX blank white screen (print worked via the native fallback): init-script statements are now
+  individually try/catch-guarded so nothing can skip loadDocx (setZoom/setLineSpacing are cosmetic;
+  loadDocx always runs), and the page arms a 25 s render watchdog that reports through
+  onDocumentError -> the honest recovery UI instead of a silent skeleton. Byte path already had a
+  fetch -> JS-bridge fallback.
+- Focus-mode chrome animation replaced (§4.4): top bar / bottom tray now settle with
+  EmphasizedDecelerate (SLOW_MS enter) and leave with EmphasizedAccelerate (BASE_MS exit) —
+  partial slide (1/3 height) + fade + 0.98 edge-anchored scale; the focus pill scales 0.9 -> 1.
+  Old FastOutSlowInEasing full-slide tweens removed.
+- Photo pinch-zoom glitch: telephoto 0.7.1 does not coordinate with HorizontalPager — panning a
+  zoomed image tugged the page sideways. The pager's userScrollEnabled is now locked while the
+  visible image is zoomed (> 1.02x, observed via snapshotFlow on contentTransformation) and
+  re-enabled at 1x / on page settle.
+All four are structural fixes reasoned from the reported symptoms; they are compile- and
+CI-verified, device re-verification pending in the next test build.

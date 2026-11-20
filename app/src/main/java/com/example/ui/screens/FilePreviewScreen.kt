@@ -80,6 +80,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.ui.graphics.TransformOrigin
+import com.example.ui.theme.Motion
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -100,7 +104,6 @@ import com.example.ui.component.ViewerAppearancePrefs
 import com.example.core.format.DocxZoomPolicy
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
@@ -659,16 +662,27 @@ fun FilePreviewScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
+            // Device polish (2026-11-18, §4.4): reader chrome settles with the emphasized
+            // curves — a partial slide (third of the bar) + fade + a 0.98 scale from the
+            // bar's own edge, instead of the old full-height linear-ish slide.
             androidx.compose.animation.AnimatedVisibility(
                 visible = isBarsVisible,
-                enter = androidx.compose.animation.slideInVertically(
-                    animationSpec = tween(260, easing = FastOutSlowInEasing),
-                    initialOffsetY = { -it }
-                ) + androidx.compose.animation.fadeIn(tween(220)),
-                exit = androidx.compose.animation.slideOutVertically(
-                    animationSpec = tween(260, easing = FastOutSlowInEasing),
-                    targetOffsetY = { -it }
-                ) + androidx.compose.animation.fadeOut(tween(220)),
+                enter = slideInVertically(
+                    animationSpec = tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate),
+                    initialOffsetY = { -it / 3 }
+                ) + fadeIn(tween(Motion.SLOW_MS)) + scaleIn(
+                    initialScale = 0.98f,
+                    animationSpec = tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate),
+                    transformOrigin = TransformOrigin(0.5f, 0f)
+                ),
+                exit = slideOutVertically(
+                    animationSpec = tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate),
+                    targetOffsetY = { -it / 3 }
+                ) + fadeOut(tween(Motion.BASE_MS)) + scaleOut(
+                    targetScale = 0.98f,
+                    animationSpec = tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate),
+                    transformOrigin = TransformOrigin(0.5f, 0f)
+                ),
                 modifier = Modifier.statusBarsPadding()
             ) {
                 if (isSearchInDocumentOpen) {
@@ -1036,14 +1050,22 @@ fun FilePreviewScreen(
             if (showFloatingBar) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = isBarsVisible,
-                    enter = androidx.compose.animation.slideInVertically(
-                        animationSpec = tween(260, easing = FastOutSlowInEasing),
-                        initialOffsetY = { it }
-                    ) + androidx.compose.animation.fadeIn(tween(220)),
-                    exit = androidx.compose.animation.slideOutVertically(
-                        animationSpec = tween(260, easing = FastOutSlowInEasing),
-                        targetOffsetY = { it }
-                    ) + androidx.compose.animation.fadeOut(tween(220))
+                    enter = slideInVertically(
+                        animationSpec = tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate),
+                        initialOffsetY = { it / 3 }
+                    ) + fadeIn(tween(Motion.SLOW_MS)) + scaleIn(
+                        initialScale = 0.98f,
+                        animationSpec = tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate),
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    ),
+                    exit = slideOutVertically(
+                        animationSpec = tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate),
+                        targetOffsetY = { it / 3 }
+                    ) + fadeOut(tween(Motion.BASE_MS)) + scaleOut(
+                        targetScale = 0.98f,
+                        animationSpec = tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate),
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    )
                 ) {
                     Box(
                         modifier = Modifier
@@ -1696,10 +1718,18 @@ fun FilePreviewScreen(
             // Subtle Floating Back & Exit Pill when !isBarsVisible (Focus mode)
             androidx.compose.animation.AnimatedVisibility(
                 visible = !isBarsVisible,
-                enter = androidx.compose.animation.fadeIn(tween(220)) +
-                    androidx.compose.animation.slideInVertically(tween(260, easing = FastOutSlowInEasing)) { -it },
-                exit = androidx.compose.animation.fadeOut(tween(220)) +
-                    androidx.compose.animation.slideOutVertically(tween(260, easing = FastOutSlowInEasing)) { -it },
+                enter = fadeIn(tween(Motion.SLOW_MS)) +
+                    slideInVertically(tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate)) { -it / 4 } +
+                    scaleIn(
+                        initialScale = 0.9f,
+                        animationSpec = tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate)
+                    ),
+                exit = fadeOut(tween(Motion.BASE_MS)) +
+                    slideOutVertically(tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate)) { -it / 4 } +
+                    scaleOut(
+                        targetScale = 0.9f,
+                        animationSpec = tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate)
+                    ),
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .statusBarsPadding()

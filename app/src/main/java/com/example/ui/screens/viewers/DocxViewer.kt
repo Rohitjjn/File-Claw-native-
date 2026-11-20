@@ -356,8 +356,14 @@ fun DocxPreviewWebView(
                                     val freshZoom = latestZoomForPageLoad.value
                                     val freshNightMode = latestNightModeForPageLoad.value
                                     val freshLineSpacing = latestLineSpacingForPageLoad.value
+                                    // Device fix (2026-11-18): one throwing statement in this
+                                    // script used to skip loadDocx entirely (blank screen, no
+                                    // error). The cosmetic calls are now individually guarded so
+                                    // the document load can never be prevented by them.
                                     view?.evaluateJavascript(
-                                        "setLineSpacing(${if (freshLineSpacing) "'relaxed'" else "'document'"}); setZoom($freshZoom); loadDocx(null, $freshNightMode);",
+                                        "try{setZoom($freshZoom);}catch(e){} " +
+                                            "try{setLineSpacing(${if (freshLineSpacing) "'relaxed'" else "'document'"});}catch(e){} " +
+                                            "loadDocx(null, $freshNightMode);",
                                         null
                                     )
                                 }

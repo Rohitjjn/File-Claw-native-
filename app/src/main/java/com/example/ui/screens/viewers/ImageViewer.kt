@@ -45,6 +45,13 @@ fun ImagePreview(
     )
     
     val currentFile = imageFiles.getOrNull(pagerState.currentPage) ?: java.io.File(fileEntity.path)
+
+    // Device fix (2026-11-18): telephoto 0.7.1 does not coordinate with the pager, so a
+    // pan while zoomed tugged the page sideways (the reported pinch "glitch"). While the
+    // visible image is zoomed in, the pager stops intercepting horizontal drags; back at
+    // 1x (or after the page settles), swiping between photos works as before.
+    val pagerScrollEnabled = remember { mutableStateOf(true) }
+    LaunchedEffect(pagerState.currentPage) { pagerScrollEnabled.value = true }
     
     // The history save requirement "history me sirf folder save kro or path me last previewed pictures jis per click krne per us folder ki last dekhi hue image lload ho"
     // Since MainViewModel automatically saves the file when openFile is called, we don't need to save every swipe to the history,
@@ -87,6 +94,7 @@ fun ImagePreview(
     ) {
         androidx.compose.foundation.pager.HorizontalPager(
             state = pagerState,
+            userScrollEnabled = pagerScrollEnabled.value,
             modifier = Modifier.fillMaxSize()
         ) { page ->
             val file = imageFiles[page]
@@ -130,6 +138,18 @@ fun ImagePreview(
             }
             val zoomableState = me.saket.telephoto.zoomable.rememberZoomableState(zoomSpec = zoomSpec)
             val zoomableImageState = me.saket.telephoto.zoomable.rememberZoomableImageState(zoomableState = zoomableState)
+            LaunchedEffect(zoomableState, page) {
+                snapshotFlow {
+                    val transformation = zoomableState.contentTransformation
+                    transformation.isSpecified && transformation.scale.scaleX > 1.02f
+                }.collect { zoomedIn ->
+                    if (zoomedIn) {
+                        pagerScrollEnabled.value = false
+                    } else if (page == pagerState.currentPage) {
+                        pagerScrollEnabled.value = true
+                    }
+                }
+            }
 
             me.saket.telephoto.zoomable.coil.ZoomableAsyncImage(
                 model = file,
