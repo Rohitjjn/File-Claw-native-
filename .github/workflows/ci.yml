@@ -255,3 +255,32 @@ jobs:
           path: app/build/reports/androidTests/connected/
           retention-days: 7
           if-no-files-found: ignore
+
+  # Device-test round 3 (2026-11-20): the viewer pages (docx_editor.html, pdfjs search.html)
+  # carry real rendering/fetch logic that neither compile nor the emulator exercises. These
+  # node/jsdom tests execute the ACTUAL page scripts against fixtures through the same URL
+  # scheme the WebViewAssetLoader serves — the regression class "page JS broke silently"
+  # now fails CI instead of only failing on a device.
+  viewer-js:
+    name: Viewer JS tests (node)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install test dependencies
+        run: npm install --no-audit --no-fund
+        working-directory: tools/viewer-tests
+
+      - name: Generate fixtures
+        run: node make-fixtures.js
+        working-directory: tools/viewer-tests
+
+      - name: Run viewer tests
+        run: node run-all.js
+        working-directory: tools/viewer-tests
