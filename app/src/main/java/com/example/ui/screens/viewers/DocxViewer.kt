@@ -53,6 +53,9 @@ fun DocxPreviewWebView(
     onRendererFallback: (Boolean) -> Unit = {}
 ) {
     var isWebViewLoading by remember(base64Docx) { mutableStateOf(true) }
+    // Device round 3 diagnostics: last JS console line from the page, surfaced in the
+    // recovery banner so a device failure names its cause instead of "blank screen".
+    var lastConsoleLine by remember(base64Docx) { mutableStateOf<String?>(null) }
     var webViewRef by remember(base64Docx) { mutableStateOf<android.webkit.WebView?>(null) }
     var pureKotlinFallback by remember(base64Docx) { mutableStateOf<com.example.core.format.DocxExtractor.ExtractedDocx?>(null) }
     // Loop 14: the plain-text view is an honest RECOVERY state, never a normal
@@ -176,10 +179,21 @@ fun DocxPreviewWebView(
                 val extracted = runCatching {
                     com.example.core.format.DocxExtractor.extractText(File(fileEntity.path))
                 }.getOrNull()
-                fallbackReason = "The preview did not finish loading on this device (supervised after ~14 s)."
-                pureKotlinFallback = extracted
-                isWebViewLoading = false
-                latestRendererFallbackCallback.value(true)
+                // Probe the page's own load state machine and attach it (plus the last
+                // console line) to the recovery banner — the next device report becomes
+                // conclusive instead of another "blank screen".
+                supervisedWebView.evaluateJavascript(
+                    "(typeof docxLoadState !== 'undefined') ? docxLoadState : 'page-not-ready'"
+                ) { pageState ->
+                    fallbackReason = buildString {
+                        append("The preview did not finish loading on this device (supervised after ~14 s).")
+                        append(" Page state: ").append(pageState?.trim('"') ?: "unknown")
+                        lastConsoleLine?.let { append(". Last console: ").append(it.take(120)) }
+                    }
+                    pureKotlinFallback = extracted
+                    isWebViewLoading = false
+                    latestRendererFallbackCallback.value(true)
+                }
                 return@LaunchedEffect
             }
         }
@@ -306,8 +320,12 @@ fun DocxPreviewWebView(
                                 builtInZoomControls = false
                                 displayZoomControls = false
                                 setSupportZoom(false)
-                                useWideViewPort = true
-                                loadWithOverviewMode = true
+                                // Device round 3 (2026-11-20): useWideViewPort/loadWithOverviewMode
+                                // removed to match the print WebView EXACTLY — the print path
+                                // (same HTML, same asset loader, same engine) renders correctly
+                                // on the reporting device with both OFF, while the preview with
+                                // them ON painted nothing. The page's own zoom engine does not
+                                // depend on the viewport meta.
                             }
                             setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
 
@@ -466,6 +484,7 @@ fun DocxPreviewWebView(
                             webChromeClient = object : android.webkit.WebChromeClient() {
                                 override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
                                     android.util.Log.d("WebViewDocx", "${consoleMessage?.message()} -- From line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
+                                    lastConsoleLine = "${consoleMessage?.message()} (line ${consoleMessage?.lineNumber()})"
                                     return true
                                 }
                             }
