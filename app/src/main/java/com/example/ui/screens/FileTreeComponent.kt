@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 data class FileNode(val file: File, val depth: Int, val isExpanded: Boolean = false)
 
@@ -548,9 +549,9 @@ fun FileTreeComponent(
         val sampleNames = selectedPaths.take(3).map { File(it).name }
         val remainingCount = count - sampleNames.size
 
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
-            title = { Text("Delete $count item(s)?") },
+            title = "Delete $count item(s)?",
             text = {
                 Column {
                     Text("Are you sure you want to delete these files? This operation permanently deletes them from disk.")
@@ -621,9 +622,9 @@ private fun FolderPickerDialog(
         currentDir.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.sortedBy { it.name.lowercase() } ?: emptyList()
     }
 
-    AlertDialog(
+    com.example.ui.component.ClawAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select Destination Folder") },
+        title = "Select Destination Folder",
         text = {
             Column(modifier = Modifier.fillMaxWidth().height(320.dp)) {
                 Text(
@@ -644,7 +645,7 @@ private fun FolderPickerDialog(
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Go up", modifier = Modifier.size(20.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Go up", modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(".. (Parent Folder)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }

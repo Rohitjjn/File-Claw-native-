@@ -32,18 +32,37 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
+import androidx.navigation.NavDestination
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.compose.ui.platform.LocalConfiguration
+import com.example.ui.component.ClawNavRail
 import com.example.ui.screens.AllFilesScreen
 import com.example.ui.screens.EditorScreen
 import com.example.ui.screens.FilePreviewScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SplashScreen
+import com.example.ui.navigation.ClawDestination
 import com.example.ui.screens.SearchScreen
 import com.example.ui.theme.FilesClawTheme
 import com.example.viewmodel.MainViewModel
 import kotlinx.coroutines.flow.first
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+
+
+/** Type-safe route check. @Serializable objects serialize to their class serial name (the FQCN). */
+private inline fun <reified T> NavDestination?.isDestinationOf(): Boolean =
+    this?.route == T::class.qualifiedName
 
 class MainActivity : ComponentActivity() {
 
@@ -165,6 +184,24 @@ class MainActivity : ComponentActivity() {
                     )
                 } else {
                     val navController = rememberNavController()
+                    val recentFilesForPalette by mainViewModel.recentFilesState.collectAsState()
+                    var quickOpenVisible by androidx.compose.runtime.mutableStateOf(false)
+
+                    // Phase 3c (docs/UI_FRONTIER.md §5.3): forward navigation. Navigation Compose
+                    // has no forward stack, so Alt+Left records the route it leaves and Alt+Right
+                    // replays it. Any navigation that is neither of those (rail, palette, file
+                    // open, system back) clears the recorded stack — the one deviation from
+                    // browser semantics is that the system back gesture clears it too.
+                    val forwardStack = androidx.compose.runtime.mutableStateListOf<String>()
+                    val navCause = androidx.compose.runtime.mutableStateOf("other")
+                    androidx.compose.runtime.DisposableEffect(navController) {
+                        val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, _, _ ->
+                            if (navCause.value == "other") forwardStack.clear()
+                            navCause.value = "other"
+                        }
+                        navController.addOnDestinationChangedListener(listener)
+                        onDispose { navController.removeOnDestinationChangedListener(listener) }
+                    }
 
                     // Dynamic Shortcuts Registration
                     LaunchedEffect(Unit) {
@@ -227,11 +264,11 @@ class MainActivity : ComponentActivity() {
                                     if (lastFile != null) {
                                         mainViewModel.openFile(lastFile)
                                         if (lastFile.extension.lowercase() == "txt" && settings.defaultToEditOnOpen) {
-                                            navController.navigate("editor") {
+                                            navController.navigate(ClawDestination.Editor) {
                                                 launchSingleTop = true
                                             }
                                         } else {
-                                            navController.navigate("preview") {
+                                            navController.navigate(ClawDestination.Preview) {
                                                 launchSingleTop = true
                                             }
                                         }
@@ -242,11 +279,11 @@ class MainActivity : ComponentActivity() {
                                     e.printStackTrace()
                                 }
                             } else if (action == "com.example.action.HISTORY") {
-                                navController.navigate("home") {
-                                    popUpTo("splash") { inclusive = true }
+                                navController.navigate(ClawDestination.Home) {
+                                    popUpTo(ClawDestination.Splash) { inclusive = true }
                                 }
                             } else if (action == "com.example.action.SETTINGS") {
-                                navController.navigate("settings") {
+                                navController.navigate(ClawDestination.Settings) {
                                     launchSingleTop = true
                                 }
                             }
@@ -255,14 +292,16 @@ class MainActivity : ComponentActivity() {
                     
                     val navigateToPreviewWithEditOnOpen = {
                         val fileState = mainViewModel.currentFileState.value
-                        val currentRoute = navController.currentBackStackEntry?.destination?.route
-                        if (currentRoute != "preview" && currentRoute != "editor") {
+                        val dest = navController.currentBackStackEntry?.destination
+                        val onPreviewOrEditor = dest.isDestinationOf<ClawDestination.Preview>() == true ||
+                            dest.isDestinationOf<ClawDestination.Editor>() == true
+                        if (!onPreviewOrEditor) {
                             if (fileState.opensInEditor() && settings.defaultToEditOnOpen) {
-                                navController.navigate("editor") {
+                                navController.navigate(ClawDestination.Editor) {
                                     launchSingleTop = true
                                 }
                             } else {
-                                navController.navigate("preview") {
+                                navController.navigate(ClawDestination.Preview) {
                                     launchSingleTop = true
                                 }
                             }
@@ -274,20 +313,22 @@ class MainActivity : ComponentActivity() {
                         mainViewModel.navigationEvent.collect { event ->
                             when (event) {
                                 is MainViewModel.NavigationEvent.NavigateToPreview -> {
-                                    val currentRoute = navController.currentBackStackEntry?.destination?.route
-                                    if (currentRoute != "preview" && currentRoute != "editor") {
+                                    val dest = navController.currentBackStackEntry?.destination
+                                    val onPreviewOrEditor = dest.isDestinationOf<ClawDestination.Preview>() == true ||
+                                        dest.isDestinationOf<ClawDestination.Editor>() == true
+                                    if (!onPreviewOrEditor) {
                                         if (event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
-                                            navController.navigate("editor") {
+                                            navController.navigate(ClawDestination.Editor) {
                                                 launchSingleTop = true
                                             }
                                         } else {
-                                            navController.navigate("preview") {
+                                            navController.navigate(ClawDestination.Preview) {
                                                 launchSingleTop = true
                                             }
                                         }
-                                    } else if (currentRoute == "preview" && event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
-                                        navController.navigate("editor") {
-                                            popUpTo("preview") { inclusive = true }
+                                    } else if (dest.isDestinationOf<ClawDestination.Preview>() == true && event.fileState.opensInEditor() && settings.defaultToEditOnOpen) {
+                                        navController.navigate(ClawDestination.Editor) {
+                                            popUpTo(ClawDestination.Preview) { inclusive = true }
                                             launchSingleTop = true
                                         }
                                     }
@@ -299,9 +340,111 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    // Phase 3a: glass-at-root — ambient glow floats behind every destination.
+                    // Reading surfaces stay opaque by contract (docs/UI_FRONTIER.md §4.5/§4.6).
+                    // Phase 3b: Quick Open (Ctrl/Cmd+K) — files + actions palette.
+                    val isExpandedLayout = LocalConfiguration.current.screenWidthDp >= 840
+                    val railBackStackEntry by navController.currentBackStackEntryAsState()
+                    val railDestination = railBackStackEntry?.destination
+                    val digitKeys = mapOf(
+                        Key.One to 0, Key.Two to 1, Key.Three to 2, Key.Four to 3, Key.Five to 4,
+                        Key.Six to 5, Key.Seven to 6, Key.Eight to 7, Key.Nine to 8
+                    )
+                    val onShortcutKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = shortcut@{ event ->
+                        if (event.type != KeyEventType.KeyDown) return@shortcut false
+                        val isMod = event.isCtrlPressed || event.isMetaPressed
+                        when {
+                            // Quick Open — Ctrl/Cmd+K or Ctrl/Cmd+P
+                            isMod && (event.key == Key.K || event.key == Key.P) -> {
+                                quickOpenVisible = !quickOpenVisible
+                                true
+                            }
+                            // Settings — Ctrl/Cmd+,
+                            isMod && event.key == Key.Comma -> {
+                                quickOpenVisible = false
+                                navController.navigate(ClawDestination.Settings) { launchSingleTop = true }
+                                true
+                            }
+                            // Back — Alt+Left
+                            event.isAltPressed && event.key == Key.DirectionLeft -> {
+                                if (quickOpenVisible) {
+                                    quickOpenVisible = false
+                                } else {
+                                    val currentRoute = navController.currentBackStackEntry?.destination?.route
+                                    if (currentRoute != null && navController.previousBackStackEntry != null) {
+                                        forwardStack.add(currentRoute)
+                                        navCause.value = "back"
+                                    }
+                                    navController.popBackStack()
+                                }
+                                true
+                            }
+                            // Forward — Alt+Right (replays the route Alt+Left recorded)
+                            event.isAltPressed && event.key == Key.DirectionRight -> {
+                                val route = forwardStack.lastOrNull()
+                                if (route != null) {
+                                    forwardStack.removeAt(forwardStack.size - 1)
+                                    navCause.value = "forward"
+                                    navController.navigate(route) { launchSingleTop = true }
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            // Copy current file path — Ctrl/Cmd+Shift+C
+                            isMod && event.isShiftPressed && event.key == Key.C -> {
+                                val path = mainViewModel.currentFileState.value.fileOrNull?.path
+                                if (path == null) {
+                                    false
+                                } else {
+                                    val clip = android.content.ClipData.newPlainText("path", path)
+                                    val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    cm.setPrimaryClip(clip)
+                                    Toast.makeText(applicationContext, R.string.path_copied, Toast.LENGTH_SHORT).show()
+                                    true
+                                }
+                            }
+                            // Open 1st…9th recent file — Ctrl/Cmd+1…9
+                            isMod && !event.isShiftPressed && digitKeys.containsKey(event.key) -> {
+                                val idx = digitKeys.getValue(event.key)
+                                if (idx < recentFilesForPalette.size) {
+                                    quickOpenVisible = false
+                                    mainViewModel.openFile(recentFilesForPalette[idx])
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            else -> false
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                    if (isExpandedLayout) {
+                        ClawNavRail(
+                            isHome = railDestination.isDestinationOf<ClawDestination.Home>() == true,
+                            isAllFiles = railDestination.isDestinationOf<ClawDestination.AllFiles>() == true,
+                            isSearch = railDestination.isDestinationOf<ClawDestination.Search>() == true,
+                            isSettings = railDestination.isDestinationOf<ClawDestination.Settings>() == true,
+                            onHome = {
+                                navController.navigate(ClawDestination.Home) {
+                                    popUpTo(ClawDestination.Splash) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            },
+                            onAllFiles = { navController.navigate(ClawDestination.AllFiles) { launchSingleTop = true } },
+                            onSearch = { navController.navigate(ClawDestination.Search) { launchSingleTop = true } },
+                            onSettings = { navController.navigate(ClawDestination.Settings) { launchSingleTop = true } }
+                        )
+                    }
+                    Box(
+                        modifier = Modifier.weight(1f).onKeyEvent { event -> onShortcutKey(event) }
+                    ) {
+                    com.example.ui.theme.GlassBackdrop {
                     NavHost(
                         navController = navController,
-                        startDestination = "splash",
+                        startDestination = ClawDestination.Splash,
                         modifier = Modifier.fillMaxSize(),
                         enterTransition = {
                             scaleIn(
@@ -328,33 +471,33 @@ class MainActivity : ComponentActivity() {
                             ) + fadeOut(animationSpec = tween(60))
                         }
                     ) {
-                        composable("splash") {
+                        composable<ClawDestination.Splash> {
                             SplashScreen(
                                 onNavigateToHome = {
-                                    navController.navigate("home") {
-                                        popUpTo("splash") { inclusive = true }
+                                    navController.navigate(ClawDestination.Home) {
+                                        popUpTo(ClawDestination.Splash) { inclusive = true }
                                     }
                                 }
                             )
                         }
 
-                        composable("home") {
+                        composable<ClawDestination.Home> {
                             HomeScreen(
                                 viewModel = mainViewModel,
                                 onNavigateToPreview = navigateToPreviewWithEditOnOpen,
                                 onNavigateToSettings = {
-                                    navController.navigate("settings")
+                                    navController.navigate(ClawDestination.Settings)
                                 },
                                 onNavigateToAllFiles = {
-                                    navController.navigate("all_files")
+                                    navController.navigate(ClawDestination.AllFiles)
                                 },
                                 onNavigateToSearch = {
-                                    navController.navigate("search")
+                                    navController.navigate(ClawDestination.Search)
                                 }
                             )
                         }
 
-                        composable("all_files") {
+                        composable<ClawDestination.AllFiles> {
                             AllFilesScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
@@ -364,7 +507,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        composable("search") {
+                        composable<ClawDestination.Search> {
                             SearchScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
@@ -374,19 +517,19 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        composable("preview") {
+                        composable<ClawDestination.Preview> {
                             FilePreviewScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
                                     navController.popBackStack()
                                 },
                                 onNavigateToEditor = {
-                                    navController.navigate("editor")
+                                    navController.navigate(ClawDestination.Editor)
                                 }
                             )
                         }
 
-                        composable("editor") {
+                        composable<ClawDestination.Editor> {
                             EditorScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
@@ -395,7 +538,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        composable("settings") {
+                        composable<ClawDestination.Settings> {
                             SettingsScreen(
                                 viewModel = mainViewModel,
                                 onBackClick = {
@@ -403,6 +546,34 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                    }
+                    }
+                    if (quickOpenVisible) {
+                        com.example.ui.component.CommandPalette(
+                            recentFiles = recentFilesForPalette,
+                            onOpenFile = { entity ->
+                                quickOpenVisible = false
+                                mainViewModel.openFile(entity)
+                            },
+                            onAction = { action ->
+                                quickOpenVisible = false
+                                when (action) {
+                                    com.example.ui.component.CommandPaletteAction.TOGGLE_THEME ->
+                                        mainViewModel.updateSettings(settings.copy(theme = if (settings.theme == "Dark") "Light" else "Dark"))
+                                    com.example.ui.component.CommandPaletteAction.OPEN_SETTINGS ->
+                                        navController.navigate(ClawDestination.Settings)
+                                    com.example.ui.component.CommandPaletteAction.OPEN_SEARCH ->
+                                        navController.navigate(ClawDestination.Search)
+                                    com.example.ui.component.CommandPaletteAction.OPEN_ALL_FILES ->
+                                        navController.navigate(ClawDestination.AllFiles)
+                                    com.example.ui.component.CommandPaletteAction.CLEAR_RECENTS ->
+                                        mainViewModel.clearRecentFiles()
+                                }
+                            },
+                            onDismiss = { quickOpenVisible = false }
+                        )
+                    }
+                    }
                     }
                 }
             }

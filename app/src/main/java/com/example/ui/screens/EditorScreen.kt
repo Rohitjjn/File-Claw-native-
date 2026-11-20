@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.activity.compose.BackHandler
@@ -13,8 +12,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.outlined.DriveFileMove
@@ -34,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.component.ClaudeAppBar
 import com.example.viewmodel.MainViewModel
 import androidx.compose.foundation.lazy.rememberLazyListState
+import com.example.ui.theme.MonoFamily
 
 class TextUndoStack(private val capacity: Int = 50) {
     private val buffer = ArrayDeque<TextFieldValue>()
@@ -226,7 +226,7 @@ fun EditorScreen(
                             enabled = undoStack.isNotEmpty,
                             leadingIcon = { 
                                 Icon(
-                                    imageVector = Icons.Default.Undo, 
+                                    imageVector = Icons.AutoMirrored.Filled.Undo, 
                                     contentDescription = "Undo", 
                                     modifier = Modifier.size(13.dp)
                                 ) 
@@ -251,7 +251,7 @@ fun EditorScreen(
                             enabled = redoStack.isNotEmpty,
                             leadingIcon = { 
                                 Icon(
-                                    imageVector = Icons.Default.Redo, 
+                                    imageVector = Icons.AutoMirrored.Filled.Redo, 
                                     contentDescription = "Redo", 
                                     modifier = Modifier.size(13.dp)
                                 ) 
@@ -398,7 +398,7 @@ fun EditorScreen(
                     ) {
                         Text(
                             text = lineNumbersText,
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = MonoFamily,
                             fontSize = fontSize,
                             lineHeight = lineHeight,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f),
@@ -434,7 +434,7 @@ fun EditorScreen(
                             textValue = newValue
                         },
                         textStyle = TextStyle(
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = MonoFamily,
                             fontSize = fontSize,
                             lineHeight = lineHeight,
                             color = MaterialTheme.colorScheme.onSurface
@@ -461,9 +461,9 @@ fun EditorScreen(
 
     // Unsaved Warning Prompt
     if (showUnsavedDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showUnsavedDialog = false },
-            title = { Text("Unsaved Changes", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error) },
+            title = "Unsaved Changes",
             text = { Text("You modified this file. Exit without saving your changes?") },
             dismissButton = {
                 TextButton(onClick = { showUnsavedDialog = false }) {
@@ -479,9 +479,7 @@ fun EditorScreen(
                 ) {
                     Text("Exit", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
-            },
-            shape = RoundedCornerShape(16.dp),
-            containerColor = MaterialTheme.colorScheme.surface
+            }
         )
     }
 
@@ -496,15 +494,9 @@ fun EditorScreen(
         }
         var copyFileNameInput by remember { mutableStateOf(defaultName) }
 
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showSaveAsDialog = false },
-            title = {
-                Text(
-                    text = "Export Modified Copy",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            },
+            title = "Export Modified Copy",
             text = {
                 Column {
                     Text(
@@ -539,9 +531,7 @@ fun EditorScreen(
                 ) {
                     Text("Export Copy")
                 }
-            },
-            shape = RoundedCornerShape(16.dp),
-            containerColor = MaterialTheme.colorScheme.surface
+            }
         )
     }
 }

@@ -1,0 +1,83 @@
+name: APK Release (tag)
+
+# Sideload test builds (Phase 3): push a v* tag on the arena branch and this builds a
+# RELEASE APK (R8-minified, release build type) and publishes it as a GitHub prerelease —
+# a download link for device testing. Without FILECLAW_* signing secrets the release build
+# type falls back to the debug key (see app/build.gradle.kts), so the APK is release-
+# optimized and installable, but debug-signed — not for Play. Truly release-signed builds
+# remain the domain of build-and-release.yml (workflow_dispatch, fails closed — AUD-021).
+# Device round 2 (2026-11-20): switched from assembleDebug to assembleRelease per tester
+# request ("released apk, not debug").
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Build & publish release APK (prerelease)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # ubuntu-latest ships with the Android SDK in $ANDROID_HOME; accept licenses so Gradle can resolve.
+      - name: Accept Android SDK licenses
+        run: |
+          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          fi
+
+      - name: Set up Gradle (cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build release + debug APKs
+        # Device round 3: BOTH variants ship. Release is the primary test build; the debug
+        # APK is the bisect control if anything misbehaves (v1.3.2 was the first R8 build —
+        # a release-only regression would otherwise be indistinguishable from a code bug).
+        run: ./gradlew assembleRelease assembleDebug -PversionName="${GITHUB_REF_NAME#v}" --stacktrace
+
+      - name: Publish prerelease with APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          mkdir -p release-artifacts
+          APK_SRC=$(find app/build/outputs/apk/release -name "*.apk" ! -name "*-unsigned.apk" | head -n 1)
+          if [ -z "$APK_SRC" ] || [ ! -f "$APK_SRC" ]; then
+            echo "::error::No signed release APK found under app/build/outputs/apk/release"
+            find app/build/outputs -type f || true
+            exit 1
+          fi
+          cp "$APK_SRC" "release-artifacts/FileClaw-${GITHUB_REF_NAME}-release.apk"
+          DEBUG_SRC=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          if [ -n "$DEBUG_SRC" ] && [ -f "$DEBUG_SRC" ]; then
+            cp "$DEBUG_SRC" "release-artifacts/FileClaw-${GITHUB_REF_NAME}-debug.apk"
+          fi
+          cd release-artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          cd ..
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-artifacts/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-artifacts/* \
+              --title "File Claw ${GITHUB_REF_NAME} (test build)" \
+              --notes "Automated build of ${GITHUB_REF_NAME} for sideload testing. The -release APK is the R8 release build (primary); the -debug APK is the bisect control. Both are signed with the debug key (no signing secrets in CI) — not for Play. SHA-256 checksums are in SHA256SUMS.txt." \
+              --prerelease
+          fi

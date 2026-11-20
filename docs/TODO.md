@@ -3,16 +3,37 @@
 Priorities: **P0** data loss / crash / security · **P1** high-impact feature or correctness · **P2** quality · **P3** polish.
 
 ## KNOWN ISSUES (read first)
-1. **RESOLVED in Loop 7 (2026-10-15):** Loop 7 changes WERE compiled and run: `:app:compileDebugKotlin` and `:app:assembleDebug` succeeded and the full `:app:testDebugUnitTest` suite passed (134 tests, 0 failures) using Android SDK 34 + JDK 17 (jlink required — a JRE-only JVM fails `compileDebugJavaWithJavac`). Setup used: `chmod +x gradlew`, `local.properties` → SDK path, `--max-workers=1` under a 4 GB RAM sandbox. Keep this toolchain recipe for future loops. Earlier loops (02–06) remain unverified on-device; still run the Quality Gate in `BUILD_GUIDE.md` before shipping.
-2. Gradle wiring for JaCoCo (`jacocoCoreReport` / `jacocoCoreVerify`), `enableUnitTestCoverage`, detekt, and Room schema export is
-   unverified. detekt is `ignoreFailures = true` until its first green run.
-3. Edits to files opened from another app are saved to the in-app copy only (the user is told). Write-back is P1 below.
+1. **RESOLVED in Loop 7 (2026-10-15):** Loop 7 changes WERE compiled and run: `:app:compileDebugKotlin` and `:app:assembleDebug` succeeded and the full `:app:testDebugUnitTest` suite passed (134 tests, 0 failures) using Android SDK 34 + JDK 17 (jlink required — a JRE-only JVM fails `compileDebugJavaWithJavac`). Setup used: `chmod +x gradlew`, `local.properties` → SDK path, `--max-workers=1` under a 4 GB RAM sandbox. Keep this toolchain recipe for future loops. Earlier loops (02–06) remain unverified on-device; still run the Quality Gate in `docs/BUILD_GUIDE.md` before shipping.
+2. RESOLVED (2026-11-17, Phase 2): JaCoCo `jacocoCoreVerify` (≥80 % core lines, measured **83.84 % — 1816/2166**) and
+   `detekt` on `core/` (blocking; legacy debt recorded in `config/detekt/baseline.xml`, new findings fail) run
+   blocking in CI; Room v4 schema is committed (`app/schemas/…/4.json`) and auto-committed by the build on push.
+   Remaining: `detektUi` advisory has NOT been baselined (intentional — UI debt must be triaged, not absorbed),
+   and the 10 baselined core findings are unpaid debt (tracked in `FILE_SUPPORT_AUDIT.md` §10).
+3. Edits to files opened from another app **are** written back to the source URI when one is stored (`tryWriteBackToSourceUri`): the user sees "Saved and synced back to source file." on success, or an in-app-copy fallback with the exact reason on failure. The write-back round trip is **not yet device-verified** (Phase 1 honesty rule: code path only). Files without a sourceUri (imported copies) still save in-app only and say so.
 4. WebView renderers (DOCX, PPTX, grid) still receive whole files as base64 (now capped at 25 MB, then falls back to the archive tree).
-5. Hex viewer shows only the first 4 KB. DOCX preview derives pages from `docx-preview` sections, but page-count accuracy still needs device verification; legacy `.doc` remains text-extraction-only.
+5. Hex viewer now streams 64 KB windows with prev/next and jump-to-offset (pure `core/hex/HexDump`, 9 unit tests); only the currently visible window is in memory. DOCX preview derives pages from `docx-preview` sections, but page-count accuracy still needs device verification; legacy `.doc` remains text-extraction-only.
 6. 3D viewer draws a wireframe sample (≤ 25k triangles); no shading, no GLB/PLY/DWG.
 7. Legacy `.doc` / `.xls` / `.ppt` and `.rar` are identified but not openable.
 8. Bundled JS libraries (docx-preview, pptx-preview, x-spreadsheet) have no license text in the shipped files; verify upstream licenses (JSZip is MIT/GPL dual, confirmed from its header).
-9. `applicationId` is still the AI-Studio-generated `com.aistudio.filesclaw.apxqzy`; JitPack repository is unscoped (supply-chain exposure).
+9. `applicationId` is still the AI-Studio-generated `com.aistudio.filesclaw.apxqzy`. JitPack was removed entirely (AUD-001/AUD-019, 2026-11-17): the only JitPack artifact was dead code.
+11. Phase 3 is in flight. **3a (foundations), 3b (partial) and 3c steps 1–3 are CI-green** (runs `44128246714`,
+   `44135800812`, `44140293225`; 3c: `44150911227`, `44154177670`, `44157789487` = AUD-035, `44236906638`,
+   `44271726453` (step 4; failed-then-fixed `44270564728`); baselines re-recorded `85a9423` / `5f1a149` / `459974a`). Outstanding for 3b: (a) medium-width
+   (600–840 dp) list–detail two-pane (§5.2) — reader is not pane-embeddable yet, needs the §7 chrome refactor;
+   (b) Macrobenchmark smoke (no module; recents-scroll fps unmeasured); (c) TalkBack sweep and font-scale 2.0
+   pass (no a11y session executed); (d) reader keyboard shortcuts `Ctrl+F/S/A/Z/Y`, `Ctrl/Cmd+Shift+D`
+   (properties), `Alt+Right` (forward) — unwired by design; reader chrome (3c) owns them; Settings lists only
+   implemented shortcuts; (e) empty-state generative illustrations; (f) predictive-back ordering inside readers;
+   (g) screenshot matrix at 1.3/2.0 scale and medium/expanded widths (10 goldens are compact, 1.0 scale only);
+   (h) Quick Open palette interactions are compile- and launch-smoke-verified only — no instrumented palette test.
+   Outstanding for 3c (reader chrome): (i) reading-progress fraction for non-PDF viewers — no honest scroll
+   fraction source exists yet, and it will not be faked; (j) auto-hide chrome + find-bar on scroll (120 dp
+   velocity) — gesture behavior needs device validation. Landed in step 5 (`53a2e7f`, run `44448030978`,
+   green first push): `Alt+Right` forward (custom forward stack; system-back clears it — documented
+   deviation), DOCX line-spacing toggle, ZIP breadcrumb. 3d (Settings groups, splash, themed icon) and 3e
+   (font-scale matrix, TalkBack, RTL, SANITY_CHECKLIST on device) are **not started** — 3e requires a
+   physical-device session.
+10. Phase 2 instrumented CI is deliberately narrow: it covers app launch, the manifest `ACTION_VIEW` resolver wiring, and the Room 3→4 migration on a real emulator. The promised open → edit → save → reopen round trips (text, Markdown, CSV), the archive password flow and the corrupt-PDF error path (AUD-013) are **NOT** automated — they need deterministic file provisioning plus UI-automation time; file bugs against `tools/ci/run-instrumented.sh` and extend `app/src/androidTest/` when picked up.
 
 ## P0
 - [x] Earlier project baseline Quality Gate was recorded green (`compile_applet` / `testDebugUnitTest`); **Loop 6 was not rerun** because Java/Android SDK are unavailable here (see KNOWN ISSUES #1).
@@ -111,3 +132,10 @@ Priorities: **P0** data loss / crash / security · **P1** high-impact feature or
 - [x] **Claude-Style Settings Redesign**: Redesigned `SettingsScreen.kt` with warm paper / charcoal aesthetics, grouped glass cards (`ClaudeCard`), 3-segment theme picker, font/tab sliders, live cache readout with clear confirmation, history clear dialog, and one-tap benchmark test files generator.
 - [x] **Unit Tests & Verification**: All unit tests (`HttpRangeTest`, `ScreenOrientationPolicyTest`, `DocxZoomPolicyTest`, etc.) passing 100% green; `compile_applet` passed.
 
+
+## Phase 0 — Audit & repo hygiene (COMPLETED 2026-11-17)
+- [x] Unwanted files removed: 9 root docs duplicated in `docs/legacy/`, stale `NEXT_LOOP_PROMPT_v3/v4/v5.md` + `NEXT_PROMPT.md`, `build.log`, 16 tracked `.gradle/` cache files (~9.6 MB) + `.gitignore` added.
+- [x] Structure: live loop docs moved to `docs/` (`changelogs.md`, `known-issues.md`, `worklog.md`, `BUILD_GUIDE.md`, `PATCH_NOTES.md`); loop prompts 1–6 → `docs/legacy/prompts/`; AI Studio artifacts → `docs/legacy/aistudio/`.
+- [x] Audit docs written: `docs/PRD.md`, `docs/FILE_SUPPORT_AUDIT.md` (AUD-001…034: dead android-pdf-viewer dep, PPTX/MIDI/media silent-failure paths, 4 KB hex dump, Room 4.json missing, docs-vs-code drift), `docs/UI_FRONTIER.md` (Phase 3 spec — no code changed).
+- [x] `.github/workflows/ci.yml` added (compile + test + assembleDebug on push/PR; **unverified** until first run).
+- [ ] **Phase 1** — execute `docs/prompts/PHASE_1_PROMPT.md`: Quality Gate green, then AUD-001/005–010/013/034 + BUG-004/005/006/007.

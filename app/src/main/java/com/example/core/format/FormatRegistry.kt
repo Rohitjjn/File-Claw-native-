@@ -107,7 +107,8 @@ object FormatRegistry {
         spec("ogg", "Ogg audio", FileKind.AUDIO, full, "audio/ogg", "ogg", "oga", "opus", "spx")
         spec("m4a", "AAC / M4A audio", FileKind.AUDIO, full, "audio/mp4", "m4a", "aac", "m4b", "3ga")
         spec("flac", "FLAC audio", FileKind.AUDIO, full, "audio/flac", "flac")
-        spec("midi", "MIDI", FileKind.AUDIO, full, "audio/midi", "mid", "midi", "kar")
+        // MediaPlayer cannot decode MIDI (AUD-006) — identify-only until a synth is bundled.
+        spec("midi", "MIDI", FileKind.AUDIO, ident, "audio/midi", "mid", "midi", "kar")
         spec("audio-other", "Other audio", FileKind.AUDIO, part, "audio/x-other", "amr", "awb", "wma", "mka", "aiff", "aif", "ape", "wv")
         spec("mp4", "MP4 video", FileKind.VIDEO, full, "video/mp4", "mp4", "m4v")
         spec("mkv", "Matroska video", FileKind.VIDEO, full, "video/x-matroska", "mkv")

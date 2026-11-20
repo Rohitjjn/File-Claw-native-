@@ -38,6 +38,8 @@ import java.io.FileInputStream
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.*
+import com.example.ui.theme.MonoFamily
+import com.example.ui.theme.SansFamily
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,9 +93,9 @@ fun FilePropertiesBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         dragHandle = { BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        containerColor = glass.fillStrong,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         modifier = modifier.testTag("file_properties_bottom_sheet")
     ) {
         Column(
@@ -365,7 +367,7 @@ private fun MetadataBox(
                 Text(
                     text = content,
                     fontSize = if (isMono) 11.sp else 12.sp,
-                    fontFamily = if (isMono) FontFamily.Monospace else FontFamily.Default,
+                    fontFamily = if (isMono) MonoFamily else SansFamily,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis

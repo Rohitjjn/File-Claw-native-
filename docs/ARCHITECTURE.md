@@ -58,6 +58,6 @@ no `android.*` imports, unit-tested on the plain JVM. The Android layers are thi
 | Persistence | Room fails fast on schema change without a migration (no silent wipe); backup disabled |
 
 ## Known structural debt (see TODO.md)
-`FilePreviewScreen.kt` is now roughly 4,100 lines after the Loop 6 readers; navigation is route-without-arguments backed by one shared
+`FilePreviewScreen.kt` is now ≈ 5,390 lines (2026-11-17) and keeps growing; navigation is route-without-arguments backed by one shared
 ViewModel state; imported copies don't write back to the source URI; DOCX/WebView renderers pass whole documents
 to JS as base64 (size-capped, not streamed).

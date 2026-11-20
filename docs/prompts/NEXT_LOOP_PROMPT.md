@@ -1,5 +1,10 @@
 # File Claw — NEXT LOOP PROMPT (Loop 15)
 
+> **⚠️ SUPERSEDED (2026-11-17, Phase 0):** this Loop-15 prompt was never executed as written and its
+> device-testing round is folded into **`PHASE_1_PROMPT.md`** (build-green + broken-format repairs,
+> AUD register) and the phase plan in `docs/ROADMAP.md`. Kept for history only — do not run it.
+> Current next-phase prompt: [`PHASE_1_PROMPT.md`](PHASE_1_PROMPT.md).
+
 > **Scope:** v1.3.3 device-testing round — verify the Loop 14 fixes on real hardware FIRST (DOCX real rendering, toolbar rotate/search order, scrubber, rotation lifecycle, always-light PDF, 8x zoom, configChanges sweep), then pull from the backlog. User tests the APK built by GitHub Actions from branch `v1.3.3` and reports real-device bugs; fix those FIRST.
 > **Golden rule:** 100% offline. No new network code, no cloud calls, no heavy new dependencies without measuring APK impact.
 

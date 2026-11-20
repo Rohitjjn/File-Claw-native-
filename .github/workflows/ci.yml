@@ -1,0 +1,286 @@
+name: CI
+
+# Phase 0 addition (2026-11-17): Quality Gate for every push/PR.
+# Kept deliberately small — compile + JVM unit tests + debug APK. Release signing/publishing lives in
+# build-and-release.yml. First run is unverified; watch it and fix forward.
+on:
+  push:
+    # Round 1 (phases 0–9) lands on the feature branch first; main gets it all at the end.
+    branches: [main, arena/5100f329-file-claw-native]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  # write: the Room-schema step below may commit the KSP-generated schema back to the branch (bot commit; never on PRs).
+  contents: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    name: Quality Gate (compile · test · assembleDebug)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Contrast audit (Phase 3 tokens, WCAG AA)
+        run: python3 tools/ci/check_contrast.py
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # ubuntu-latest ships with the Android SDK in $ANDROID_HOME; accept licenses so Gradle can resolve.
+      - name: Accept Android SDK licenses
+        run: |
+          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          fi
+
+      - name: Set up Gradle (cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Compile Kotlin
+        # Emit compiler errors as workflow annotations so they are visible via the Checks API
+        # (raw job logs are not readable from the agent sandbox).
+        run: |
+          set +e
+          ./gradlew compileDebugKotlin --console=plain > /tmp/compile.log 2>&1
+          code=$?
+          grep -E '^e: ' /tmp/compile.log | head -60 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
+          grep -iE 'what went wrong|could not|script .*compil|exception|failed with an exception|build.gradle.kts|unresolved' /tmp/compile.log | head -40 | sed 's#^#::error ::#'
+          echo '== head of log =='
+          head -50 /tmp/compile.log | sed 's#^#::error ::#'
+          exit $code
+
+      # Phase 2: detekt over core/ (blocking, baselined) and the UI layer (advisory, reported).
+      # First failure on an empty baseline bootstraps config/detekt/baseline.xml from the
+      # current findings (legacy debt is recorded, not hidden) and bot-commits it on push.
+      # After that the step is fully blocking: any NEW finding fails the run.
+      - name: detekt (core) + detektUi (advisory)
+        run: |
+          set +e
+          ./gradlew detekt detektUi --console=plain > /tmp/detekt.log 2>&1
+          code=$?
+          grep -E '^[^ ].*\.kt:[0-9]+' /tmp/detekt.log | head -40 | sed 's#^#::error ::#'
+          if [ $code -ne 0 ] && [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "$(grep -cE '^\s+<[A-Za-z]' config/detekt/baseline.xml)" -eq 0 ]; then
+            echo "Empty baseline and existing findings — generating baseline and bot-committing it."
+            ./gradlew detektBaseline --console=plain > /tmp/detektbase.log 2>&1 || { tail -20 /tmp/detektbase.log | sed 's#^#::error ::#'; exit 1; }
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add config/detekt/baseline.xml
+            git commit -m "chore(detekt): baseline existing core findings (AUD: legacy debt)" || echo "nothing to commit"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+            exit 0
+          fi
+          if [ $code -ne 0 ]; then tail -20 /tmp/detekt.log | sed 's#^#::error ::#'; fi
+          exit $code
+
+      # Phase 2: JaCoCo — verify >= 80% line coverage of com.example.core (blocking) and
+      # publish the coverage report as a CI artifact.
+      - name: JaCoCo (core) verify + report
+        run: |
+          set +e
+          ./gradlew jacocoCoreVerify --console=plain > /tmp/jacoco.log 2>&1
+          code=$?
+          python3 - <<'PY'
+          import re, sys, glob
+          for path in glob.glob('app/build/reports/jacoco/jacocoCoreReport/*.xml'):
+              xml = open(path, encoding='utf-8').read()
+              m = re.findall(r'<counter type="LINE" missed="(\d+)" covered="(\d+)"/>', xml)
+              if m:
+                  missed, covered = map(int, m[-1])
+                  total = missed + covered
+                  pct = 100.0 * covered / total if total else 0.0
+                  print(f'::notice title=JaCoCo::core LINE coverage: {covered}/{total} = {pct:.2f}%')
+          PY
+          if [ $code -ne 0 ]; then tail -20 /tmp/jacoco.log | sed 's#^#::error ::#'; fi
+          exit $code
+
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-core-report
+          path: app/build/reports/jacoco/jacocoCoreReport/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Compile instrumented tests
+        run: |
+          set +e
+          ./gradlew compileDebugAndroidTestKotlin --console=plain > /tmp/itcompile.log 2>&1
+          code=$?
+          grep -E '^e: ' /tmp/itcompile.log | head -60 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
+          [ $code -ne 0 ] && tail -30 /tmp/itcompile.log | sed 's#^#::error ::#'
+          exit $code
+
+      # Phase 2: screenshot golden masters (Roborazzi, JVM + Robolectric).
+      # Baselines live in app/src/test/snapshots/images. Bootstrap: on push events with no baselines,
+      # record and bot-commit them; everywhere else, verify (mismatch = blocked run).
+      # To intentionally re-record baselines, delete the PNGs and let the push bootstrap re-record.
+      - name: Screenshot baselines (Roborazzi)
+        run: |
+          set -e
+          IMG_DIR=app/src/test/snapshots/images
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && { [ ! -d "$IMG_DIR" ] || [ -z "$(ls -A "$IMG_DIR" 2>/dev/null)" ]; }; then
+            echo "No baselines found — recording initial set and committing."
+            ./gradlew recordRoborazziDebug --console=plain > /tmp/record.log 2>&1 || { echo '::error title=Screenshots::recordRoborazziDebug failed'; grep -E '^e: ' /tmp/record.log | head -40 | sed 's#^#::error ::#'; tail -30 /tmp/record.log | sed 's#^#::error ::#'; exit 1; }
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add "$IMG_DIR"
+            git commit -m "test(screenshots): record golden baselines (Roborazzi)" || echo "nothing to commit"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          else
+            set +e
+            ./gradlew verifyRoborazziDebug --console=plain > /tmp/verify.log 2>&1
+            code=$?
+            grep -E '^e: ' /tmp/verify.log | head -40 | sed -E 's#^e: (file://)?([^:]+):([0-9]+):[0-9]+ (.*)#::error file=\2,line=\3::\4#'
+            grep -E 'FAILED|were different' /tmp/verify.log | head -20 | sed 's#^#::error ::#'
+            [ $code -ne 0 ] && tail -30 /tmp/verify.log | sed 's#^#::error ::#'
+            exit $code
+          fi
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      # Every green Quality Gate leaves a downloadable debug APK on the run page (sideload testing).
+      - name: Upload debug APK (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: fileclaw-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+
+      # AUD-034 / Phase 1: fail visibly (but not the build) when the Room schema history is
+      # missing 4.json. room.schemaLocation makes every KSP run emit the current schema, so
+      # this step tells us the committed file was never regenerated/committed for v4.
+      # AUD-034: KSP emits app/schemas/<db>/<version>.json on every run. Commit the generated
+      # v4 schema back to the branch (push events only; PRs are never pushed). Closes the gap
+      # where the drift check below only ever warned.
+      - name: Room schema (AUD-034) — commit generated schema if missing/changed
+        if: github.event_name == 'push'
+        run: |
+          set -e
+          ./gradlew kspDebugKotlin --console=plain > /tmp/ksp.log 2>&1 || { echo "::error title=AUD-034::kspDebugKotlin failed; see tail"; tail -20 /tmp/ksp.log; exit 1; }
+          if [ -z "$(git status --porcelain -- app/schemas)" ]; then
+            echo "Room schema already committed and up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/schemas
+          git commit -m "chore(db): commit Room v4 schema as generated by KSP (AUD-034)"
+          git push origin HEAD:${GITHUB_REF_NAME}
+          echo "::notice title=AUD-034::Room v4 schema was missing/stale and has been committed by the build."
+
+      - name: Room schema drift check
+        run: |
+          if [ ! -f app/schemas/com.example.data.AppDatabase/4.json ]; then
+            echo "::warning title=AUD-034::app/schemas/com.example.data.AppDatabase/4.json still not committed. If the previous step pushed it, this runs before re-checkout; otherwise run ./gradlew kspDebugKotlin and commit."
+          else
+            echo "Room 4.json present."
+          fi
+
+      - name: Upload test reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Phase 2 / AUD-013: on-device instrumented suite. Runs on every PR/push because this repo is a
+  # single-module Android app — every change can touch androidTest-relevant code, and the suite is
+  # small (launch smoke, "open with" resolver wiring, Room 3→4 migration on real SQLite).
+  instrumented:
+    name: Instrumented tests (emulator API 34)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Accept Android SDK licenses
+        run: |
+          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          fi
+
+      - name: Set up Gradle (cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Run instrumented tests (API 34 emulator)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -no-snapshot -no-audio -no-boot-anim
+          disable-animations: true
+          script: bash tools/ci/run-instrumented.sh
+
+      - name: Upload instrumented test reports (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instrumented-test-reports
+          path: app/build/reports/androidTests/connected/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Device-test round 3 (2026-11-20): the viewer pages (docx_editor.html, pdfjs search.html)
+  # carry real rendering/fetch logic that neither compile nor the emulator exercises. These
+  # node/jsdom tests execute the ACTUAL page scripts against fixtures through the same URL
+  # scheme the WebViewAssetLoader serves — the regression class "page JS broke silently"
+  # now fails CI instead of only failing on a device.
+  viewer-js:
+    name: Viewer JS tests (node)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install test dependencies
+        run: npm install --no-audit --no-fund
+        working-directory: tools/viewer-tests
+
+      - name: Generate fixtures
+        run: node make-fixtures.js
+        working-directory: tools/viewer-tests
+
+      - name: Run viewer tests
+        run: node run-all.js
+        working-directory: tools/viewer-tests

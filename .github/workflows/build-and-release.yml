@@ -95,7 +95,15 @@ jobs:
           STORE_PASSWORD: ${{ secrets.FILECLAW_STORE_PASSWORD || secrets.RELEASE_STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.FILECLAW_KEY_ALIAS || secrets.RELEASE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.FILECLAW_KEY_PASSWORD || secrets.RELEASE_KEY_PASSWORD }}
+          BUILD_TYPE: ${{ inputs.build_type }}
         run: |
+          # AUD-021: a *release* build must never silently fall back to a debug/CI-generated
+          # key — Play rejects it and it breaks the update chain. Only debug builds may
+          # use the fallback chain below (kept for sideloading).
+          if [ "$BUILD_TYPE" = "release" ] && [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "::error::build_type=release but no signing keystore is configured. Set the FILECLAW_KEYSTORE_BASE64 (and FILECLAW_STORE_PASSWORD / FILECLAW_KEY_ALIAS / FILECLAW_KEY_PASSWORD) repository secrets. Refusing to sign a release with a debug key."
+            exit 1
+          fi
           if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
             echo "Using custom release keystore from GitHub Secrets..."
             KEYSTORE_PATH="$RUNNER_TEMP/release.keystore"
@@ -105,6 +113,7 @@ jobs:
             echo "FILECLAW_KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
             echo "FILECLAW_KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
           elif [ -f "debug.keystore.base64" ]; then
+            echo "::warning::No release keystore configured — signing DEBUG build with the repository debug key (sideloading only, not for Play)."
             echo "Decoding repository debug.keystore.base64 for signing..."
             KEYSTORE_PATH="$RUNNER_TEMP/repo-debug.keystore"
             base64 -d debug.keystore.base64 > "$KEYSTORE_PATH"

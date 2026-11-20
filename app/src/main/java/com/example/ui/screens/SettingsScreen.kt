@@ -35,7 +35,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
+import com.example.R
+import com.example.ui.theme.MonoFamily
 import com.example.data.SettingEntity
 import com.example.ui.component.ClaudeAppBar
 import com.example.ui.component.ClaudeCard
@@ -80,7 +83,7 @@ fun SettingsScreen(
                 navIcon = Icons.AutoMirrored.Filled.ArrowBack
             )
         },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         modifier = modifier.testTag("settings_screen")
     ) { innerPadding ->
         val scrollState = rememberScrollState()
@@ -443,15 +446,47 @@ fun SettingsScreen(
                 }
             }
 
+            // 5. KEYBOARD SHORTCUTS (docs/UI_FRONTIER.md §5.3) — only shortcuts the app actually honors
+            SettingsSectionHeader(title = stringResource(R.string.shortcuts_section))
+            ClaudeCard {
+                ShortcutRow(stringResource(R.string.shortcuts_palette), stringResource(R.string.shortcuts_palette_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_settings), stringResource(R.string.shortcuts_settings_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_back), stringResource(R.string.shortcuts_back_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_forward), stringResource(R.string.shortcuts_forward_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_recents), stringResource(R.string.shortcuts_recents_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_copy_path), stringResource(R.string.shortcuts_copy_path_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_find), stringResource(R.string.shortcuts_find_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_save), stringResource(R.string.shortcuts_save_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_select_all), stringResource(R.string.shortcuts_select_all_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_undo_redo), stringResource(R.string.shortcuts_undo_redo_desc))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ShortcutRow(stringResource(R.string.shortcuts_properties), stringResource(R.string.shortcuts_properties_desc))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.shortcuts_footer),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+            }
+
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
 
     // Clear Cache Confirmation Dialog
     if (showClearCacheDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showClearCacheDialog = false },
-            title = { Text("Clear Cache") },
+            title = "Clear Cache",
             text = { Text("This will free up $cacheSize of preview and temporary rendering data. All documents remain intact on your device.") },
             confirmButton = {
                 TextButton(onClick = {
@@ -474,9 +509,9 @@ fun SettingsScreen(
 
     // Clear History Confirmation Dialog
     if (showClearHistoryDialog) {
-        AlertDialog(
+        com.example.ui.component.ClawAlertDialog(
             onDismissRequest = { showClearHistoryDialog = false },
-            title = { Text("Clear Recent Files") },
+            title = "Clear Recent Files",
             text = { Text("Are you sure you want to clear your recent file history? Your actual files will not be deleted.") },
             confirmButton = {
                 TextButton(onClick = {
@@ -489,6 +524,39 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showClearHistoryDialog = false }) { Text("Cancel") }
             }
+        )
+    }
+}
+
+/** One shortcut row: monospace key caps on the left, description on the right. */
+@Composable
+private fun ShortcutRow(keys: String, description: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.widthIn(min = 96.dp)
+        ) {
+            Text(
+                text = keys,
+                fontFamily = MonoFamily,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                maxLines = 1
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = description,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
         )
     }
 }

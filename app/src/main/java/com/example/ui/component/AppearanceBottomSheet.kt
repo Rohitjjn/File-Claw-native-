@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.theme.MonoFamily
 
 enum class ViewerSyntaxTheme(
     val title: String,
@@ -162,9 +163,9 @@ fun AppearanceBottomSheet(
         dragHandle = {
             BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
         },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        containerColor = com.example.ui.theme.LocalGlass.current.fillStrong,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         modifier = modifier.testTag("appearance_bottom_sheet")
     ) {
         Column(
@@ -508,14 +509,14 @@ fun AppearanceBottomSheet(
                     Text(
                         text = "// Live Code Preview",
                         fontSize = currentFontSizeSp.sp,
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = MonoFamily,
                         color = currentTheme.accentColor
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "fun renderDocument(file: String) { println(file) }",
                         fontSize = currentFontSizeSp.sp,
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = MonoFamily,
                         color = currentTheme.textColor
                     )
                 }

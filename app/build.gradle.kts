@@ -3,8 +3,10 @@ import java.util.Base64
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.roborazzi)
     jacoco
 }
 
@@ -25,6 +27,13 @@ if (base64File.exists() && !keystoreFile.exists()) {
 
 android {
     namespace = "com.example"
+
+    // Ship the committed Room schema JSONs as assets of the *test* APK so MigrationTestHelper can load them.
+    sourceSets {
+        getByName("androidTest") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
     compileSdk = 34
 
     defaultConfig {
@@ -103,6 +112,7 @@ android {
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
     }
     lint {
         abortOnError = true
@@ -137,12 +147,12 @@ dependencies {
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.kotlinx.serialization.core)
 
     // Image loading (Coil)
     implementation(libs.coil.compose)
     implementation(libs.telephoto.zoomable.coil)
     implementation("androidx.work:work-runtime-ktx:2.9.0")
-    implementation("com.github.mhiew:android-pdf-viewer:3.2.0-beta.3")
     implementation("org.jetbrains:markdown:0.7.3")
     implementation("androidx.webkit:webkit:1.12.1")
 
@@ -159,7 +169,11 @@ dependencies {
     // implementation("org.apache.commons:commons-compress:1.26.0")
 
     testImplementation(libs.junit)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.robolectric)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -172,13 +186,27 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
-// ---- Static analysis: gates only the pure-Kotlin core for now ------------------------------------
+// ---- Static analysis: gates only the pure-Kotlin core; UI layer is advisory for now ----------------
 detekt {
     buildUponDefaultConfig = true
     config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    baseline = rootProject.file("config/detekt/baseline.xml")
     source.setFrom("src/main/java/com/example/core")
-    // Advisory until the first green run on a machine with network access (tracked in docs/TODO.md).
+    // Phase 2: this must be green on core before merge; see docs/TODO.md.
+    ignoreFailures = false
+}
+
+// Advisory run over the Compose UI layer: findings are reported in CI but never fail the build.
+tasks.register("detektUi", io.gitlab.arturbosch.detekt.Detekt::class.java) {
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    setSource(files("src/main/java/com/example/ui", "src/main/java/com/example/viewmodel"))
     ignoreFailures = true
+    reports {
+        xml.required.set(false)
+        html.required.set(true)
+        txt.required.set(true)
+    }
 }
 
 // ---- Coverage for the core package (target: 80% lines) --------------------------------------------

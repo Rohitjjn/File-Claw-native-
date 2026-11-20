@@ -17,6 +17,11 @@
             --text-primary: #f5f5f3;
             --border: #2d2b28;
         }
+        /* Phase 3c: comfortable line-spacing reading aid, toggled from Kotlin via setLineSpacing(). */
+        body.relaxed .docx p,
+        body.relaxed .docx li {
+            line-height: 1.6 !important;
+        }
         html, body {
             margin: 0;
             padding: 0;
@@ -40,11 +45,25 @@
             overscroll-behavior: contain;
         }
 
+        /* BUG-007: while a pinch-preview transform is on the content, clip the
+           scroller — the scaled page transiently overflows the viewport and must
+           never paint outside it (horizontal scrollbar flicker during pinch). */
+        body.pinching #document-scroller {
+            overflow: hidden !important;
+        }
+
+        /* Recraft (2026-11-20, device round 2): the zoom engine no longer uses the
+           CSS `zoom` property — its interaction with width:max-content/min-width
+           collapsed the layout on the reporting device's WebView (the renderer
+           reported success while the surface painted nothing). #output is scaled
+           with transform:scale() and #zoom-sizer is sized to the VISUAL box, so
+           the scroller's scroll extents always match what is on screen. */
+        #zoom-sizer {
+            position: relative;
+        }
         #output {
             position: relative;
-            margin: 0 auto;
             width: max-content;
-            min-width: 100%;
             transform-origin: 0 0;
             transition: none;
         }
@@ -164,8 +183,11 @@
                 height: auto !important;
                 padding: 0 !important;
             }
+            #zoom-sizer {
+                width: auto !important;
+                height: auto !important;
+            }
             #output {
-                zoom: 1 !important;
                 transform: none !important;
                 width: 100% !important;
                 max-width: 100% !important;
@@ -188,6 +210,7 @@
 </head>
 <body>
     <div id="document-scroller">
+      <div id="zoom-sizer">
         <div id="output">
             <div id="loading" class="docx-skeleton" role="status" aria-label="Rendering Word document">
                 <div class="docx-skeleton-page">
@@ -203,12 +226,14 @@
                 </div>
             </div>
         </div>
+      </div>
     </div>
 
     <script>
         const isPrintMode = new URLSearchParams(window.location.search).has('print');
         const scroller = document.getElementById("document-scroller");
         const container = document.getElementById("output");
+        const sizer = document.getElementById("zoom-sizer");
 
         let currentZoom = 1.0; // 1.0 = 100% (Fit Width)
         let baseScale = 1.0;   // Viewport fit-to-width ratio
@@ -230,6 +255,34 @@
             return isPrintMode ? 1.0 : (baseScale * currentZoom);
         }
 
+        // Visual-box layout sync: scale #output with a transform and size
+        // #zoom-sizer to the scaled box, so the scroller's extents always equal
+        // the visible content (no phantom scroll space, no clipped zoom).
+        function syncZoomLayout() {
+            if (isPrintMode || !container || !sizer) return;
+            const z = getEffectiveZoom();
+            container.style.transformOrigin = "0 0";
+            container.style.transform = (Math.abs(z - 1) < 0.005) ? "" : ("scale(" + z + ")");
+            const naturalWidth = container.offsetWidth || measuredPageWidth;
+            const naturalHeight = container.offsetHeight || 0;
+            sizer.style.width = Math.ceil(naturalWidth * z) + "px";
+            sizer.style.height = Math.ceil(naturalHeight * z) + "px";
+        }
+
+        // Compositor-only preview while a pinch is in progress: the transform is
+        // applied instantly (no document re-layout) and the sizer is grown to the
+        // previewed visual box so the previewed content is never clipped.
+        function applyPreviewTransform(scale, originX, originY) {
+            if (isPrintMode || !container || !sizer) return;
+            container.style.transformOrigin = originX + "px " + originY + "px";
+            container.style.transform = "scale(" + scale + ")";
+            const committedZ = getEffectiveZoom();
+            const naturalWidth = container.offsetWidth || measuredPageWidth;
+            const naturalHeight = container.offsetHeight || 0;
+            sizer.style.width = Math.ceil(naturalWidth * committedZ * scale) + "px";
+            sizer.style.height = Math.ceil(naturalHeight * committedZ * scale) + "px";
+        }
+
         function applyCommittedZoom(factor, focalX, focalY) {
             const clamped = Math.min(Math.max(Number(factor) || 1.0, 0.5), 5.0);
             const oldEffectiveZoom = getEffectiveZoom();
@@ -243,9 +296,7 @@
             const contentX = (fx + scroller.scrollLeft) / oldEffectiveZoom;
             const contentY = (fy + scroller.scrollTop) / oldEffectiveZoom;
 
-            container.style.transform = "";
-            container.style.transformOrigin = "";
-            container.style.zoom = String(newEffectiveZoom);
+            syncZoomLayout();
 
             requestAnimationFrame(() => {
                 const newScrollLeft = contentX * newEffectiveZoom - fx;
@@ -266,9 +317,11 @@
         function setZoomDisplay(factor) {
             if (isPrintMode) return;
             const clamped = Math.min(Math.max(Number(factor) || 1.0, 0.5), 5.0);
-            const previewRatio = clamped / currentZoom;
-            container.style.transformOrigin = `${scroller.scrollLeft + window.innerWidth / 2}px ${scroller.scrollTop + window.innerHeight / 2}px`;
-            container.style.transform = `scale(${previewRatio})`;
+            applyPreviewTransform(
+                clamped / currentZoom,
+                scroller.scrollLeft + window.innerWidth / 2,
+                scroller.scrollTop + window.innerHeight / 2
+            );
         }
 
         // On window resize / orientation change: update baseScale and preserve visible page
@@ -287,7 +340,7 @@
             }
 
             baseScale = calculateBaseScale();
-            container.style.zoom = String(getEffectiveZoom());
+            syncZoomLayout();
 
             requestAnimationFrame(() => {
                 if (anchorPage && anchorPage.isConnected) {
@@ -297,6 +350,13 @@
                 }
             });
         });
+
+        // Keep the sizer in sync when the content's own size changes (e.g. the
+        // relaxed line-spacing aid reflows the document). Transforms do not
+        // trigger ResizeObserver, so live pinch previews are never fought over.
+        if (!isPrintMode && 'ResizeObserver' in window) {
+            new ResizeObserver(function () { syncZoomLayout(); }).observe(container);
+        }
 
         // ---------------------------------------------------------------------------
         // Focal-Point Anchored Touch Gestures (Pinch-to-zoom & Double-tap)
@@ -313,6 +373,7 @@
         scroller.addEventListener('touchstart', function (e) {
             if (isPrintMode) return;
             if (e.touches.length === 2) {
+                document.body.classList.add('pinching');
                 isPinching = true;
                 if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
                 const t1 = e.touches[0];
@@ -334,8 +395,7 @@
                     const factor = dist / initialPinchDist;
                     const previewZoom = Math.min(Math.max(initialZoomOnTouch * factor, 0.5), 5.0);
                     const scale = previewZoom / currentZoom;
-                    container.style.transformOrigin = `${pinchFocalX + scroller.scrollLeft}px ${pinchFocalY + scroller.scrollTop}px`;
-                    container.style.transform = `scale(${scale})`;
+                    applyPreviewTransform(scale, pinchFocalX + scroller.scrollLeft, pinchFocalY + scroller.scrollTop);
                 }
             }
         }, { passive: true });
@@ -343,10 +403,9 @@
         scroller.addEventListener('touchend', function (e) {
             if (isPrintMode) return;
             if (isPinching && e.touches.length < 2) {
+                document.body.classList.remove('pinching');
                 isPinching = false;
                 const transform = container.style.transform;
-                container.style.transform = "";
-                container.style.transformOrigin = "";
                 const match = transform.match(/scale\(([^)]+)\)/);
                 if (match) {
                     const previewRatio = parseFloat(match[1]);
@@ -396,6 +455,11 @@
             if (isPrintMode) return;
             document.body.classList.toggle('dark', Boolean(isDark));
             document.documentElement.classList.toggle('dark', Boolean(isDark));
+        }
+
+        function setLineSpacing(mode) {
+            if (isPrintMode) return;
+            document.body.classList.toggle('relaxed', mode === 'relaxed');
         }
 
         function scrollToPage(pageNumber) {
@@ -451,8 +515,17 @@
             }
         }
 
+        // Load state machine: Kotlin supervises the load and may re-issue the init
+        // call; 'loading'/'done' re-entries are no-ops, failures stay retryable.
+        let docxLoadState = "idle";
+
         function renderDocument(arrayBuffer) {
             if (!container) return;
+            if (docxLoadState === "loading" || docxLoadState === "done") return;
+            docxLoadState = "loading";
+
+            // Staging lives on <body>, never inside #output — measurement can never
+            // be contaminated by the container's transform state.
             const staging = document.createElement("div");
             staging.style.position = "absolute";
             staging.style.left = "-100000px";
@@ -460,8 +533,7 @@
             staging.style.visibility = "hidden";
             staging.style.pointerEvents = "none";
             staging.style.width = "max-content";
-            staging.style.minWidth = "100%";
-            container.appendChild(staging);
+            document.body.appendChild(staging);
 
             const options = {
                 className: "docx",
@@ -478,41 +550,85 @@
 
             docx.renderAsync(arrayBuffer, staging, null, options).then(function() {
                 const pages = staging.querySelectorAll('.docx');
-                const totalPages = pages.length > 0 ? pages.length : 1;
-                if (pages.length > 0) {
-                    measuredPageWidth = pages[0].offsetWidth || pages[0].getBoundingClientRect().width || 800;
+                if (!pages.length) {
+                    staging.remove();
+                    docxLoadState = "failed";
+                    showLoadError("The document renderer produced no pages.");
+                    return;
                 }
-                const renderedNodes = Array.from(staging.childNodes);
-                container.replaceChildren(...renderedNodes);
-
-                baseScale = calculateBaseScale();
-                container.style.zoom = String(getEffectiveZoom());
+                measuredPageWidth = pages[0].offsetWidth || pages[0].getBoundingClientRect().width || 800;
+                container.replaceChildren(...Array.from(staging.childNodes));
+                staging.remove();
+                docxLoadState = "done";
+                disarmRenderWatchdog();
 
                 if (!isPrintMode && document.body.classList.contains('dark')) {
                     setDarkMode(true);
                 }
+                baseScale = calculateBaseScale();
+                syncZoomLayout();
                 observePages();
 
-                if (window.Android && window.Android.onDocumentLoaded) {
-                    window.Android.onDocumentLoaded(totalPages);
-                }
-                if (isPrintMode && window.Android && window.Android.onPrintReady) {
-                    window.Android.onPrintReady();
-                }
+                // Painted failsafe (non-print only — an unattached print WebView
+                // never produces animation frames): pages must occupy real layout
+                // space; a collapsed render is reported honestly through the
+                // recovery UI instead of a silent blank screen.
+                const finalize = function () {
+                    if (window.Android && window.Android.onDocumentLoaded) {
+                        window.Android.onDocumentLoaded(pages.length);
+                    }
+                    if (isPrintMode && window.Android && window.Android.onPrintReady) {
+                        window.Android.onPrintReady();
+                    }
+                };
+                if (isPrintMode) { finalize(); return; }
+                requestAnimationFrame(function () {
+                    const firstPage = container.querySelector('.docx');
+                    if (!firstPage || firstPage.getBoundingClientRect().height < 10) {
+                        docxLoadState = "failed";
+                        showLoadError("Rendered pages have no visible content on this device.");
+                        return;
+                    }
+                    finalize();
+                });
             }).catch(function(err) {
+                disarmRenderWatchdog();
                 staging.remove();
+                docxLoadState = "failed";
                 console.error("renderAsync error:", err);
                 showLoadError("Could not render formatted layout (" + (err ? err.toString() : 'Unknown error') + ").");
             });
+        }
+
+        // Device fix (2026-11-18): a stuck blank screen with no error banner meant the
+        // render pipeline never settled (init script failure or a renderAsync hang).
+        // The watchdog surfaces that honestly through onDocumentError -> the Kotlin
+        // recovery UI, instead of a silent skeleton forever.
+        let renderWatchdogTimer = null;
+        function armRenderWatchdog() {
+            if (renderWatchdogTimer) clearTimeout(renderWatchdogTimer);
+            renderWatchdogTimer = setTimeout(function () {
+                renderWatchdogTimer = null;
+                docxLoadState = "failed";
+                if (window.Android && window.Android.onDocumentError) {
+                    window.Android.onDocumentError("Rendering did not complete within 12 seconds.");
+                }
+            }, 12000);
+        }
+        function disarmRenderWatchdog() {
+            if (renderWatchdogTimer) { clearTimeout(renderWatchdogTimer); renderWatchdogTimer = null; }
         }
 
         function loadDocx(base64, isDark) {
             if (!isPrintMode) setDarkMode(isDark);
 
             if (typeof docx === 'undefined' || typeof JSZip === 'undefined') {
+                docxLoadState = "failed";
                 showLoadError("Document preview engine components could not be loaded.");
                 return;
             }
+            if (docxLoadState === "loading" || docxLoadState === "done") return;
+            armRenderWatchdog();
 
             if (!base64 || base64.trim().length === 0) {
                 fetchDocumentBytes().then(function (buffer) {
@@ -524,10 +640,16 @@
                         try { bridged = window.Android.getDocxBase64(); } catch (e) {}
                     }
                     if (!bridged || bridged.trim().length === 0) {
+                        docxLoadState = "failed";
                         showLoadError("Document data is empty or unavailable.");
                         return;
                     }
-                    renderDocument(base64ToBuffer(bridged));
+                    try {
+                        renderDocument(base64ToBuffer(bridged));
+                    } catch (e) {
+                        docxLoadState = "failed";
+                        showLoadError("Invalid DOCX format (" + (e ? e.toString() : 'Parse error') + ")");
+                    }
                 });
                 return;
             }
@@ -535,6 +657,7 @@
             try {
                 renderDocument(base64ToBuffer(base64));
             } catch (err) {
+                docxLoadState = "failed";
                 showLoadError("Invalid DOCX format (" + (err ? err.toString() : 'Parse error') + ")");
             }
         }

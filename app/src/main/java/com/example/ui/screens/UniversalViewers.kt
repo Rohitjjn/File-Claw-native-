@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.Base64
 import android.view.ViewGroup
@@ -59,6 +60,9 @@ import kotlin.math.max
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.example.R
+import androidx.compose.ui.res.stringResource
+import com.example.ui.theme.MonoFamily
 
 private fun humanSize(bytes: Long): String = when {
     bytes >= 1024L * 1024 * 1024 -> "%.2f GB".format(bytes / (1024.0 * 1024 * 1024))
@@ -199,7 +203,7 @@ fun SqliteViewer(fileEntity: RecentFileEntity, modifier: Modifier = Modifier) {
                                 Text(
                                     text = cell,
                                     fontSize = 12.sp,
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = MonoFamily,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     color = if (cell == "NULL") MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
@@ -222,7 +226,15 @@ fun SqliteViewer(fileEntity: RecentFileEntity, modifier: Modifier = Modifier) {
 @Composable
 fun FontViewer(fileEntity: RecentFileEntity, modifier: Modifier = Modifier) {
     val textColor = MaterialTheme.colorScheme.onBackground.toArgb()
+    // AUD-009: a successfully-parsed face is not enough — prove the glyphs resolve.
+    // Paint.hasGlyph("AGg0") is false for corrupt/empty faces that still "load" and
+    // would otherwise render blank/tofu with no explanation (minSdk 26 ≥ API 23).
     val face = remember(fileEntity.path) { runCatching { Typeface.createFromFile(File(fileEntity.path)) }.getOrNull() }
+    val glyphsOk = remember(face) {
+        face != null && runCatching {
+            Paint().apply { typeface = face; textSize = 32f }.hasGlyph("AGg0")
+        }.getOrDefault(false)
+    }
 
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text(
@@ -231,8 +243,11 @@ fun FontViewer(fileEntity: RecentFileEntity, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
         )
         if (face == null) {
-            NoticeBanner("This font file could not be loaded.", Modifier.padding(top = 12.dp))
+            NoticeBanner(stringResource(R.string.font_load_failed), Modifier.padding(top = 12.dp))
             return@Column
+        }
+        if (!glyphsOk) {
+            NoticeBanner(stringResource(R.string.font_no_usable_glyphs), Modifier.padding(top = 12.dp))
         }
         val samples = listOf(
             12f to "The quick brown fox jumps over the lazy dog",

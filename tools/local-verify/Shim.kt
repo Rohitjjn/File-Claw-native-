@@ -7,6 +7,7 @@ annotation class Test(val expected: KClass<out Throwable> = Test.None::class) {
 }
 annotation class Before
 annotation class After
+annotation class Rule
 
 object Assert {
     @JvmStatic fun fail(msg: String?): Nothing = throw AssertionError(msg)

@@ -2,6 +2,27 @@
 
 Full support matrix: `FILE_FORMATS.md` (generated from the code).
 
+## The Phase Plan — 10 phases (0–9)
+
+Full execution plan with per-phase steps, CI test ladder, and exit criteria lives in
+**`docs/PHASES.md`**. Summary:
+
+| # | Phase | Status |
+|---|---|---|
+| 0 | Audit & repo hygiene | ✅ done (2026-11-17) |
+| 1 | Quality Gate green + broken-format repairs | ✅ done 2026-11-17 — CI green (`44051142574` and later) |
+| 2 | Test infrastructure & architecture (split monolith, typed nav, emulator CI) | ✅ done 2026-11-17 — CI green (`44070900120`, `44073036452`, `44085373942`); `docs/prompts/PHASE_3_PROMPT.md` is next |
+| 3 | Claude frontier UI — "The Quiet Desk" | ⏳ next — `docs/prompts/PHASE_3_PROMPT.md` |
+| 4 | Format depth (.ppt, .xlsb, CJK, RAR, GLB/PLY, Parquet…) | ⏳ |
+| 5 | Performance, memory & 500 MB-class files (Macrobenchmark, Baseline Profiles) | ⏳ |
+| 6 | Security & privacy hardening (manifest guard, SAF-first, fuzz gates) | ⏳ |
+| 7 | Accessibility, i18n & device matrix (EN+HI, RTL, TalkBack, API 26→34) | ⏳ |
+| 8 | Release & Play Store (applicationId, signed release, staged rollout) | ⏳ |
+| 9 | Post-release loop & 2.0 streaming renderers | ⏳ ongoing |
+
+Phases supersede the loop-numbering era. Phase 1+ is executed by pasting the matching prompt from
+`docs/prompts/`; each phase ends by writing the next phase's prompt.
+
 ## Milestones
 | Version | Theme | Status |
 |---|---|---|

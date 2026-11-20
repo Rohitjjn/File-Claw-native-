@@ -21,7 +21,7 @@ private tailrec fun android.content.Context.findActivity(): Activity? = when (th
 }
 
 private val LightColorScheme = lightColorScheme(
-    primary = ClaudeTerracotta,
+    primary = ClaudeSoftTomato,
     secondary = ClaudeSoftTomato,
     background = ClaudeAlabaster,
     surface = ClaudeWhite,
@@ -31,11 +31,13 @@ private val LightColorScheme = lightColorScheme(
     onSurface = ClaudeCharcoal,
     outline = ClaudeSandBorder,
     surfaceVariant = ClaudeSelectedBg,
-    onSurfaceVariant = ClaudeTerracotta
+    onSurfaceVariant = ClaudeOnSurfaceVariantLight,
+    surfaceContainer = ClaudeSurfaceContainerLight,
+    surfaceContainerHigh = ClaudeSurfaceContainerHighLight,
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = ClaudeTerracotta,
+    primary = ClaudeSoftTomato,
     secondary = ClaudeOrangeAccent,
     background = ClaudeOnyx,
     surface = ClaudeDarkSurface,
@@ -45,7 +47,9 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = ClaudeDarkText,
     outline = ClaudeDarkBorder,
     surfaceVariant = ClaudeDarkSelectedBg,
-    onSurfaceVariant = ClaudeOrangeAccent
+    onSurfaceVariant = ClaudeOnSurfaceVariantDark,
+    surfaceContainer = ClaudeSurfaceContainerDark,
+    surfaceContainerHigh = ClaudeSurfaceContainerHighDark,
 )
 
 @Composable
@@ -78,7 +82,10 @@ fun FilesClawTheme(
         }
     }
 
-    CompositionLocalProvider(LocalGlass provides if (darkTheme) DarkGlass else LightGlass) {
+    CompositionLocalProvider(
+        LocalGlass provides if (darkTheme) DarkGlass else LightGlass,
+        LocalClawColors provides if (darkTheme) DarkClawColors else LightClawColors
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

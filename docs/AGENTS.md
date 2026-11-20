@@ -8,7 +8,7 @@ Architect · Reader/Analyzer · Planner · Coder · Designer · FileFormat · QA
 Arena Agent Mode did not expose the underlying model identifier in this session. Report that limitation; do not attribute this work to a guessed model such as Claude Sonnet 5 or claim Hermes used a model.
 
 ## State to read on every run (in this order)
-`docs/AGENTS.md` → `docs/TODO.md` (KNOWN ISSUES first) → `docs/CHANGELOG.md` → `docs/ROADMAP.md` → `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, `docs/SECURITY_AUDIT.md`, `docs/SANITY_CHECKLIST.md` → `docs/prompts/README.md` → source.
+`docs/AGENTS.md` → `docs/TODO.md` (KNOWN ISSUES first) → `docs/CHANGELOG.md` → `docs/ROADMAP.md` → `docs/PHASES.md` → `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, `docs/SECURITY_AUDIT.md`, `docs/SANITY_CHECKLIST.md` → `docs/PRD.md`, `docs/FILE_SUPPORT_AUDIT.md`, `docs/UI_FRONTIER.md` → `docs/prompts/README.md` → source.
 Never recreate docs; update them. Add a CHANGELOG entry with **measured** numbers and explicitly label unverified work.
 
 ## Commands
@@ -36,7 +36,7 @@ kotlinc + tools/GenFormatDocs.kt                # regenerate the format matrix
 1. Excel became **view-only** (editing flattened workbooks); CSV/TSV keep editing with explicit save.
 2. HTML preview scripts default **off** with a per-file opt-in.
 3. RAR stays unsupported (previous owner dropped junrar), but reported honestly.
-4. Files opened from other apps are edited as an in-app copy (with a visible message) until write-back is built.
+4. Files opened from other apps are synced back to the source URI on save when one was stored (with the fallback reason shown on failure); in-app-only saves say so. Write-back round trip pending device verification.
 5. Glass design shipped as tokens + cards + app bar + permission screen; root-level backdrop deferred because opaque Scaffolds + NavHost crossfades would overlap.
 6. Gradle wrapper moved 8.5 → 8.7 (AGP 8.4.2 needs ≥ 8.6).
 7. Preview cap kept at 250k chars (unmeasured perf), made safe via read-only flag rather than raising it.

@@ -1,3 +1,76 @@
 <resources>
     <string name="app_name">Files Claw</string>
+
+    <!-- AUD-005/006/007/008/010 honest-failure surfaces (Phase 1; extracted Phase 2) -->
+    <string name="action_open_with">Open with…</string>
+    <string name="action_view_as_hex">View as hex</string>
+    <string name="audio_decode_failed">This audio can\'t be decoded on this device.</string>
+    <string name="audio_playback_failed_title">Can\'t play this audio</string>
+    <string name="video_decode_failed">This video can\'t be decoded on this device (unsupported codec or container).</string>
+    <string name="video_playback_failed_title">Can\'t play this video</string>
+    <string name="pptx_load_failed_title">This presentation couldn\'t be rendered</string>
+    <string name="pptx_watchdog_timeout">The presentation renderer took too long to respond (15 s watchdog).</string>
+    <string name="pptx_load_failed_generic">The presentation preview page could not be loaded.</string>
+    <string name="image_decode_failed">This image can\'t be decoded on this device (no codec for it).</string>
+    <string name="font_load_failed">This font file could not be loaded — it may be corrupt or an unsupported format.</string>
+    <string name="font_no_usable_glyphs">This font loaded but contains no usable glyphs (invalid font) — showing it anyway; glyph boxes may be blank.</string>
+    <string name="hex_empty_file">Empty file.</string>
+    <string name="hex_invalid_offset">Enter a hex (0x…) or decimal offset ≥ 0</string>
+    <string name="file_not_found">File not found on disk. It might have been deleted.</string>
+    <string name="no_app_can_open">No app can open this file</string>
+    <string name="unsupported_preview_notice">This viewer can\'t decode the file on this device; showing the raw bytes.</string>
+    <string name="pptx_http_error">The presentation preview page failed to load (HTTP %1$s).</string>
+
+    <!-- Phase 3b: Quick Open / Command Palette -->
+    <string name="palette_placeholder">Quick Open — files and actions</string>
+    <string name="palette_section_files">Files</string>
+    <string name="palette_section_actions">Actions</string>
+    <string name="palette_no_matches">No matches</string>
+    <string name="palette_show_more">Showing first 12 matches</string>
+    <string name="action_toggle_theme">Toggle dark mode</string>
+    <string name="action_open_settings">Open Settings</string>
+    <string name="action_open_search">Open Search</string>
+    <string name="action_open_all_files">Open All Files</string>
+    <string name="action_clear_recents">Clear recent files</string>
+    <string name="path_copied">Path copied to clipboard</string>
+    <!-- Phase 3b: navigation rail + keyboard shortcut map (docs/UI_FRONTIER.md §5.2/§5.3) -->
+    <string name="nav_rail_home">Home</string>
+    <string name="nav_rail_all_files">All files</string>
+    <string name="nav_rail_search">Search</string>
+    <string name="nav_rail_settings">Settings</string>
+
+    <string name="shortcuts_section">KEYBOARD SHORTCUTS</string>
+    <string name="shortcuts_palette">Ctrl/Cmd+K&#160;·&#160;Ctrl/Cmd+P</string>
+    <string name="shortcuts_palette_desc">Open or close Quick Open</string>
+    <string name="shortcuts_settings">Ctrl/Cmd+,</string>
+    <string name="shortcuts_settings_desc">Open Settings</string>
+    <string name="shortcuts_back">Alt+Left</string>
+    <string name="shortcuts_back_desc">Back</string>
+    <string name="shortcuts_forward">Alt+Right</string>
+    <string name="shortcuts_forward_desc">Forward (after Alt+Left)</string>
+    <string name="shortcuts_recents">Ctrl/Cmd+1…9</string>
+    <string name="shortcuts_recents_desc">Open the 1st…9th recent file</string>
+    <string name="shortcuts_copy_path">Ctrl/Cmd+Shift+C</string>
+    <string name="shortcuts_copy_path_desc">Copy the current file path</string>
+    <string name="shortcuts_find">Ctrl/Cmd+F</string>
+    <string name="shortcuts_find_desc">Find in the open document</string>
+    <string name="shortcuts_save">Ctrl/Cmd+S</string>
+    <string name="shortcuts_save_desc">Save edits (while editing)</string>
+    <string name="shortcuts_select_all">Ctrl/Cmd+A</string>
+    <string name="shortcuts_select_all_desc">Select all text (while editing)</string>
+    <string name="shortcuts_undo_redo">Ctrl/Cmd+Z&#160;·&#160;Ctrl/Cmd+Y</string>
+    <string name="shortcuts_undo_redo_desc">Undo / redo (while editing)</string>
+    <string name="shortcuts_properties">Ctrl/Cmd+Shift+D</string>
+    <string name="shortcuts_properties_desc">Open file properties (in a viewer)</string>
+    <string name="shortcuts_footer">Hardware keyboards only. Reader shortcuts apply inside an open viewer. The full map lives in docs/UI_FRONTIER.md §5.3.</string>
+    <!-- Phase 3c: reader chrome v2 (§6/§7) -->
+    <string name="docx_line_spacing_desc">Comfortable line spacing</string>
+    <string name="show_password">Show password</string>
+    <string name="hide_password">Hide password</string>
+    <string name="report_render_item">Report this page renders wrong</string>
+    <string name="report_render_title">Report a rendering problem</string>
+    <string name="report_render_body">Files Claw never sends data automatically. The diagnostic details below (app version, page, file type — no contents, no path) go wherever you choose to send them.</string>
+    <string name="report_render_copy">Copy details</string>
+    <string name="report_render_share">Share…</string>
+    <string name="report_render_copied">Diagnostic details copied</string>
 </resources>
