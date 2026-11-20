@@ -4,6 +4,52 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [v1.3.2-arena] — 2026-11-20 · device-test round 2 (DOCX render recraft, PDF live scrubbing, spring focus motion, release APKs)
+
+**Verification status:** compile/test/assembleDebug + instrumented emulator tests green in GitHub
+Actions on branch `arena/5100f329-file-claw-native` (run id in the worklog); release APK built by
+the tag workflow. Device round-1 fixes that this round builds on were confirmed on the reporting
+device where noted. Everything below is **pending the next device round** unless stated.
+
+### Fixed
+- **DOCX preview blank screen — render pipeline recrafted (device round 1: NOT fixed; the print
+  path of the SAME file rendered perfectly).** Round-1 screenshots (pixel-analyzed) showed the
+  page surface painted nothing at all — no skeleton, no error, and the JS had reported success.
+  The preview now mirrors the device-proven print path exactly and adds supervision:
+  - The init script is now just `loadDocx(null, night)` — identical to the print path; the old
+    pre-render `setZoom`/`setLineSpacing` calls are gone (zoom/dark/spacing re-apply after load
+    through the existing state effects).
+  - The zoom engine no longer uses the CSS `zoom` property (its interaction with
+    `width:max-content`/`min-width:100%` collapses layout on some WebView builds). `#output` is
+    scaled with `transform:scale()` and a new `#zoom-sizer` is sized to the visual box, so scroll
+    extents always match the visible content; pinch previews resize the sizer live.
+  - `renderAsync` staging moved from inside the (transformed) container to `document.body`, so
+    page measurement can never be zoom-contaminated; zero-page renders and collapsed (unpainted)
+    layouts are reported honestly through the recovery UI instead of a blank surface.
+  - The load is now supervised from Kotlin: the init is re-issued at ~4 s and ~9 s while the
+    loading overlay is up, and at ~14 s the labeled text-recovery state takes over with the
+    reason; the in-page render watchdog now fires at 12 s. **(not verified on device)**
+- **PDF page scrubber is now live (Google-Drive-style).** Grabbing the right-edge rail jumps to
+  the touched position immediately, and every page boundary crossed while dragging scrolls the
+  document in real time (page-granular emissions — the render pipeline is never spammed; pages
+  passed over are still not eagerly rendered). Previously the jump happened only on release.
+  **(not verified on device)**
+
+### Changed
+- **Focus-mode transitions rebuilt on spring physics** (third style; §4.4): the top bar and
+  bottom tray glide in over half their height with a no-bounce low-stiffness spring and leave
+  with a quick medium-stiffness snap; the focus pill pops in with a slight overshoot (damping
+  0.62) from 0.85 scale. Springs are velocity-continuous and read smoother than the previous
+  emphasized tweens. **(not verified on device)**
+- **Tag builds are now RELEASE APKs** (`assembleRelease`, R8-minified) instead of debug APKs,
+  published as `FileClaw-<tag>-release.apk`. Without `FILECLAW_*` secrets the release build type
+  falls back to the debug key (pre-existing behavior), so test builds stay installable —
+  release-optimized, debug-signed, not for Play.
+
+### Confirmed on device (round 1)
+- PDF preview opens (the pdf.js main-thread fake-worker fix worked); photo pinch-zoom pager lock
+  was not re-reported this round but also not explicitly confirmed.
+
 ## [v1.3.1-arena] — 2026-11-18 · device-test round 1 fixes (from v1.3.0-arena on-device feedback)
 
 **Verification status:** compile/test/assembleDebug + instrumented emulator tests green in GitHub

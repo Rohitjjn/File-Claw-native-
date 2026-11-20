@@ -346,3 +346,31 @@ Work Log (4 device-reported bugs):
   re-enabled at 1x / on page settle.
 All four are structural fixes reasoned from the reported symptoms; they are compile- and
 CI-verified, device re-verification pending in the next test build.
+
+Task ID: DEVICE-TEST-ROUND-2 (2026-11-20, from v1.3.1-arena device feedback)
+Agent: Arena Agent (Claude)
+Baseline: branch `arena/5100f329-file-claw-native` @ `b6957b9`.
+
+Evidence gathering (the two tester screenshots were OCR'd + pixel-analyzed in the sandbox —
+rapidocr-onnxruntime; no vision): screenshot 1 = DOCX viewer with toolbar (search Q, 125% zoom)
+but a body that is 96.6% pure #faf9f5 with ZERO skeleton cards, error text, or spinner pixels;
+screenshot 2 = the Android print preview of the same file rendering perfectly (2 pages,
+Devanagari, shading/watermark effects). Conclusion: the print path of the SAME html/asset-loader
+works on the device; the preview path painted nothing while reporting success, and "still
+loading" had no timeout at all.
+
+Work log:
+- DOCX recraft: init reduced to the exact print-proven call; CSS-`zoom` engine replaced with
+  transform:scale + #zoom-sizer (visual-box sizing, live-sized pinch previews, ResizeObserver for
+  line-spacing reflows); renderAsync staging moved to document.body; zero-page and collapsed-
+  layout renders reported honestly; Kotlin-supervised load (init re-issued ~4 s/~9 s, honest
+  text recovery at ~14 s); JS render watchdog 12 s; loadDocx/renderDocument state machine makes
+  Kotlin re-injection a no-op once loading/done.
+- PDF scrubber: live Drive-style scrubbing (jump on grab + one emission per page boundary crossed
+  during the drag; release only commits if the last live page differs).
+- Focus-mode chrome animations: rebuilt on springs (third style) — NoBouncy MediumLow glide in,
+  Medium snap out; pill pops with 0.62 damping overshoot.
+- apk-release.yml: assembleDebug -> assembleRelease (R8), artifact FileClaw-<tag>-release.apk;
+  release build type falls back to debug signing without secrets (pre-existing gradle logic).
+- Photo pinch-zoom (round-1 fix) was not re-reported; left unchanged, still not device-confirmed.
+All changes are CI-verified only; device re-verification pending in the next test build.

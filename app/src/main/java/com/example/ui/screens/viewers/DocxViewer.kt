@@ -87,9 +87,7 @@ fun DocxPreviewWebView(
     // Fresh values for the WebViewClient closures created once in the factory: reading
     // them at callback time prevents a stale initial zoom/theme being re-applied after
     // the document finishes loading (Loop 10).
-    val latestZoomForPageLoad = androidx.compose.runtime.rememberUpdatedState(zoomFactor)
     val latestNightModeForPageLoad = androidx.compose.runtime.rememberUpdatedState(isNightMode)
-    val latestLineSpacingForPageLoad = androidx.compose.runtime.rememberUpdatedState(lineSpacingRelaxed)
 
     // Loop 12 (Bug B): query changes search exactly once; arrow presses issue only
     // next/prev deltas, so all N matches stay reachable in both directions.
@@ -153,6 +151,37 @@ fun DocxPreviewWebView(
         if (webViewRef != null && !isWebViewLoading && pureKotlinFallback == null && scrollToPage != null) {
             webViewRef?.evaluateJavascript("scrollToPage(${scrollToPage + 1});", null)
             onScrollProgressHandled()
+        }
+    }
+    // Device round 2 (2026-11-20): supervised load. "Still loading" used to have no
+    // timeout at all (a silent cream screen). While the loading overlay is up, the
+    // exact print-proven init is re-issued at ~4 s and ~9 s; at ~14 s the honest
+    // text-recovery state takes over with the reason. The in-page watchdog covers
+    // renderAsync hangs at 12 s. Together: content, or an honest error — never blank.
+    LaunchedEffect(webViewRef, base64Docx, docxReloadKey, pureKotlinFallback) {
+        val supervisedWebView = webViewRef ?: return@LaunchedEffect
+        var attempt = 0
+        while (isActive) {
+            delay(if (attempt == 0) 4000L else 5000L)
+            if (!isActive) return@LaunchedEffect
+            if (pureKotlinFallback != null || !isWebViewLoading) return@LaunchedEffect
+            if (webViewRef !== supervisedWebView) return@LaunchedEffect
+            attempt++
+            if (attempt <= 2) {
+                supervisedWebView.evaluateJavascript(
+                    "if (typeof loadDocx === 'function') { loadDocx(null, ${latestNightModeForPageLoad.value}); }",
+                    null
+                )
+            } else {
+                val extracted = runCatching {
+                    com.example.core.format.DocxExtractor.extractText(File(fileEntity.path))
+                }.getOrNull()
+                fallbackReason = "The preview did not finish loading on this device (supervised after ~14 s)."
+                pureKotlinFallback = extracted
+                isWebViewLoading = false
+                latestRendererFallbackCallback.value(true)
+                return@LaunchedEffect
+            }
         }
     }
 
@@ -348,22 +377,14 @@ fun DocxPreviewWebView(
 
                             webViewClient = object : android.webkit.WebViewClient() {
                                 override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
-                                    // Apply the CURRENT zoom factor (not a stale factory-time
-                                    // capture) BEFORE loadDocx so the document never flashes at
-                                    // 100% before settling on the preferred zoom. Loop 12: the
-                                    // bytes are streamed by the page itself (loadDocx(null, ...));
-                                    // the bridge base64 path is only the in-page fallback.
-                                    val freshZoom = latestZoomForPageLoad.value
+                                    // Device round 2 (2026-11-20): the init is now IDENTICAL to
+                                    // the print path that provably works on the reporting device —
+                                    // just loadDocx. Zoom / dark mode / line spacing are re-applied
+                                    // by the LaunchedEffects above once isWebViewLoading flips, so
+                                    // nothing needs to run before the render.
                                     val freshNightMode = latestNightModeForPageLoad.value
-                                    val freshLineSpacing = latestLineSpacingForPageLoad.value
-                                    // Device fix (2026-11-18): one throwing statement in this
-                                    // script used to skip loadDocx entirely (blank screen, no
-                                    // error). The cosmetic calls are now individually guarded so
-                                    // the document load can never be prevented by them.
                                     view?.evaluateJavascript(
-                                        "try{setZoom($freshZoom);}catch(e){} " +
-                                            "try{setLineSpacing(${if (freshLineSpacing) "'relaxed'" else "'document'"});}catch(e){} " +
-                                            "loadDocx(null, $freshNightMode);",
+                                        "loadDocx(null, $freshNightMode);",
                                         null
                                     )
                                 }

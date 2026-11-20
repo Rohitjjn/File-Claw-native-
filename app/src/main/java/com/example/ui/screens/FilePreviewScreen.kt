@@ -82,8 +82,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.ui.graphics.TransformOrigin
-import com.example.ui.theme.Motion
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -662,26 +662,29 @@ fun FilePreviewScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            // Device polish (2026-11-18, §4.4): reader chrome settles with the emphasized
-            // curves — a partial slide (third of the bar) + fade + a 0.98 scale from the
-            // bar's own edge, instead of the old full-height linear-ish slide.
+            // Device round 2 (2026-11-20, §4.4): rebuilt on SPRING physics — no fixed
+            // duration; the bar glides in over half its height and settles naturally,
+            // then leaves with a quick no-bounce snap. Springs read smoother than any
+            // tween of the same travel (velocity-continuous at both ends).
             androidx.compose.animation.AnimatedVisibility(
                 visible = isBarsVisible,
                 enter = slideInVertically(
-                    animationSpec = tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate),
-                    initialOffsetY = { -it / 3 }
-                ) + fadeIn(tween(Motion.SLOW_MS)) + scaleIn(
-                    initialScale = 0.98f,
-                    animationSpec = tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate),
-                    transformOrigin = TransformOrigin(0.5f, 0f)
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
+                    initialOffsetY = { -it / 2 }
+                ) + fadeIn(
+                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
                 ),
                 exit = slideOutVertically(
-                    animationSpec = tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate),
-                    targetOffsetY = { -it / 3 }
-                ) + fadeOut(tween(Motion.BASE_MS)) + scaleOut(
-                    targetScale = 0.98f,
-                    animationSpec = tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate),
-                    transformOrigin = TransformOrigin(0.5f, 0f)
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    ),
+                    targetOffsetY = { -it / 2 }
+                ) + fadeOut(
+                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
                 ),
                 modifier = Modifier.statusBarsPadding()
             ) {
@@ -1051,20 +1054,22 @@ fun FilePreviewScreen(
                 androidx.compose.animation.AnimatedVisibility(
                     visible = isBarsVisible,
                     enter = slideInVertically(
-                        animationSpec = tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate),
-                        initialOffsetY = { it / 3 }
-                    ) + fadeIn(tween(Motion.SLOW_MS)) + scaleIn(
-                        initialScale = 0.98f,
-                        animationSpec = tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate),
-                        transformOrigin = TransformOrigin(0.5f, 1f)
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        initialOffsetY = { it / 2 }
+                    ) + fadeIn(
+                        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
                     ),
                     exit = slideOutVertically(
-                        animationSpec = tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate),
-                        targetOffsetY = { it / 3 }
-                    ) + fadeOut(tween(Motion.BASE_MS)) + scaleOut(
-                        targetScale = 0.98f,
-                        animationSpec = tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate),
-                        transformOrigin = TransformOrigin(0.5f, 1f)
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        targetOffsetY = { it / 2 }
+                    ) + fadeOut(
+                        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
                     )
                 ) {
                     Box(
@@ -1718,18 +1723,24 @@ fun FilePreviewScreen(
             // Subtle Floating Back & Exit Pill when !isBarsVisible (Focus mode)
             androidx.compose.animation.AnimatedVisibility(
                 visible = !isBarsVisible,
-                enter = fadeIn(tween(Motion.SLOW_MS)) +
-                    slideInVertically(tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate)) { -it / 4 } +
-                    scaleIn(
-                        initialScale = 0.9f,
-                        animationSpec = tween(Motion.SLOW_MS, easing = Motion.EmphasizedDecelerate)
-                    ),
-                exit = fadeOut(tween(Motion.BASE_MS)) +
-                    slideOutVertically(tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate)) { -it / 4 } +
-                    scaleOut(
-                        targetScale = 0.9f,
-                        animationSpec = tween(Motion.BASE_MS, easing = Motion.EmphasizedAccelerate)
-                    ),
+                enter = fadeIn(
+                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                ) + slideInVertically(
+                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+                ) { -it / 2 } + scaleIn(
+                    initialScale = 0.85f,
+                    // A touch of overshoot: the pill pops just past 1.0 and settles —
+                    // a livelier focus entry than a straight tween.
+                    animationSpec = spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMedium)
+                ),
+                exit = fadeOut(
+                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                ) + slideOutVertically(
+                    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                ) { -it / 2 } + scaleOut(
+                    targetScale = 0.9f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+                ),
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .statusBarsPadding()

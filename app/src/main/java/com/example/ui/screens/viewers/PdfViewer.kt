@@ -543,9 +543,12 @@ private fun PdfOpeningSkeleton(modifier: Modifier = Modifier) {
  * Loop 14: right-edge draggable page scrubber. A slim rail with a grabbable
  * thumb sits over the page-margin area (never over body text), shows
  * `current / total` in a bubble while dragging, and maps the drag fraction to a
- * valid 1-based page via [PdfRotationPolicy.pageFromFraction]. Navigation fires
- * on release through [onJumpRequest] — the pages passed over are NOT eagerly
- * rendered, the shared gotoPdfPage pipeline simply scrolls to the target.
+ * valid 1-based page via [PdfRotationPolicy.pageFromFraction]. Device round 2
+ * (2026-11-20): Google-Drive-style LIVE scrubbing — grabbing the rail at a new
+ * position jumps immediately, and every page boundary crossed while dragging
+ * emits [onJumpRequest] right away (page-granular, so the pipeline is never
+ * spammed). The pages passed over are NOT eagerly rendered; the shared
+ * gotoPdfPage pipeline simply scrolls to the target.
  */
 @Composable
 private fun PdfPageScrubber(
@@ -556,6 +559,8 @@ private fun PdfPageScrubber(
 ) {
     var isDragging by remember { mutableStateOf(false) }
     var dragFraction by remember { mutableFloatStateOf(0f) }
+    // Last page emitted to onJumpRequest during the current drag (0 = none yet).
+    var lastEmittedPage by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val pageTotal = pageCount.coerceAtLeast(1)
     val fraction = if (isDragging) dragFraction else
@@ -659,18 +664,31 @@ private fun PdfPageScrubber(
                             val available = (size.height - with(density) { handleHeight.toPx() }).coerceAtLeast(1f)
                             dragFraction = ((offset.y - with(density) { handleHeight.toPx() / 2f }) / available)
                                 .coerceIn(0f, 1f)
+                            // Grabbing the rail at a new position jumps immediately.
+                            val startPage = com.example.core.format.PdfRotationPolicy
+                                .pageFromFraction(dragFraction, pageTotal)
+                            lastEmittedPage = startPage
+                            onJumpRequest(startPage)
                         },
                         onDrag = { change, _ ->
                             change.consume()
                             val available = (size.height - with(density) { handleHeight.toPx() }).coerceAtLeast(1f)
                             dragFraction = ((change.position.y - with(density) { handleHeight.toPx() / 2f }) / available)
                                 .coerceIn(0f, 1f)
+                            // Live scrubbing: each page boundary crossed while dragging
+                            // scrolls the document immediately (one emission per page).
+                            val livePage = com.example.core.format.PdfRotationPolicy
+                                .pageFromFraction(dragFraction, pageTotal)
+                            if (livePage != lastEmittedPage) {
+                                lastEmittedPage = livePage
+                                onJumpRequest(livePage)
+                            }
                         },
                         onDragEnd = {
                             val targetPage = com.example.core.format.PdfRotationPolicy
                                 .pageFromFraction(dragFraction, pageTotal)
                             isDragging = false
-                            onJumpRequest(targetPage)
+                            if (targetPage != lastEmittedPage) onJumpRequest(targetPage)
                         },
                         onDragCancel = { isDragging = false }
                     )
