@@ -1,0 +1,10 @@
+{
+  "name": "fileclaw-viewer-tests",
+  "private": true,
+  "description": "Node/jsdom tests that execute the REAL viewer HTML/JS (docx_editor.html, pdfjs search.html loading path) against fixtures, mirroring the Android WebViewAssetLoader URL scheme. Run: node make-fixtures.js && node run-all.js",
+  "type": "module",
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "jsdom": "^26.0.0"
+  }
+}

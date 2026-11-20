@@ -45,3 +45,8 @@ jacoco/
 *.tmp
 *.bak
 *.orig
+
+# Viewer JS tests (tools/viewer-tests): deps + generated fixtures are reproducible
+tools/viewer-tests/node_modules/
+tools/viewer-tests/fixtures/
+tools/viewer-tests/package-lock.json
