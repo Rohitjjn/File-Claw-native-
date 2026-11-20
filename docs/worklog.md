@@ -374,3 +374,34 @@ Work log:
   release build type falls back to debug signing without secrets (pre-existing gradle logic).
 - Photo pinch-zoom (round-1 fix) was not re-reported; left unchanged, still not device-confirmed.
 All changes are CI-verified only; device re-verification pending in the next test build.
+
+Task ID: DEVICE-TEST-ROUND-3 (2026-11-20, "all issues again" after v1.3.2-arena; karpathy-guidelines skill applied)
+Agent: Arena Agent (Claude)
+Baseline: branch `arena/5100f329-file-claw-native` @ `f9077ea`.
+
+Method change (the skill's core demand): no more reasoning-only fixes — build a loop that EXECUTES
+the code under test. A node/jsdom harness (tools/viewer-tests) now runs the real viewer page
+scripts against generated DOCX/PDF fixtures via the WebViewAssetLoader URL scheme.
+
+Sandbox dead ends this round (do not retry): @sparticuz/chromium 153 binaries launch but hang at
+zygote/gpu even with the package's exact args + al2023 libs + fonts + swiftshader (sandbox
+restriction); electron's binary CDN (objects.githubusercontent.com) is off the allowlist; release
+asset downloads via npm postinstall therefore fail. jsdom + node module imports are the working
+stack. Harness bugs found while wiring it (all fixed in the harness, none in app code):
+window.Request/Response missing in jsdom (shimmed); cross-realm ArrayBuffer rejected by JSZip
+(bytes now copied into a jsdom-realm ArrayBuffer); jsdom lacks setImmediate (JSZip file .async()
+penders forever without it — the DOCX render "hang" was this); jsdom lacks scrollIntoView;
+pdf.js fetchData needs document.baseURI and an explicit 'arraybuffer' response type.
+
+Test results at HEAD (v1.3.2 code): ALL PASS — the JS pipeline (load state machine, fetch,
+renderAsync DOM build, bridges, transform+sizer zoom, search, dark mode, print parity) is correct
+in a DOM environment. Conclusion: the DOCX blank screen on the device is in the Android WebView
+layer. Diffing preview vs print WebView configs left exactly two differences (useWideViewPort=true,
+loadWithOverviewMode=true — print has both OFF and renders on-device). Removed both from the
+preview (commit 7b2ab87) — the preview configuration is now identical to the device-proven print
+path. Supervisor recovery now reports docxLoadState + last console line for a conclusive next
+device report.
+
+Commits: 1e59eef (harness), 24a153c (CI job), 7b2ab87 (WebView parity + diagnostics),
+84c6f38 (dual-APK release workflow). CI run 44707780991 green (Quality Gate, Instrumented,
+Viewer JS). Tag v1.3.3-arena ships release + debug APKs for device bisect.

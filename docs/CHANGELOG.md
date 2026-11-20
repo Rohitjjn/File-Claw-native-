@@ -4,6 +4,43 @@ Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measur
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
 no Maven access). See `TODO.md` → KNOWN ISSUES.
 
+## [v1.3.3-arena] — 2026-11-20 · device-test round 3 (real test harness; WebView print-parity fix; dual-APK releases)
+
+**Verification status:** Quality Gate + Instrumented tests + the NEW "Viewer JS tests (node)" job all
+green in run `44707780991`. This round introduced an executable verification loop for the viewer
+pages instead of reasoning-only fixes; the remaining unknowns are called out per item.
+
+### Added
+- **Viewer JS test harness** (`tools/viewer-tests`, CI job "Viewer JS tests (node)"): executes the
+  REAL `docx_editor.html` scripts (jszip + docx-preview + the page engine) in jsdom against a
+  generated DOCX fixture through the same URL scheme `WebViewAssetLoader` serves, and drives
+  pdf.js's actual loading mechanism (`globalThis.pdfjsWorker` fake worker + `fetchData` through an
+  intercepted fetch + the page's `getDocument` options). 17 assertions covering: load state machine,
+  fetch fallback, DOM construction, `onDocumentLoaded`/`onPrintReady` bridges, the transform+sizer
+  zoom engine, idempotent re-load (the Kotlin supervisor's re-issued init), in-document search,
+  dark mode, line spacing, and print-mode parity. **All pass against the shipped page code** —
+  i.e. the v1.3.2 JS pipeline is verified correct in a real DOM environment (geometry stubbed and
+  labeled as such). Two harness gaps were found and shimmed (jsdom lacks `setImmediate`, which
+  JSZip's scheduler needs; pdf.js needs `document.baseURI` for fetch URL validation) — these are
+  test-environment gaps, not app bugs.
+
+### Fixed
+- **DOCX blank screen — Android WebView layer** (rounds 1–2 fixed the JS layer; the harness now
+  proves that layer correct). Diffing the preview WebView against the print WebView — which
+  renders the same file correctly ON THE REPORTING DEVICE — left exactly two functional
+  differences: `useWideViewPort = true` and `loadWithOverviewMode = true` (print has both off).
+  Both are now removed from the preview, making its configuration identical to the device-proven
+  print path. **(not verified on device — this is the top suspect for the blank render)**
+- **DOCX recovery diagnostics:** if the supervised load still fails on a device, the recovery
+  banner now includes the page's own `docxLoadState` and the last JS console line — the next
+  device report names its cause instead of "blank screen".
+
+### Changed
+- **Tag builds now ship TWO APKs**: `FileClaw-<tag>-release.apk` (R8, primary) and
+  `FileClaw-<tag>-debug.apk` (bisect control). v1.3.2-arena was the first R8-minified build; if
+  a viewer misbehaves only in the release APK, the debug APK distinguishes an R8 regression from
+  a code bug.
+
 ## [v1.3.2-arena] — 2026-11-20 · device-test round 2 (DOCX render recraft, PDF live scrubbing, spring focus motion, release APKs)
 
 **Verification status:** compile/test/assembleDebug + instrumented emulator tests green in GitHub
