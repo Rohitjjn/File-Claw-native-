@@ -52,6 +52,15 @@ This audit established source-level behavior and a static baseline, not a green 
 - The repository guide claims direct `./gradlew ...` commands, but both `gradlew` and `tools/local-verify/verify-core.sh` are tracked non-executable. Workflow compensates for the wrapper with `chmod +x`; local docs do not consistently do so.
 - Release signing/build behavior was reviewed statically only. No Actions run, published artifact, signing identity, or artifact checksum was verified in this audit.
 
+## Authorized DOCX follow-up (2026-11-21)
+
+The owner authorized scoped DOCX rehabilitation. The implementation is recorded in `FILE_FORMAT_REHABILITATION.md`; the source-audited issue mapping is `ISSUE_REGISTER.md`. Keep the renderer/offline architecture and read-only behavior; do not expand into PDF or other formats.
+
+- Local checks: Node search regression tests passed 5/5; inline JS syntax checks, manifest XML parsing, and `git diff --check` passed. `bash ./gradlew :app:testDebugUnitTest --no-daemon` was attempted and blocked before Gradle startup because this sandbox has no Java.
+- First remote verification run `44925707980`, commit `d3c4d2ae9fb8124c780798bdd5150fb9891f1a36`: JVM tests, lint, Detekt task, Kotlin compilation, debug APK build, bundled-JS checks, and artifact upload all succeeded. Android emulator/instrumentation step failed with exit 127 before instrumentation; investigation points to `adb` not being added to PATH after SDK installation. This is a workflow setup failure, not a DOCX test result. The failure prompted a workflow fix appending SDK platform-tools and emulator directories to `GITHUB_PATH`; that workflow correction has not yet run.
+- An APK and reports were uploaded by the failed workflow's `always()` artifact step, but the artifact is deliberately not being delivered because the exact workflow run did not pass all checks. Do not treat it as a verified deliverable.
+- Print dialog/cancellation, renderer failure recovery, rotation/lifecycle, heavy files, and owner-device symptoms have not been physically reproduced or verified. No user-visible bug root cause has been confirmed.
+
 ## Next decision
 
-The next approved engineering phase should investigate DOCX end-to-end and report a reproduction-backed defect list without changing source code. See `FILE_FORMAT_REHABILITATION.md`. Wait for explicit owner approval before fixes. Keep PDF and other formats out of DOCX work unless a shared cause is demonstrated and scope is approved.
+Finish CI on the corrected workflow and exact latest commit. If green, provide the debug APK artifact and report the issue-by-issue evidence with explicit runtime limitations. Then stop for physical-device feedback; do not start PDF rehabilitation.

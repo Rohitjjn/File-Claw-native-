@@ -45,6 +45,8 @@ jobs:
             "build-tools;34.0.0" \
             "emulator" \
             "system-images;android-34;google_apis;x86_64"
+          # sdkmanager installs tools but does not guarantee they are on PATH for later steps.
+          printf '%s\n' "$ANDROID_HOME/platform-tools" "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
           printf 'no\n' | "$AVDMANAGER" create avd --name docx-api-34 --package "system-images;android-34;google_apis;x86_64" --device pixel_2 --force
 
       - name: Run unit tests, lint, Detekt, WebView instrumentation and debug APK build
