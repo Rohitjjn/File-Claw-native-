@@ -1,6 +1,9 @@
 # AGENTS.md: how the improvement loop works
 
-This file lets the next run resume with full context. It is the operating manual for the repository's improvement loop; versioned prompt history and the next prompt are indexed in `docs/prompts/README.md`.
+This file lets the next run resume with full context. Root [`AGENTS.md`](../AGENTS.md) contains the concise permanent project policy; this document preserves the improvement-loop history. Current checkout facts and test evidence are in [`PROJECT_STATUS.md`](PROJECT_STATUS.md), audited findings in [`ISSUE_REGISTER.md`](ISSUE_REGISTER.md), and the DOCX approval boundary in [`FILE_FORMAT_REHABILITATION.md`](FILE_FORMAT_REHABILITATION.md). Do not use historical prompt/changelog claims as current test evidence. Versioned prompt history and the current prompt index are in `docs/prompts/README.md`.
+
+## Current task boundary (2026-11-21)
+The owner explicitly authorized scoped DOCX rehabilitation in this turn. Implement only the documented DOCX scope in `FILE_FORMAT_REHABILITATION.md`, retain offline/read-only behavior and the existing renderer, and do not expand to PDF or other formats. Approval is not pending. Static checks and the Node search tests have run; Gradle/Android checks and the workflow have not yet completed. See `PROJECT_STATUS.md` for literal outcomes. Arena Agent Mode exposes no verified native skill installation here; adapted engineering principles in root `AGENTS.md` must not be described as an installed upstream plugin.
 
 ## Roles and truthful tool use
 Architect · Reader/Analyzer · Planner · Coder · Designer · FileFormat · QA/Tester · Reviewer · DevOps · Docs · Release are useful review perspectives, not agents that are automatically present. Do not claim a multi-agent team ran unless an actual runner produced verifiable work. The user requested Hermes Agent from `https://github.com/NousResearch/hermes-agent`; it was inspected but was **not cloned, installed, or run** in Loop 6. Use it in a later loop only if a configured runner/provider is actually available. Do not request or store credentials in chat.
@@ -8,16 +11,17 @@ Architect · Reader/Analyzer · Planner · Coder · Designer · FileFormat · QA
 Arena Agent Mode did not expose the underlying model identifier in this session. Report that limitation; do not attribute this work to a guessed model such as Claude Sonnet 5 or claim Hermes used a model.
 
 ## State to read on every run (in this order)
-`docs/AGENTS.md` → `docs/TODO.md` (KNOWN ISSUES first) → `docs/CHANGELOG.md` → `docs/ROADMAP.md` → `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, `docs/SECURITY_AUDIT.md`, `docs/SANITY_CHECKLIST.md` → `docs/prompts/README.md` → source.
-Never recreate docs; update them. Add a CHANGELOG entry with **measured** numbers and explicitly label unverified work.
+`AGENTS.md` → `docs/AGENTS.md` → `docs/PROJECT_STATUS.md` → `docs/ISSUE_REGISTER.md` → `docs/TODO.md` (KNOWN ISSUES first) → `docs/CHANGELOG.md` → `docs/ROADMAP.md` → `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, `docs/FILE_FORMATS.md`, `docs/SECURITY_AUDIT.md`, `docs/SANITY_CHECKLIST.md` → active prompt if needed → relevant source.
+Never recreate useful docs; update them. Add a CHANGELOG entry with **measured** numbers and explicitly label unverified work. The prompt index has historical entries and may itself be stale; compare it to `docs/prompts/NEXT_LOOP_PROMPT.md`.
 
 ## Commands
+`gradlew` is tracked executable for CI and local use; run it directly. The separate local verify script may still require `bash` if its executable bit is absent.
 ```
-./gradlew testDebugUnitTest jacocoCoreVerify   # tests + 80% core coverage gate
-./gradlew lintDebug detekt                      # static analysis
-./gradlew assembleDebug                         # APK
-kotlinc + tools/bench/CoreBench.kt              # JVM benchmarks (old vs new)
-kotlinc + tools/GenFormatDocs.kt                # regenerate the format matrix
+bash ./gradlew testDebugUnitTest jacocoCoreVerify   # tests + 80% core coverage gate
+bash ./gradlew lintDebug detekt                      # static analysis
+bash ./gradlew assembleDebug                         # APK
+kotlinc + tools/bench/CoreBench.kt                   # JVM benchmarks (old vs new)
+kotlinc + tools/GenFormatDocs.kt                     # regenerate the format matrix
 ```
 
 ## Environment lessons from cycle 1 (important for the next run)

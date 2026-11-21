@@ -5,24 +5,26 @@ JDK 17 · Android SDK (platform 34, build-tools 34) via Android Studio or `sdkma
 Set `ANDROID_HOME` (or `local.properties` → `sdk.dir=...`).
 
 ## One command
+The Gradle wrapper is executable in the repository:
 ```
 ./gradlew assembleDebug
 ```
 APK: `app/build/outputs/apk/debug/app-debug.apk`. No keystore needed: without `debug.keystore.base64` the AGP debug key is used.
 
-## Quality Gate (run this first on a new machine; cycle 1 could not run it)
+## Quality Gate (run this first on a new machine)
 ```
-./gradlew build                        # compile + all checks
-./gradlew testDebugUnitTest            # 91 JUnit tests (core/)
-./gradlew jacocoCoreVerify             # fails below 80 % line coverage of com.example.core
-./gradlew lintDebug detekt             # lint must have 0 errors; detekt is advisory for now
-./gradlew assembleDebug
+bash ./gradlew build                     # compile + configured checks
+bash ./gradlew testDebugUnitTest         # current static inventory: 222 @Test annotations; actual count requires a run
+bash ./gradlew jacocoCoreVerify          # fails below 80 % line coverage of com.example.core
+bash ./gradlew lintDebug detekt          # lint must have 0 errors; detekt is advisory for now
+bash ./gradlew assembleDebug
 ```
-If the first build fails to compile, the likely places are listed in `docs/TODO.md` → KNOWN ISSUES #1.
+Test counts in older guides/changelogs are historical and not a substitute for test output. If a build fails, record the actual failure and see `docs/PROJECT_STATUS.md` and `docs/TODO.md`.
 
 ## Verify the core without Gradle
+The script is also tracked without its executable bit; invoke it through Bash when its Java/Kotlin requirements are installed:
 ```
-KOTLINC=/path/to/kotlinc/bin/kotlinc JACOCO_DIR=/path/to/jacoco ./tools/local-verify/verify-core.sh
+KOTLINC=/path/to/kotlinc/bin/kotlinc JACOCO_DIR=/path/to/jacoco bash ./tools/local-verify/verify-core.sh
 ```
 
 ## Release build
@@ -30,7 +32,7 @@ KOTLINC=/path/to/kotlinc/bin/kotlinc JACOCO_DIR=/path/to/jacoco ./tools/local-ve
 export FILECLAW_KEYSTORE=/path/to/release.jks FILECLAW_STORE_PASSWORD=... FILECLAW_KEY_ALIAS=... FILECLAW_KEY_PASSWORD=...
 ./gradlew assembleRelease
 ```
-Without those variables the release APK is signed with the debug key (sideloading only).
+Do not publish a production release without a stable, protected release keystore. The current build/workflow fallback may sign with a debug key or a fresh per-run CI key and is for test/sideloading only; signature continuity across releases is not guaranteed. See `docs/ISSUE_REGISTER.md` (`AUD-REL-002`).
 
 ## Automated GitHub Actions Release Workflow
 A manual GitHub Actions workflow is provided in `.github/workflows/build-and-release.yml`.

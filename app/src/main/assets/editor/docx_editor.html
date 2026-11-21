@@ -6,6 +6,7 @@
     <title>File Claw Word Document Viewer</title>
     <script src="jszip.min.js"></script>
     <script src="docx-preview.min.js"></script>
+    <script src="docx_search.js"></script>
     <style>
         :root {
             --bg-color: #faf9f5;
@@ -39,6 +40,7 @@
             padding: 12px 8px 32px 8px;
             overscroll-behavior: contain;
         }
+        #document-scroller.docx-pinch-preview { overflow-x: hidden; }
 
         #output {
             position: relative;
@@ -314,6 +316,7 @@
             if (isPrintMode) return;
             if (e.touches.length === 2) {
                 isPinching = true;
+                scroller.classList.add('docx-pinch-preview');
                 if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
                 const t1 = e.touches[0];
                 const t2 = e.touches[1];
@@ -340,22 +343,28 @@
             }
         }, { passive: true });
 
-        scroller.addEventListener('touchend', function (e) {
-            if (isPrintMode) return;
-            if (isPinching && e.touches.length < 2) {
-                isPinching = false;
-                const transform = container.style.transform;
-                container.style.transform = "";
-                container.style.transformOrigin = "";
-                const match = transform.match(/scale\(([^)]+)\)/);
-                if (match) {
-                    const previewRatio = parseFloat(match[1]);
-                    if (Number.isFinite(previewRatio) && previewRatio > 0.05) {
-                        const targetZoom = Math.min(Math.max(currentZoom * previewRatio, 0.5), 5.0);
-                        applyCommittedZoom(targetZoom, pinchFocalX, pinchFocalY);
-                    }
+        function finishPinchGesture() {
+            if (!isPinching) return;
+            isPinching = false;
+            const transform = container.style.transform;
+            container.style.transform = "";
+            container.style.transformOrigin = "";
+            scroller.classList.remove('docx-pinch-preview');
+            const match = transform.match(/scale\(([^)]+)\)/);
+            if (match) {
+                const previewRatio = parseFloat(match[1]);
+                if (Number.isFinite(previewRatio) && previewRatio > 0.05) {
+                    const targetZoom = Math.min(Math.max(currentZoom * previewRatio, 0.5), 5.0);
+                    applyCommittedZoom(targetZoom, pinchFocalX, pinchFocalY);
                 }
             }
+        }
+
+        scroller.addEventListener('touchend', function (e) {
+            if (!isPrintMode && e.touches.length < 2) finishPinchGesture();
+        }, { passive: true });
+        scroller.addEventListener('touchcancel', function () {
+            if (!isPrintMode) finishPinchGesture();
         }, { passive: true });
 
         // Distinguish single-tap (focus mode) vs double-tap (zoom toggle) with 250ms window
@@ -425,16 +434,6 @@
             pages.forEach(page => pageObserver.observe(page));
         }
 
-        function base64ToBuffer(value) {
-            const binaryString = window.atob(value);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            return bytes.buffer;
-        }
-
         function fetchDocumentBytes() {
             return fetch('/docx-src/document.docx', { credentials: 'omit' }).then(function (response) {
                 if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -445,7 +444,12 @@
         function showLoadError(message) {
             const loadingEl = document.getElementById("loading");
             if (loadingEl) loadingEl.style.display = 'none';
-            if (container) container.innerHTML = '<div class="error-banner">' + message + '</div>';
+            if (container) {
+                const errorBanner = document.createElement('div');
+                errorBanner.className = 'error-banner';
+                errorBanner.textContent = String(message || 'Unknown preview error');
+                container.replaceChildren(errorBanner);
+            }
             if (window.Android && window.Android.onDocumentError) {
                 window.Android.onDocumentError(message);
             }
@@ -506,7 +510,7 @@
             });
         }
 
-        function loadDocx(base64, isDark) {
+        function loadDocx(isDark) {
             if (!isPrintMode) setDarkMode(isDark);
 
             if (typeof docx === 'undefined' || typeof JSZip === 'undefined') {
@@ -514,29 +518,12 @@
                 return;
             }
 
-            if (!base64 || base64.trim().length === 0) {
-                fetchDocumentBytes().then(function (buffer) {
-                    renderDocument(buffer);
-                }).catch(function (fetchError) {
-                    console.warn("docx-src fetch failed, falling back to bridge", fetchError);
-                    let bridged = null;
-                    if (window.Android && window.Android.getDocxBase64) {
-                        try { bridged = window.Android.getDocxBase64(); } catch (e) {}
-                    }
-                    if (!bridged || bridged.trim().length === 0) {
-                        showLoadError("Document data is empty or unavailable.");
-                        return;
-                    }
-                    renderDocument(base64ToBuffer(bridged));
-                });
-                return;
-            }
-
-            try {
-                renderDocument(base64ToBuffer(base64));
-            } catch (err) {
-                showLoadError("Invalid DOCX format (" + (err ? err.toString() : 'Parse error') + ")");
-            }
+            fetchDocumentBytes().then(function (buffer) {
+                renderDocument(buffer);
+            }).catch(function (fetchError) {
+                console.warn("docx-src fetch failed", fetchError);
+                showLoadError("Document data could not be loaded from the local file.");
+            });
         }
 
         // ---------------------------------------------------------------------------
@@ -570,8 +557,7 @@
 
         function searchWord(keyword) {
             clearSearch();
-            const query = String(keyword || '').trim().toLowerCase();
-            if (!query || !container) {
+            if (!String(keyword || '').trim() || !container || typeof DocxSearch === 'undefined') {
                 notifySearchCount();
                 return 0;
             }
@@ -587,36 +573,39 @@
             });
             const textNodes = [];
             while (walker.nextNode()) textNodes.push(walker.currentNode);
-            const foundMatches = [];
-            let totalCount = 0;
+            const result = DocxSearch.findMatches(textNodes, keyword, maxSearchHighlights);
+            const groups = result.matches.map(() => []);
+            const rangesByNode = new Map();
 
-            for (const node of textNodes) {
-                const text = node.nodeValue || '';
-                const lower = text.toLowerCase();
-                let index = lower.indexOf(query);
-                if (index < 0) continue;
-                const fragment = document.createDocumentFragment();
-                let last = 0;
-                while (index >= 0) {
-                    totalCount++;
-                    fragment.appendChild(document.createTextNode(text.substring(last, index)));
-                    if (foundMatches.length < maxSearchHighlights) {
-                        const mark = document.createElement('mark');
-                        mark.className = 'docx-highlight';
-                        mark.textContent = text.substring(index, index + query.length);
-                        fragment.appendChild(mark);
-                        foundMatches.push(mark);
+            result.matches.forEach((match, matchIndex) => {
+                match.ranges.forEach(segment => {
+                    if (!rangesByNode.has(segment.node)) rangesByNode.set(segment.node, []);
+                    rangesByNode.get(segment.node).push({ ...segment, matchIndex });
+                });
+            });
+
+            // Wrap each text-node segment from right to left so earlier offsets stay valid.
+            for (const [node, segments] of rangesByNode) {
+                segments.sort((a, b) => b.start - a.start);
+                for (const segment of segments) {
+                    if (!node.parentNode || segment.end > node.length) continue;
+                    const mark = document.createElement('mark');
+                    mark.className = 'docx-highlight';
+                    const range = document.createRange();
+                    range.setStart(node, segment.start);
+                    range.setEnd(node, segment.end);
+                    try {
+                        range.surroundContents(mark);
+                        groups[segment.matchIndex].push(mark);
+                    } catch (error) {
+                        console.warn('Could not highlight one DOCX search segment', error);
                     }
-                    last = index + query.length;
-                    index = lower.indexOf(query, last);
                 }
-                fragment.appendChild(document.createTextNode(text.substring(last)));
-                if (node.parentNode) node.parentNode.replaceChild(fragment, node);
             }
 
-            searchMatches = foundMatches;
-            totalSearchMatches = totalCount;
-            searchMatchesTruncated = totalCount > foundMatches.length;
+            searchMatches = groups.filter(group => group.length > 0);
+            totalSearchMatches = result.total;
+            searchMatchesTruncated = result.truncated || searchMatches.length < result.matches.length;
             if (searchMatches.length > 0) highlightMatch(0);
             else notifySearchCount();
             return totalSearchMatches;
@@ -629,12 +618,14 @@
                 return 0;
             }
             currentMatchIdx = ((idx % searchMatches.length) + searchMatches.length) % searchMatches.length;
-            searchMatches.forEach((match, index) => {
-                match.className = index === currentMatchIdx
-                    ? 'docx-highlight docx-highlight-active'
-                    : 'docx-highlight';
+            searchMatches.forEach((group, index) => {
+                group.forEach(mark => {
+                    mark.className = index === currentMatchIdx
+                        ? 'docx-highlight docx-highlight-active'
+                        : 'docx-highlight';
+                });
             });
-            searchMatches[currentMatchIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            searchMatches[currentMatchIdx][0].scrollIntoView({ behavior: 'smooth', block: 'center' });
             notifySearchCount();
             return currentMatchIdx + 1;
         }

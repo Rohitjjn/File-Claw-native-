@@ -3,16 +3,18 @@
 Priorities: **P0** data loss / crash / security · **P1** high-impact feature or correctness · **P2** quality · **P3** polish.
 
 ## KNOWN ISSUES (read first)
-1. **RESOLVED in Loop 7 (2026-10-15):** Loop 7 changes WERE compiled and run: `:app:compileDebugKotlin` and `:app:assembleDebug` succeeded and the full `:app:testDebugUnitTest` suite passed (134 tests, 0 failures) using Android SDK 34 + JDK 17 (jlink required — a JRE-only JVM fails `compileDebugJavaWithJavac`). Setup used: `chmod +x gradlew`, `local.properties` → SDK path, `--max-workers=1` under a 4 GB RAM sandbox. Keep this toolchain recipe for future loops. Earlier loops (02–06) remain unverified on-device; still run the Quality Gate in `BUILD_GUIDE.md` before shipping.
-2. Gradle wiring for JaCoCo (`jacocoCoreReport` / `jacocoCoreVerify`), `enableUnitTestCoverage`, detekt, and Room schema export is
-   unverified. detekt is `ignoreFailures = true` until its first green run.
-3. Edits to files opened from another app are saved to the in-app copy only (the user is told). Write-back is P1 below.
-4. WebView renderers (DOCX, PPTX, grid) still receive whole files as base64 (now capped at 25 MB, then falls back to the archive tree).
-5. Hex viewer shows only the first 4 KB. DOCX preview derives pages from `docx-preview` sections, but page-count accuracy still needs device verification; legacy `.doc` remains text-extraction-only.
-6. 3D viewer draws a wireframe sample (≤ 25k triangles); no shading, no GLB/PLY/DWG.
-7. Legacy `.doc` / `.xls` / `.ppt` and `.rar` are identified but not openable.
-8. Bundled JS libraries (docx-preview, pptx-preview, x-spreadsheet) have no license text in the shipped files; verify upstream licenses (JSZip is MIT/GPL dual, confirmed from its header).
-9. `applicationId` is still the AI-Studio-generated `com.aistudio.filesclaw.apxqzy`; JitPack repository is unscoped (supply-chain exposure).
+The current source-checked baseline is `docs/PROJECT_STATUS.md`; audited findings are in `docs/ISSUE_REGISTER.md`. Earlier loop results and counts below are historical claims, not current test evidence.
+
+1. The project has a 2026-11-21 baseline audit; this checkout could not run Java/Gradle because Java, Kotlin and Android SDK are absent. No test/build pass is claimed. See `PROJECT_STATUS.md` for literal outputs.
+2. JaCoCo/detekt/Room wiring still needs a current toolchain run; detekt remains configured with `ignoreFailures = true`.
+3. Open-with imports retain an app-private file copy. Source URI write-back code exists, but URI grant persistence and provider write support still need device verification. See `AUD-IO-001` and `AUD-DATA-001`.
+4. DOCX normally streams its file through `WebViewAssetLoader`, but the ViewModel still pre-reads/base64-encodes the whole file up to 25 MiB for fallback; PPTX also uses the base64 route. Both fall back to archive browsing above the cap. See `AUD-DOCX-001` and `AUD-DOCX-004`.
+5. DOCX page count, styled-run search, and pinch viewport behavior need WebView/device verification. Legacy `.doc` currently has text extraction; `.xls` has a read-only grid; `.ppt` and RAR remain identify-only.
+6. 3D viewer draws a wireframe sample (≤25k triangles); other 3D formats remain limited/identify-only as described in `FILE_FORMATS.md`.
+7. Bundled JS licenses for docx-preview, pptx-preview and x-spreadsheet are marked “verify” in `THIRD_PARTY_NOTICES.md`; resolve before a public release.
+8. `applicationId` remains `com.aistudio.filesclaw.apxqzy`; JitPack is unscoped. Review repository/supply-chain and release signing/input risks in `ISSUE_REGISTER.md`.
+9. The checkout's `gradlew` and local verifier script are tracked as non-executable (`100644`); this audit did not change their modes. `BUILD_GUIDE.md` commands require `bash ./gradlew ...` or a deliberate executable-mode correction.
+10. Existing `known-issues.md`, prompt index and older format notes contain stale or unverified statements. Cross-check them against the register before acting.
 
 ## P0
 - [x] Earlier project baseline Quality Gate was recorded green (`compile_applet` / `testDebugUnitTest`); **Loop 6 was not rerun** because Java/Android SDK are unavailable here (see KNOWN ISSUES #1).

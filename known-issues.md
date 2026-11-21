@@ -1,7 +1,9 @@
 # File Claw - Known Issues & Tech Debt
-Last Updated: October 16, 2026
+Last Updated: October 16, 2026 (historical content; audit index added 2026-11-21)
 Document Version: 1.3
 Next Review Date: January 15, 2027
+
+> Current audited status is in [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) and [`docs/ISSUE_REGISTER.md`](docs/ISSUE_REGISTER.md). Older watchlists remain useful investigation leads, but their runtime claims are not current verification unless reproduced on the present revision. No device checks were run in the 2026-11-21 audit.
 
 ## 1. Issue Classification System
 - **Severity**: `CRITICAL` (Crashes/Data Loss), `HIGH` (Core Feature Broken), `MEDIUM` (Degraded Experience), `LOW` (Cosmetic).
@@ -12,8 +14,8 @@ Next Review Date: January 15, 2027
 
 | ID | Title | Severity | Status | Area | Description & Workaround |
 |----|-------|----------|--------|------|--------------------------|
-| BUG-001 | Large Text File UI Freeze | HIGH | OPEN | `FILE_IO` | Files > 10MB cause ANRs due to full read into memory on main thread string assignment. *Workaround*: App limits rendering blocks, but true streaming is missing. |
-| BUG-002 | Search Indexing Latency | HIGH| OPEN | `PERFORMANCE`| Searching entire external storage triggers massive GC churn. |
+| BUG-001 | Large Text File UI Freeze | HIGH | UNVERIFIED / legacy claim | `FILE_IO` | Historical >10MB ANR claim is not reproduced in this audit. Current text paths include bounded previews and `TextWindowReader`; verify actual viewer path and device behavior before retaining as an active confirmed bug. See `docs/ISSUE_REGISTER.md`. |
+| BUG-002 | Search Indexing Latency | HIGH | UNVERIFIED / legacy claim | `PERFORMANCE` | Historical GC-latency claim has no current measurement. Current scanner is bounded to depth 8 / 60,000 files and filename matching; measure on device before treating as an active confirmed bug. See `docs/ISSUE_REGISTER.md`. |
 
 ## 3. Active Issues (MEDIUM and LOW)
 
@@ -97,7 +99,7 @@ Next Review Date: January 15, 2027
 - **PDFBox-Android**: Extremely heavy dependency (~5MB). Updates are incredibly slow/orphan state, but required because native Android `PdfRenderer` explicitly lacks password support.
 
 ## 8. Won't Fix / By Design
-- **DOCX Formatting Loss**: Custom parser strictly isolates text. Retaining word-perfect structural formatting (images, fonts, alignments) is `BY_DESIGN` ignored to keep the app lightweight and avoid bloated Apache POI imports.
+- **DOCX text recovery is intentionally plain text**: `DocxExtractor` is a recovery fallback, not a full-fidelity renderer. Normal preview uses bundled `docx-preview` in WebView and attempts formatted rendering; do not describe all DOCX formatting as intentionally discarded. Recovery behavior, coverage and limits still need verification (see `docs/FILE_FORMAT_REHABILITATION.md`).
 - **No Cloud Sync**: App is marketed and designed as purely offline file manager. Network APIs are excluded intentionally.
 - **PDF has no dark mode (Loop 14)**: removed by scope decision — PDF pages always display their original light colors; no classifier, no filters. DOCX/TXT/Markdown keep dark mode.
 - **Tile rendering at extreme PDF zoom (Loop 12)**: a bounded viewport/tile design exists on paper but cannot be verified (tile coordinates, scroll/highlight/cleanup interplay) without a device; shipping a partial tile implementation is explicitly out of scope. Whole-page rendering with dimension caps remains the shipped behavior — see `docs/prompts/NEXT_LOOP_PROMPT.md` backlog.

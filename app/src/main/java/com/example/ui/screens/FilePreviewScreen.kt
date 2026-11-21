@@ -947,10 +947,13 @@ fun FilePreviewScreen(
                                 }
 
                                 val isPdf = activeFile?.extension?.lowercase() == "pdf"
-                                val isDocx = activeFile?.extension?.lowercase() in setOf("docx", "doc")
+                                val isDocx = fileState is MainViewModel.FileContentState.DocxSuccess
                                 if (isPdf || isDocx) {
                                     DropdownMenuItem(
-                                        text = { Text("Go to Page ($currentPdfPage / $totalPdfPages)") },
+                                        text = {
+                                            val pageCountLabel = if (activeFile?.extension?.lowercase() == "docx") "≈$totalPdfPages" else "$totalPdfPages"
+                                            Text("Go to Page ($currentPdfPage / $pageCountLabel)")
+                                        },
                                         onClick = {
                                             showMenu = false
                                             showJumpDialog = true
@@ -1222,7 +1225,7 @@ fun FilePreviewScreen(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "$currentPdfPage / ${totalPdfPages.coerceAtLeast(1)}",
+                                                text = "$currentPdfPage / ${if (isDocx) "≈" else ""}${totalPdfPages.coerceAtLeast(1)}",
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -1835,6 +1838,34 @@ fun FilePreviewScreen(
                         com.example.ui.component.PremiumLoadingIndicator(text = "Loading file...")
                     }
                 }
+                is MainViewModel.FileContentState.DocxPreviewLimitExceeded -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.InsertDriveFile,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "DOCX preview limit",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Formatted preview is currently limited to ${state.maxBytes / (1024 * 1024)} MiB to protect device memory. This file is larger, so it was not rendered. The original file has not been changed.",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
                 is MainViewModel.FileContentState.Error -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(
@@ -2071,7 +2102,6 @@ fun FilePreviewScreen(
                 }
                 is MainViewModel.FileContentState.DocxSuccess -> {
                     DocxPreviewWebView(
-                        base64Docx = state.base64Data,
                         fileEntity = state.file,
                         isNightMode = isDocxNightMode,
                         viewModel = viewModel,
@@ -2245,9 +2275,15 @@ fun FilePreviewScreen(
                     Text("Cancel")
                 }
             },
-            title = { Text("Go to Page") },
+            title = {
+                Text(if (activeFile?.extension?.lowercase() == "docx") "Go to Approximate Page" else "Go to Page")
+            },
             text = {
                 Column {
+                    if (activeFile?.extension?.lowercase() == "docx") {
+                        Text("DOCX page positions are renderer estimates, not verified Microsoft Word pagination.")
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                     Text("Enter page number (1 to $totalPdfPages):")
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
@@ -4847,7 +4883,6 @@ private fun loadLocalFileOnce(webView: android.webkit.WebView, path: String, all
 
 @Composable
 fun DocxPreviewWebView(
-    base64Docx: String,
     fileEntity: RecentFileEntity,
     isNightMode: Boolean,
     viewModel: MainViewModel,
@@ -4873,18 +4908,18 @@ fun DocxPreviewWebView(
     onDoubleTap: () -> Unit = {},
     onRendererFallback: (Boolean) -> Unit = {}
 ) {
-    var isWebViewLoading by remember(base64Docx) { mutableStateOf(true) }
-    var webViewRef by remember(base64Docx) { mutableStateOf<android.webkit.WebView?>(null) }
-    var pureKotlinFallback by remember(base64Docx) { mutableStateOf<com.example.core.format.DocxExtractor.ExtractedDocx?>(null) }
+    var isWebViewLoading by remember(fileEntity.path) { mutableStateOf(true) }
+    var webViewRef by remember(fileEntity.path) { mutableStateOf<android.webkit.WebView?>(null) }
+    var pureKotlinFallback by remember(fileEntity.path) { mutableStateOf<com.example.core.format.DocxExtractor.ExtractedDocx?>(null) }
     // Loop 14: the plain-text view is an honest RECOVERY state, never a normal
     // preview. The renderer failure reason is surfaced verbatim (no document
     // content, no sensitive data) and Retry rebuilds the WebView from scratch.
-    var fallbackReason by remember(base64Docx) { mutableStateOf<String?>(null) }
-    var docxReloadKey by remember(base64Docx) { mutableIntStateOf(0) }
+    var fallbackReason by remember(fileEntity.path) { mutableStateOf<String?>(null) }
+    var docxReloadKey by remember(fileEntity.path) { mutableIntStateOf(0) }
     // Ledger of what the renderer's search engine has already been told (Loop 12, Bug
     // B): navigation triggers now issue ONLY next/prev deltas; re-issuing searchWord()
     // per arrow press used to reset the match index to 0 so the counter stuck at 2/N.
-    var issuedSearch by remember(base64Docx) { mutableStateOf(InViewerSearchCommandPolicy.Issued()) }
+    var issuedSearch by remember(fileEntity.path) { mutableStateOf(InViewerSearchCommandPolicy.Issued()) }
     fun retryDocxRender() {
         pureKotlinFallback = null
         fallbackReason = null
@@ -4895,6 +4930,7 @@ fun DocxPreviewWebView(
     // Display-frame throttle (~30/s) for the pinch preview path (Bug E: coalescing).
     var lastDisplayDispatchNanos by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
     val context = LocalContext.current
+    val recoveryScope = rememberCoroutineScope()
     val latestSearchResultCallback = androidx.compose.runtime.rememberUpdatedState(onSearchResultCount)
     val latestPageChangedCallback = androidx.compose.runtime.rememberUpdatedState(onPageChanged)
     val latestDocumentReadyCallback = androidx.compose.runtime.rememberUpdatedState(onDocumentReady)
@@ -4905,6 +4941,25 @@ fun DocxPreviewWebView(
     val latestPinchSettledCallback = androidx.compose.runtime.rememberUpdatedState(onPinchSettled)
     val latestDoubleTapCallback = androidx.compose.runtime.rememberUpdatedState(onDoubleTap)
     val latestRendererFallbackCallback = androidx.compose.runtime.rememberUpdatedState(onRendererFallback)
+    fun recoverFromRenderFailure(sourceWebView: android.webkit.WebView, reason: String) {
+        if (webViewRef !== sourceWebView) return
+        recoveryScope.launch {
+            val recovered = withContext(Dispatchers.IO) {
+                runCatching { com.example.core.format.DocxExtractor.extractText(File(fileEntity.path)) }
+                    .getOrElse {
+                        com.example.core.format.DocxExtractor.ExtractedDocx(
+                            fileEntity.name, emptyList(), "", 0, 0
+                        )
+                    }
+            }
+            // Ignore late callbacks from a WebView that was replaced by retry/navigation.
+            if (webViewRef !== sourceWebView) return@launch
+            fallbackReason = reason.take(180)
+            pureKotlinFallback = recovered
+            isWebViewLoading = false
+            latestRendererFallbackCallback.value(true)
+        }
+    }
     // Fresh values for the WebViewClient closures created once in the factory: reading
     // them at callback time prevents a stale initial zoom/theme being re-applied after
     // the document finishes loading (Loop 10).
@@ -5003,6 +5058,13 @@ fun DocxPreviewWebView(
                                     color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = .75f)
                                 )
                             }
+                        if (extracted.truncated) {
+                            Text(
+                                text = "Recovered text was truncated at the safety limit.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = .75f)
+                            )
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
                             // Retry rebuilds the WebView and re-runs the real renderer;
                             // the source document is never modified.
@@ -5032,14 +5094,13 @@ fun DocxPreviewWebView(
                 }
             }
         } else {
-            androidx.compose.runtime.key(base64Docx, docxReloadKey) {
+            androidx.compose.runtime.key(fileEntity.path, docxReloadKey) {
                 AndroidView(
                     factory = { viewContext ->
                         // Loop 12 (Bug E): the editor page is now served through the
                         // WebViewAssetLoader (same mechanism as the PDF reader) so the
-                        // DOCX bytes can be streamed to docx-preview as an ArrayBuffer
-                        // instead of a ~1.33x-larger base64 String crossing the JS bridge
-                        // (which peaked at ~5 simultaneous copies of large documents).
+                        // DOCX bytes can be streamed to docx-preview as an ArrayBuffer;
+                        // no eager Base64 copy is retained in ViewModel state.
                         //
                         // Loop 14 REGRESSION FIX: the editor was previously registered under
                         // "/editor/" and loaded at /editor/docx_editor.html. WebViewAssetLoader
@@ -5073,6 +5134,7 @@ fun DocxPreviewWebView(
                             })
                             .build()
                         android.webkit.WebView(viewContext).apply {
+                            val ownerWebView = this
                             webViewRef = this
                             latestWebViewCreatedCallback.value(this)
                             settings.apply {
@@ -5098,12 +5160,15 @@ fun DocxPreviewWebView(
                             addJavascriptInterface(object : Any() {
                                 private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
-                                @android.webkit.JavascriptInterface
-                                fun getDocxBase64(): String = base64Docx
+                                private fun postForCurrentWebView(action: () -> Unit) {
+                                    mainHandler.post {
+                                        if (webViewRef === ownerWebView) action()
+                                    }
+                                }
 
                                 @android.webkit.JavascriptInterface
                                 fun onDocumentLoaded(totalPages: Int) {
-                                    mainHandler.post {
+                                    postForCurrentWebView {
                                         isWebViewLoading = false
                                         latestDocumentReadyCallback.value()
                                         pageChangedCallback.value(1, totalPages)
@@ -5112,63 +5177,54 @@ fun DocxPreviewWebView(
 
                                 @android.webkit.JavascriptInterface
                                 fun onPageChanged(currentPage: Int, totalPages: Int) {
-                                    mainHandler.post { pageChangedCallback.value(currentPage, totalPages) }
+                                    postForCurrentWebView { pageChangedCallback.value(currentPage, totalPages) }
                                 }
 
                                 @android.webkit.JavascriptInterface
                                 fun onSearchResultCount(count: Int, currentIndex: Int, truncated: Boolean) {
-                                    mainHandler.post { latestSearchResultCallback.value(count, currentIndex, truncated) }
+                                    postForCurrentWebView { latestSearchResultCallback.value(count, currentIndex, truncated) }
                                 }
 
                                 @android.webkit.JavascriptInterface
                                 fun onDocumentTap() {
-                                    mainHandler.post { latestSingleTapCallback.value() }
+                                    postForCurrentWebView { latestSingleTapCallback.value() }
                                 }
 
                                 @android.webkit.JavascriptInterface
                                 fun onDocumentDoubleTap() {
-                                    mainHandler.post { latestDoubleTapCallback.value() }
+                                    postForCurrentWebView { latestDoubleTapCallback.value() }
                                 }
 
                                 @android.webkit.JavascriptInterface
                                 fun onZoomChanged(newZoom: Double) {
-                                    mainHandler.post { latestZoomChangedCallback.value(newZoom.toFloat()) }
+                                    postForCurrentWebView { latestZoomChangedCallback.value(newZoom.toFloat()) }
                                 }
 
                                 @android.webkit.JavascriptInterface
                                 fun onDocumentError(error: String) {
-                                    mainHandler.post {
-                                        isWebViewLoading = false
-                                        android.util.Log.w("WebViewDocx", "Switching to text-only DOCX preview: $error")
-                                        val extracted = runCatching {
-                                            com.example.core.format.DocxExtractor.extractText(File(fileEntity.path))
-                                        }.getOrNull()
-                                        // Loop 14: always enter the labeled recovery state (even with
-                                        // zero recovered paragraphs) so a failed render is never left
-                                        // as a silent blank surface or a deceptively normal preview.
-                                        fallbackReason = error.take(180)
-                                        pureKotlinFallback = extracted
-                                        latestRendererFallbackCallback.value(true)
+                                    postForCurrentWebView {
+                                        android.util.Log.w("WebViewDocx", "Switching to bounded text recovery: $error")
+                                        recoverFromRenderFailure(ownerWebView, error)
                                     }
                                 }
 
                                 @android.webkit.JavascriptInterface
                                 fun exitWithoutSaving() {
-                                    mainHandler.post { viewModel.closeCurrentFile() }
+                                    postForCurrentWebView { viewModel.closeCurrentFile() }
                                 }
                             }, "Android")
 
                             webViewClient = object : android.webkit.WebViewClient() {
                                 override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                    if (view !== ownerWebView || webViewRef !== ownerWebView) return
                                     // Apply the CURRENT zoom factor (not a stale factory-time
                                     // capture) BEFORE loadDocx so the document never flashes at
-                                    // 100% before settling on the preferred zoom. Loop 12: the
-                                    // bytes are streamed by the page itself (loadDocx(null, ...));
-                                    // the bridge base64 path is only the in-page fallback.
+                                    // 100% before settling on the preferred zoom. Bytes stream
+                                    // from the local asset handler; text extraction is the fallback.
                                     val freshZoom = latestZoomForPageLoad.value
                                     val freshNightMode = latestNightModeForPageLoad.value
                                     view?.evaluateJavascript(
-                                        "setZoom($freshZoom); loadDocx(null, $freshNightMode);",
+                                        "setZoom($freshZoom); loadDocx($freshNightMode);",
                                         null
                                     )
                                 }
@@ -5199,17 +5255,11 @@ fun DocxPreviewWebView(
                                     super.onReceivedError(view, request, error)
                                     if (request?.isForMainFrame == true) {
                                         android.util.Log.e("WebViewDocx", "Error: ${error?.description}")
-                                        val extracted = runCatching {
-                                            com.example.core.format.DocxExtractor.extractText(File(fileEntity.path))
-                                        }.getOrNull()
-                                        // Loop 14: honest recovery state with the failure reason
-                                        // (the Loop 12 /editor/ registration 404 surfaced HERE).
-                                        view?.post {
-                                            fallbackReason = error?.description?.toString()?.take(180)
-                                                ?: "The preview page could not be loaded."
-                                            pureKotlinFallback = extracted
-                                            latestRendererFallbackCallback.value(true)
-                                            isWebViewLoading = false
+                                        view?.let { failedWebView ->
+                                            recoverFromRenderFailure(
+                                                failedWebView,
+                                                error?.description?.toString() ?: "The preview page could not be loaded."
+                                            )
                                         }
                                     }
                                 }
@@ -5226,15 +5276,7 @@ fun DocxPreviewWebView(
                                         "WebViewDocx",
                                         "Renderer process gone (crashed=${detail.didCrash()}); switching to text-only preview"
                                     )
-                                    view.post {
-                                        val extracted = runCatching {
-                                            com.example.core.format.DocxExtractor.extractText(File(fileEntity.path))
-                                        }.getOrNull()
-                                        fallbackReason = "The document renderer stopped unexpectedly."
-                                        pureKotlinFallback = extracted
-                                        latestRendererFallbackCallback.value(true)
-                                        isWebViewLoading = false
-                                    }
+                                    recoverFromRenderFailure(view, "The document renderer stopped unexpectedly.")
                                     return true
                                 }
 

@@ -1,8 +1,22 @@
 # Changelog
 
 Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measured)** were produced by a real
-run in the build sandbox; **(not verified)** means the change could not be compiled or run there (no Android SDK,
-no Maven access). See `TODO.md` → KNOWN ISSUES.
+run in the build sandbox; **(not verified)** means the change could not be compiled or run there. See `PROJECT_STATUS.md` and `ISSUE_REGISTER.md` for the current checkout baseline.
+
+## [Unreleased] 2026-11-21 — Engineering reset, audit baseline and DOCX handoff
+
+### Added
+- Root `AGENTS.md` with verified Karpathy-inspired project principles and the long-term inspect/reproduce/test/approve policy. The upstream skill was inspected but not installed: Arena Agent Mode exposes no verified native installation mechanism in this session.
+- `docs/PROJECT_STATUS.md`, `docs/ISSUE_REGISTER.md`, `docs/DEVELOPMENT_WORKFLOW.md`, `docs/TESTING_STRATEGY.md`, and `docs/FILE_FORMAT_REHABILITATION.md` for current evidence, findings and phase boundaries.
+
+### Changed
+- Updated existing agent, architecture, format, security, backlog, roadmap, prompt-index and build documentation to distinguish historical claims from current source evidence and test results.
+- Documented DOCX as the next investigation target. No DOCX implementation, UI, dependency, database, or release configuration was changed.
+
+### Verification
+- **PASS (static only):** three inline JavaScript blocks extracted from `docx_editor.html` passed `node --check`; `AndroidManifest.xml` parsed with Python XML parser.
+- **NOT RUN:** Gradle unit tests, JaCoCo, lint, detekt, Kotlin/Android compilation, APK/AAB, emulator/device, print/export and performance checks. Java/Kotlin/Android SDK unavailable. Direct Gradle wrapper invocation also failed because its tracked mode is non-executable; using `bash ./gradlew testDebugUnitTest --no-daemon` reached the wrapper and stopped because no Java executable exists.
+- **Inventory only:** 32 Kotlin test files and 222 `@Test` annotations. No current pass count or coverage percentage is claimed.
 
 ## [Unreleased] Loop 15 (v4) — DOCX Pinch/Print, Sensor Orientation, Large File Streaming & Claude Settings
 

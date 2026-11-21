@@ -1,0 +1,96 @@
+name: DOCX Rehabilitation Verification
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docx-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Unit, WebView and debug APK verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Android SDK components
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "Android command-line tools missing from runner: $ANDROID_HOME" >&2
+            exit 1
+          fi
+          printf 'y\n%.0s' {1..100} | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "emulator" \
+            "system-images;android-34;google_apis;x86_64"
+          printf 'no\n' | "$AVDMANAGER" create avd --name docx-api-34 --package "system-images;android-34;google_apis;x86_64" --device pixel_2 --force
+
+      - name: Run unit tests, lint, Detekt, WebView instrumentation and debug APK build
+        run: |
+          set -euo pipefail
+          ./gradlew \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:detekt \
+            :app:compileDebugKotlin \
+            :app:assembleDebug \
+            --stacktrace
+
+      - name: Start Android emulator and run DOCX WebView integration tests
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/emulator/emulator" -avd docx-api-34 \
+            -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
+            -gpu swiftshader_indirect > "$RUNNER_TEMP/docx-emulator.log" 2>&1 &
+          adb wait-for-device
+          timeout 300s bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 2; done'
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          ./gradlew :app:connectedDebugAndroidTest --stacktrace
+
+      - name: Verify bundled DOCX JavaScript and search regression tests
+        if: always()
+        run: |
+          set -euo pipefail
+          node --test tools/docx-tests/docx-search.test.cjs
+          node --check app/src/main/assets/editor/docx_search.js
+          node --check app/src/main/assets/editor/docx-preview.min.js
+          node --check app/src/main/assets/editor/jszip.min.js
+
+      - name: Upload debug APK and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docx-rehabilitation-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            app/build/reports/detekt/
+            app/build/outputs/androidTest-results/connected/
+            app/build/reports/androidTests/connected/
+            ${{ runner.temp }}/docx-emulator.log

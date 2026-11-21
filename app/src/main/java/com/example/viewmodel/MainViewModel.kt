@@ -341,7 +341,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         data class ImageSuccess(val file: RecentFileEntity) : FileContentState()
         data class SvgSuccess(val file: RecentFileEntity) : FileContentState()
         data class PdfSuccess(val file: RecentFileEntity) : FileContentState()
-        data class DocxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
+        data class DocxSuccess(val file: RecentFileEntity) : FileContentState()
+        data class DocxPreviewLimitExceeded(val file: RecentFileEntity, val maxBytes: Long) : FileContentState()
         data class PptxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
         data class MediaSuccess(val file: RecentFileEntity, val isAudio: Boolean) : FileContentState()
         data class SqliteSuccess(val file: RecentFileEntity) : FileContentState()
@@ -368,6 +369,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 is SvgSuccess -> file
                 is PdfSuccess -> file
                 is DocxSuccess -> file
+                is DocxPreviewLimitExceeded -> file
                 is PptxSuccess -> file
                 is MediaSuccess -> file
                 is SqliteSuccess -> file
@@ -574,7 +576,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val spec = detection.spec
         val ext = FormatRegistry.extensionOf(file.name).ifEmpty { entity.extension.lowercase() }
         return when (spec.kind) {
-            FileKind.DOCX -> webDocument(file, entity, password) { FileContentState.DocxSuccess(it, entity) }
+            FileKind.DOCX -> when (val route = com.example.core.format.DocxPreviewPolicy.route(file.length())) {
+                com.example.core.format.DocxPreviewPolicy.Route.FormattedPreview -> FileContentState.DocxSuccess(entity)
+                is com.example.core.format.DocxPreviewPolicy.Route.LimitExceeded ->
+                    FileContentState.DocxPreviewLimitExceeded(entity, route.maxBytes)
+            }
             FileKind.PPTX -> webDocument(file, entity, password) { FileContentState.PptxSuccess(it, entity) }
             FileKind.PDF -> FileContentState.PdfSuccess(entity)
             FileKind.DELIMITED -> {
@@ -682,7 +688,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** DOCX/PPTX are rendered by a WebView from a base64 blob, so very large ones fall back to the archive tree. */
+    /** PPTX keeps its existing base64 WebView transport and size fallback; DOCX uses a local file stream. */
     private fun webDocument(
         file: File,
         entity: RecentFileEntity,
@@ -1309,7 +1315,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val INDEX_MAX_DEPTH = 8
         const val INDEX_MAX_FILES = 60_000
 
-        /** DOCX/PPTX go to a WebView as base64 (about 2.7x memory), so cap what we hand over. */
+        /** Existing PPTX base64 transport cap. DOCX has its own explicit preview policy. */
         const val MAX_WEB_DOCUMENT_BYTES = 25L * 1024 * 1024
     }
 }

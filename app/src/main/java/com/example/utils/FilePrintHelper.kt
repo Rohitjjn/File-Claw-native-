@@ -16,6 +16,7 @@ import android.webkit.WebViewClient
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import kotlinx.coroutines.launch
 
 /**
  * Native Print and Export helper using Android's PrintManager & PrintDocumentAdapter.
@@ -143,8 +144,10 @@ object FilePrintHelper {
         }
 
         mainHandler.post {
+            var createdWebView: WebView? = null
             try {
                 val tempWebView = WebView(context)
+                createdWebView = tempWebView
                 activeWebViews.add(tempWebView)
 
                 val docxAssetLoader = androidx.webkit.WebViewAssetLoader.Builder()
@@ -172,40 +175,124 @@ object FilePrintHelper {
                     builtInZoomControls = false
                     displayZoomControls = false
                     setSupportZoom(false)
+                    allowFileAccess = false
+                    allowContentAccess = false
                 }
 
                 var printSubmitted = false
+                var fallbackPageLoaded = false
+                var released = false
+                var cleanupWatchdog: Runnable? = null
+                val fallbackJob = kotlinx.coroutines.SupervisorJob()
+                val fallbackScope = kotlinx.coroutines.CoroutineScope(
+                    fallbackJob + kotlinx.coroutines.Dispatchers.Main.immediate
+                )
+
+                fun cleanupOnMain() {
+                    if (released) return
+                    released = true
+                    cleanupWatchdog?.let(mainHandler::removeCallbacks)
+                    fallbackJob.cancel()
+                    activeWebViews.remove(tempWebView)
+                    tempWebView.stopLoading()
+                    tempWebView.removeJavascriptInterface("Android")
+                    tempWebView.destroy()
+                }
+
+                fun cleanup() {
+                    if (android.os.Looper.myLooper() == Looper.getMainLooper()) cleanupOnMain()
+                    else mainHandler.post { cleanupOnMain() }
+                }
+
+                fun scheduleCleanupWatchdog() {
+                    cleanupWatchdog?.let(mainHandler::removeCallbacks)
+                    val watchdog = Runnable { cleanupOnMain() }
+                    cleanupWatchdog = watchdog
+                    // PrintDocumentAdapter.onFinish handles normal completion/cancel. This is
+                    // only a final guard if Android never returns the adapter callback.
+                    mainHandler.postDelayed(watchdog, 10 * 60 * 1000L)
+                }
+
+                fun submitWebViewForPrint() {
+                    val delegate = tempWebView.createPrintDocumentAdapter(title)
+                    val adapter = object : PrintDocumentAdapter() {
+                        override fun onStart() = delegate.onStart()
+
+                        override fun onLayout(
+                            oldAttributes: PrintAttributes?,
+                            newAttributes: PrintAttributes?,
+                            cancellationSignal: CancellationSignal?,
+                            callback: LayoutResultCallback?,
+                            extras: Bundle?
+                        ) = delegate.onLayout(oldAttributes, newAttributes, cancellationSignal, callback, extras)
+
+                        override fun onWrite(
+                            pages: Array<out PageRange>?,
+                            destination: ParcelFileDescriptor?,
+                            cancellationSignal: CancellationSignal?,
+                            callback: WriteResultCallback?
+                        ) = delegate.onWrite(pages, destination, cancellationSignal, callback)
+
+                        override fun onFinish() {
+                            try {
+                                delegate.onFinish()
+                            } finally {
+                                cleanup()
+                            }
+                        }
+                    }
+                    try {
+                        printManager.print(
+                            title,
+                            adapter,
+                            PrintAttributes.Builder()
+                                .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                                .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                                .build()
+                        )
+                        if (!released) scheduleCleanupWatchdog()
+                    } catch (error: Exception) {
+                        cleanup()
+                        android.widget.Toast.makeText(
+                            context, "Print failed: ${error.message}", android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+
                 fun triggerPrint() {
-                    if (printSubmitted) return
+                    if (printSubmitted || released) return
                     printSubmitted = true
-                    val printAdapter = tempWebView.createPrintDocumentAdapter(title)
-                    printManager.print(
-                        title,
-                        printAdapter,
-                        PrintAttributes.Builder()
-                            .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                            .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
-                            .build()
-                    )
-                    mainHandler.postDelayed({
-                        activeWebViews.remove(tempWebView)
-                        tempWebView.destroy()
-                    }, 60000)
+                    submitWebViewForPrint()
                 }
 
                 fun fallbackTextPrint(reason: String) {
-                    if (printSubmitted) return
+                    if (printSubmitted || released) return
                     printSubmitted = true
-                    try {
-                        val extracted = com.example.core.format.DocxExtractor.extractText(docxFile)
-                        val paragraphsHtml = extracted.paragraphs.joinToString("\n") { p ->
-                            val escaped = escapeHtml(p)
-                            if (p.startsWith("#") || p.length < 50 && !p.endsWith(".")) {
-                                "<h3>$escaped</h3>"
-                            } else {
-                                "<p>$escaped</p>"
+                    fallbackScope.launch {
+                        val extracted = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            runCatching { com.example.core.format.DocxExtractor.extractText(docxFile) }
+                                .getOrElse {
+                                    com.example.core.format.DocxExtractor.ExtractedDocx(
+                                        docxFile.name, emptyList(), "", 0, 0
+                                    )
+                                }
+                        }
+                        if (released) return@launch
+                        val paragraphsHtml = if (extracted.paragraphs.isEmpty()) {
+                            "<p>No text could be recovered within the DOCX recovery safety limits.</p>"
+                        } else {
+                            extracted.paragraphs.joinToString("\n") { p ->
+                                val escaped = escapeHtml(p)
+                                if (p.startsWith("#") || p.length < 50 && !p.endsWith(".")) {
+                                    "<h3>$escaped</h3>"
+                                } else {
+                                    "<p>$escaped</p>"
+                                }
                             }
                         }
+                        val truncationNotice = if (extracted.truncated) {
+                            "<p><em>Recovered text was truncated at the safety limit.</em></p>"
+                        } else ""
                         val escapedTitle = escapeHtml(title)
                         val html = """
                             <!DOCTYPE html>
@@ -221,6 +308,7 @@ object FilePrintHelper {
                             </head>
                             <body>
                                 <h2>$escapedTitle</h2>
+                                $truncationNotice
                                 $paragraphsHtml
                             </body>
                             </html>
@@ -228,27 +316,17 @@ object FilePrintHelper {
 
                         tempWebView.webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView?, url: String?) {
-                                val printAdapter = tempWebView.createPrintDocumentAdapter(title)
-                                printManager.print(
-                                    title,
-                                    printAdapter,
-                                    PrintAttributes.Builder()
-                                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                                        .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
-                                        .build()
-                                )
-                                mainHandler.postDelayed({
-                                    activeWebViews.remove(tempWebView)
-                                    tempWebView.destroy()
-                                }, 60000)
+                                if (fallbackPageLoaded || released) return
+                                fallbackPageLoaded = true
+                                submitWebViewForPrint()
                             }
                         }
                         tempWebView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
-                        android.widget.Toast.makeText(context, "Printed with text recovery ($reason)", android.widget.Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        activeWebViews.remove(tempWebView)
-                        tempWebView.destroy()
-                        android.widget.Toast.makeText(context, "Print failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(
+                            context,
+                            "Printed with bounded text recovery ($reason)",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
 
@@ -273,12 +351,11 @@ object FilePrintHelper {
                     override fun shouldInterceptRequest(
                         view: WebView?,
                         request: android.webkit.WebResourceRequest?
-                    ): android.webkit.WebResourceResponse? {
-                        return request?.url?.let { docxAssetLoader.shouldInterceptRequest(it) }
-                    }
+                    ): android.webkit.WebResourceResponse? =
+                        request?.url?.let(docxAssetLoader::shouldInterceptRequest)
 
                     override fun onPageFinished(view: WebView?, url: String?) {
-                        view?.evaluateJavascript("loadDocx(null, false);", null)
+                        view?.evaluateJavascript("loadDocx(false);", null)
                     }
 
                     override fun onReceivedError(
@@ -292,15 +369,16 @@ object FilePrintHelper {
                     }
                 }
 
-                // Safety timeout: if formatted layout takes more than 12 seconds, fall back
                 mainHandler.postDelayed({
-                    if (!printSubmitted) {
-                        fallbackTextPrint("Format timeout")
-                    }
+                    if (!printSubmitted) fallbackTextPrint("Format timeout")
                 }, 12000)
-
                 tempWebView.loadUrl("https://appassets.androidplatform.net/assets/editor/docx_editor.html?print=1")
             } catch (e: Exception) {
+                createdWebView?.let { webView ->
+                    activeWebViews.remove(webView)
+                    runCatching { webView.stopLoading() }
+                    runCatching { webView.destroy() }
+                }
                 android.widget.Toast.makeText(context, "Print initialization error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
             }
         }

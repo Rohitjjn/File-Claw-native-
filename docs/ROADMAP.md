@@ -1,32 +1,29 @@
 # Roadmap
 
-Full support matrix: `FILE_FORMATS.md` (generated from the code).
+This roadmap reflects the inspected checkout, not a promise that every historical milestone was built or device-verified. Source-level capability detail is in [`FILE_FORMATS.md`](FILE_FORMATS.md); audited issues and verification status are in [`ISSUE_REGISTER.md`](ISSUE_REGISTER.md) and [`PROJECT_STATUS.md`](PROJECT_STATUS.md).
 
-## Milestones
-| Version | Theme | Status |
+## Immediate sequence
+
+1. **Audit and workflow setup (current task):** record baseline/toolchain limits, adopt project instructions, correct high-impact documentation conflicts and create an evidence-based issue register. No application code changes.
+2. **DOCX investigation (next phase, awaiting owner review):** reproduce the DOCX findings, validate local/WebView/print/search/fallback paths, prepare a detailed defect and test plan. No fixes until explicit product-owner approval.
+3. **Approved DOCX fixes only:** implement narrowly, regression-test and device-test; update findings with exact evidence. PDF and other formats remain untouched unless a shared cause is proven and scope is explicitly expanded.
+4. **Owner review:** stop after DOCX verification and wait for approval before selecting the next file format.
+
+## Historical milestones
+
+Older version/loop records remain in `docs/CHANGELOG.md`, `worklog.md`, `known-issues.md`, and `docs/prompts/`. They are not current CI/runtime evidence. Several status and test-count claims have been superseded or conflict with current source; refer to the audit register before relying on them.
+
+## Source-checked format landscape
+
+| Area | Current implementation examples | Important limits / not implied |
 |---|---|---|
-| 1.1.0 | Foundation & safety: tested core, universal detection, atomic writes, archive hardening, 13 new format families | ✅ code complete, **awaiting first real build** |
-| 1.2.0 | Verified build + device pass; write-back to source URI; paged huge-text viewer; legacy `.xls`; editor fixes | ⏳ next |
-| 1.3.0 | Root glass UI rollout; split `FilePreviewScreen`; typed navigation; Compose UI tests | ⏳ |
-| 1.4.0 | Legacy `.doc`, RAR, GLB/PLY/DXF, CJK charsets | ⏳ |
-| 2.0.0 | Streaming renderers (no base64 hand-off), Macrobenchmark-gated performance budget | ⏳ |
+| Documents | PDF, DOCX, PPTX, RTF, EPUB, Markdown, HTML, text/code | DOCX renderer and fallback have open verification items; RTF/ODF are text-extracted; legacy `.doc` is text extraction and `.xls` read-only grid, `.ppt` identify-only. |
+| Data | CSV/TSV/PSV, XLSX read-only, SQLite, JSON/XML/YAML | Feature parity and round-trip behavior vary; XLSX remains view-only. |
+| Archives | ZIP, 7z, tar variants, gzip/bzip2/xz, ar/deb/cpio and others | RAR and some archive families are identify-only/unsupported. |
+| Media | Images, audio/video, fonts and selected 3D formats | Device codec/API support varies; STL/OBJ are wireframe, other 3D formats may be identify-only. |
 
-## Current preview work (Loop 6, pending Android verification)
-- Scope: PDF, DOCX, TXT, and Markdown only. The working branch adds offline PDF.js reader/search/print, DOCX search/theme/zoom/print improvements, TXT/Markdown fenced-code copy, whole-file text search with bounded excerpts, and print/export wiring for all four formats.
-- Static JavaScript and whitespace checks passed; Android compilation, unit tests, emulator/device checks, and actual print/export were not available in the authoring sandbox. See `TODO.md` → KNOWN ISSUES and the Unreleased changelog entry.
+Consult `FormatRegistry.kt`, route logic in `MainViewModel.kt`, and `docs/FILE_FORMATS.md` before changing a claim.
 
-## Proposed next loop (Loop 7)
-- Keep the same four-format scope. Priorities: true paged/virtualized TXT/Markdown reading beyond the initial window; Markdown syntax context across page boundaries; navigation beyond the 10,000 retained large-file search offsets; DOCX search across styled text runs; and device verification of PDF/DOCX/TXT/Markdown printing, dark mode, zoom, and immersive mode.
-- Prompt: `docs/prompts/LOOP_07_PROMPT.md`.
+## Performance goals (not measured in this audit)
 
-## Format highlights
-| Area | ✅ done | 🔄 partial | ⏳ planned |
-|---|---|---|---|
-| Documents | PDF, DOCX, PPTX, RTF, EPUB, Markdown, HTML, text/code | OpenDocument (text only) | `.doc`, `.ppt`, `.xls`, `.pages` |
-| Data | CSV/TSV/PSV, XLSX (view), SQLite, JSON/XML/YAML | | Parquet, Avro, `.xlsb` |
-| Archives | zip, 7z, tar(.gz/.bz2/.xz), gz/bz2/xz, ar/deb, cpio, apk/jar/… | | RAR, ISO, CAB, zstd |
-| Media | image (png/jpg/gif/webp/bmp/ico), audio, video | HEIC/AVIF/TIFF/DNG, avi/mov (device codecs) | PSD preview, subtitles overlay |
-| Fonts / 3D | TTF/OTF, STL, OBJ | | WOFF, GLB, PLY, DXF, 3MF, DWG |
-
-## Performance budget (to be enforced once measurable on a device)
-Cold start < 1.5 s · 60 fps scrolling · open 500 MB without OOM (core already supports it) · crash-free sessions ≥ 99.9 %.
+Existing historical goals such as cold start, smooth scrolling, 500 MB files and crash-free sessions require a device benchmark plan and measurements before being treated as release gates. Do not quote historic performance claims as current measurements.

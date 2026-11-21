@@ -1,8 +1,8 @@
 # Supported file formats
 
-The matrix below is **generated** from `FormatRegistry` by `tools/GenFormatDocs.kt`; regenerate it instead of editing by hand.
-Support levels: ✅ full (dedicated in-app viewer) · 🔄 partial (extracted text only, or depends on device codecs) · ⏳ identify only
-(recognised and labelled; hex view is shown).
+The extension/support matrix below is **generated** from `FormatRegistry` by `tools/GenFormatDocs.kt`; regenerate it after registry changes. Parser notes are maintained alongside it and should be cross-checked against the current route implementation. This document contains stale behavior notes identified in `docs/ISSUE_REGISTER.md`; treat the source and current issue register as authoritative until reconciled.
+Support levels: ✅ registry-level full support · 🔄 partial (extracted text only, or depends on device codecs) · ⏳ identify only
+(recognised and labelled; hex view is shown). A registry flag is not device verification.
 
 ## Detection
 Content wins over the extension. A strong binary signature (PDF, ZIP, PNG, SQLite, …) always decides; text-like formats trust the
@@ -15,8 +15,9 @@ heuristic (UTF-8/16/32, single-byte). A file whose extension disagrees with its 
 | Text, code, JSON, XML, YAML, config | `TextLoader` | 250k-char preview; larger files are read-only and flagged; BOM and charset preserved on save; non-UTF-8 without BOM → windows-1252 (CJK charsets TODO) |
 | CSV / TSV / PSV | `DelimitedParser` (RFC 4180) | delimiter sniffed for `.csv` (`, ; tab \|`); 50k rows × 256 cols in the grid, beyond that read-only; CRLF preserved |
 | XLSX / XLSM / XLTX | fastexcel-reader | **view-only**, first sheet only; 50k rows × 256 cols; formulas show cached values |
-| DOCX / PPTX | docx-preview / pptx-preview in a WebView | view-only; ≤ 25 MB, larger falls back to archive listing; page count not reported for DOCX |
-| PDF | AndroidPdfViewer (pdfium) | password supported; corrupt files currently spin (TODO: surface error) |
+| DOCX | bundled `docx-preview` / JSZip in a local WebView | view-only; >25 MiB routes to archive listing; normal path streams local bytes but ViewModel still precomputes a base64 fallback; page count is derived from rendered `.docx` nodes and accuracy is unverified |
+| PPTX | bundled `pptx-preview` in a local WebView | view-only; uses a bounded base64 route and >25 MiB falls back to archive listing |
+| PDF | bundled PDF.js in a local WebView; legacy AndroidPdfViewer dependency also exists | PDF.js assets are local; password/error flows need runtime verification; corrupt-PDF handling is documented as fixed but not re-tested in this audit |
 | RTF | `RtfExtractor` | text only; pictures, tables and styles dropped |
 | ODT / ODS / ODP | `OdfTextExtractor` (SAX) | text only; DTDs refused; ≤ 64 MB `content.xml` |
 | EPUB | `EpubReader` + `HtmlSanitizer` | spine order, text and basic structure; images/CSS/scripts removed; ≤ 3M chars |
