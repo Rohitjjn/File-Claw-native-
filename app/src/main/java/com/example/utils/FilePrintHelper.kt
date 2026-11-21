@@ -193,6 +193,7 @@ object FilePrintHelper {
                             DocxPreviewDiagnostics.log(
                                 "asset_request", "mode" to "print", "assetRequestUrl" to assetUrl,
                                 "fileName" to docxFile.name, "responseStatus" to 200,
+                                "responseMime" to "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 "responseLength" to sizeBytes
                             )
                             return runCatching {

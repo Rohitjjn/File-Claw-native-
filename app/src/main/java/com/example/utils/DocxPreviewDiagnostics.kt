@@ -12,6 +12,7 @@ object DocxPreviewDiagnostics {
     private val jsMetricKeys = setOf(
         "event", "elapsedMs", "fetchCount", "fetchUrl", "fetchStatus", "fetchMime", "fetchContentLength",
         "fetchBytes", "fetchDurationMs", "docxMagic", "rendererAvailable", "pages", "pageWidth", "pageHeight",
+        "responseMime",
         "renderDurationMs", "contentPresent", "contentVisible", "pageCount", "assetRequestUrl", "fileName",
         "fileSizeBytes", "decision", "lifecycle", "callbackElapsedMs", "responseStatus", "responseBytes", "responseLength",
         "rectLeft", "rectTop", "rectRight", "rectBottom", "rectWidth", "rectHeight",

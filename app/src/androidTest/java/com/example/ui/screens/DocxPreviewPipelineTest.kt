@@ -37,6 +37,10 @@ import kotlin.math.ceil
 @RunWith(AndroidJUnit4::class)
 class DocxPreviewPipelineTest {
 
+    companion object {
+        private const val DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+
     @Test
     fun previewAndPrintModeRenderVisibleContentAcrossFixtureSuite() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -58,8 +62,8 @@ class DocxPreviewPipelineTest {
                 // streams; when exposed it must agree, and fetched bytes are always exact below.
                 assertTrue("$label response Content-Length disagreed: ${result.fetchContentLength}",
                     result.fetchContentLength == 0 || result.fixtureBytes == result.fetchContentLength)
-                assertTrue("$label response MIME was wrong: ${result.fetchMime}",
-                    result.fetchMime.contains("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+                assertEquals("$label intercepted asset MIME", DOCX_MIME, result.assetResponseMime)
+                assertEquals("$label intercepted asset length", result.fixtureBytes, result.assetResponseLength)
                 assertTrue("$label returned no DOCX ZIP signature", result.docxMagic)
                 assertTrue("$label did not initialize JSZip/docx-preview", result.rendererAvailable)
                 assertTrue("$label raised a JavaScript console error: ${result.jsError}", result.jsError == null)
@@ -167,6 +171,8 @@ class DocxPreviewPipelineTest {
         val resultValue = AtomicReference<String>("")
         val callbackPageCount = AtomicInteger(0)
         val fetchRequestCount = AtomicInteger(0)
+        val interceptedMime = AtomicReference<String?>(null)
+        val interceptedLength = AtomicInteger(0)
         val fixtureBytes = fixture.bytes
         val loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
@@ -174,8 +180,10 @@ class DocxPreviewPipelineTest {
                 override fun handle(path: String): WebResourceResponse? {
                     if (path != "document.docx") return null
                     fetchRequestCount.incrementAndGet()
+                    interceptedMime.set(DOCX_MIME)
+                    interceptedLength.set(fixtureBytes.size)
                     return WebResourceResponse(
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        DOCX_MIME,
                         null,
                         200,
                         "OK",
@@ -343,6 +351,8 @@ class DocxPreviewPipelineTest {
             fixtureName = fixture.name,
             fixtureBytes = fixtureBytes.size,
             fetchRequestCount = fetchRequestCount.get(),
+            assetResponseMime = interceptedMime.get().orEmpty(),
+            assetResponseLength = interceptedLength.get(),
             fetchCount = resultJson?.optInt("fetchCount") ?: 0,
             fetchStatus = resultJson?.optInt("fetchStatus") ?: 0,
             fetchBytes = resultJson?.optInt("fetchBytes") ?: 0,
@@ -516,6 +526,8 @@ class DocxPreviewPipelineTest {
         val fixtureName: String,
         val fixtureBytes: Int,
         val fetchRequestCount: Int,
+        val assetResponseMime: String,
+        val assetResponseLength: Int,
         val fetchCount: Int,
         val fetchStatus: Int,
         val fetchBytes: Int,

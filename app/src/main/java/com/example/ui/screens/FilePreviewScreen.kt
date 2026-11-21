@@ -5132,6 +5132,7 @@ fun DocxPreviewWebView(
                                     com.example.utils.DocxPreviewDiagnostics.log(
                                         "asset_request", "assetRequestUrl" to assetUrl,
                                         "fileName" to fileEntity.name, "responseStatus" to 200,
+                                        "responseMime" to "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                         "responseLength" to sizeBytes
                                     )
                                     return runCatching {
