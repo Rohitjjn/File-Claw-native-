@@ -60,6 +60,13 @@ jobs:
             :app:assembleDebug \
             --stacktrace
 
+      - name: Enable hardware acceleration for the Android emulator
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Start Android emulator and run DOCX WebView integration tests
         run: |
           set -euo pipefail
