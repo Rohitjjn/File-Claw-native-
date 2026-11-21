@@ -476,7 +476,7 @@
                 debug: false
             };
 
-            docx.renderAsync(arrayBuffer, staging, null, options).then(function() {
+            docx.renderAsync(arrayBuffer, staging, document.head, options).then(function() {
                 const pages = staging.querySelectorAll('.docx');
                 const totalPages = pages.length > 0 ? pages.length : 1;
                 if (pages.length > 0) {
@@ -486,7 +486,21 @@
                 container.replaceChildren(...renderedNodes);
 
                 baseScale = calculateBaseScale();
-                container.style.zoom = String(getEffectiveZoom());
+                const effectiveZoom = getEffectiveZoom();
+                // A non-finite or near-zero zoom makes the whole sheet invisible on a
+                // white background (the "blank DOCX" report). Never commit a degenerate
+                // scale: fall back to plain fit-to-width.
+                container.style.zoom = String(
+                    (Number.isFinite(effectiveZoom) && effectiveZoom > 0.05) ? effectiveZoom : baseScale
+                );
+
+                // Recovery for a structurally empty render: show an honest error instead
+                // of a silent white page.
+                const renderedText = (container.textContent || '').trim();
+                if (pages.length === 0 || renderedText.length === 0) {
+                    showLoadError('The document layout is empty.');
+                    return;
+                }
 
                 if (!isPrintMode && document.body.classList.contains('dark')) {
                     setDarkMode(true);

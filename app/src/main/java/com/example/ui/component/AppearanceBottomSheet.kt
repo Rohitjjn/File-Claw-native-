@@ -127,17 +127,25 @@ object ViewerAppearancePrefs {
     }
 
     /**
-     * Persisted DOCX zoom in percent (25 - 500). Defaults to the shipped 40% opening zoom.
-     * Used by the preview screen to remember the user's last DOCX zoom across sessions.
+     * Persisted DOCX zoom in percent (50 - 500). 100% means fit-to-width, because the
+     * DOCX engine already divides the page width by the viewport before applying this
+     * factor. Older builds shipped a 40% default that was multiplied on top of the
+     * fit-to-width scale, leaving the page ~17% of the screen — a blank-looking white
+     * sheet. Values below 50 are legacy artefacts of that bug and are migrated to 100.
      */
     fun getDocxZoomPercent(context: Context): Int {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getInt(KEY_DOCX_ZOOM_PERCENT, 40).coerceIn(25, 500)
+        val stored = prefs.getInt(KEY_DOCX_ZOOM_PERCENT, 100)
+        if (stored < 50) {
+            prefs.edit().putInt(KEY_DOCX_ZOOM_PERCENT, 100).apply()
+            return 100
+        }
+        return stored.coerceIn(50, 500)
     }
 
     fun setDocxZoomPercent(context: Context, percent: Int) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putInt(KEY_DOCX_ZOOM_PERCENT, percent.coerceIn(25, 500)).apply()
+        prefs.edit().putInt(KEY_DOCX_ZOOM_PERCENT, percent.coerceIn(50, 500)).apply()
     }
 }
 

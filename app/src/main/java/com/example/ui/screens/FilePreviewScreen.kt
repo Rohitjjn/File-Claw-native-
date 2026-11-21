@@ -97,6 +97,8 @@ import com.example.viewmodel.MainViewModel
 import java.io.File
 import coil.compose.AsyncImage
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeIn
@@ -129,6 +131,8 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
@@ -148,6 +152,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material.icons.outlined.RotateRight
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
@@ -765,13 +770,24 @@ fun FilePreviewScreen(
                 }
                 window.statusBarColor = android.graphics.Color.TRANSPARENT
                 window.navigationBarColor = android.graphics.Color.TRANSPARENT
-                insetsController.hide(WindowInsetsCompat.Type.systemBars())
             } else {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P && originalCutoutMode != null) {
                     window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = originalCutoutMode }
                 }
-                insetsController.show(WindowInsetsCompat.Type.systemBars())
             }
+        }
+    }
+    // Focus-mode chrome is choreographed instead of snapping: the immersive system-bar
+    // change waits until the app bars have finished sliding out (320 ms), and the bars
+    // are restored immediately when leaving focus mode so both transitions overlap.
+    LaunchedEffect(isBarsVisible, activity) {
+        val window = activity?.window ?: return@LaunchedEffect
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        if (isBarsVisible) {
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
+        } else {
+            kotlinx.coroutines.delay(320)
+            insetsController.hide(WindowInsetsCompat.Type.systemBars())
         }
     }
     DisposableEffect(activity) {
@@ -802,14 +818,22 @@ fun FilePreviewScreen(
         topBar = {
             androidx.compose.animation.AnimatedVisibility(
                 visible = isBarsVisible,
-                enter = androidx.compose.animation.slideInVertically(
-                    animationSpec = tween(260, easing = FastOutSlowInEasing),
+                enter = androidx.compose.animation.fadeIn(
+                    animationSpec = tween(240, easing = LinearOutSlowInEasing)
+                ) + androidx.compose.animation.slideInVertically(
+                    animationSpec = tween(320, easing = FastOutSlowInEasing),
                     initialOffsetY = { -it }
-                ) + androidx.compose.animation.fadeIn(tween(220)),
-                exit = androidx.compose.animation.slideOutVertically(
-                    animationSpec = tween(260, easing = FastOutSlowInEasing),
+                ) + androidx.compose.animation.scaleIn(
+                    animationSpec = tween(320, easing = FastOutSlowInEasing),
+                    initialScale = 0.96f,
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+                ),
+                exit = androidx.compose.animation.fadeOut(
+                    animationSpec = tween(150, easing = LinearOutSlowInEasing)
+                ) + androidx.compose.animation.slideOutVertically(
+                    animationSpec = tween(240, easing = FastOutLinearInEasing),
                     targetOffsetY = { -it }
-                ) + androidx.compose.animation.fadeOut(tween(220)),
+                ),
                 modifier = Modifier.statusBarsPadding()
             ) {
                 if (isSearchInDocumentOpen) {
@@ -1162,14 +1186,22 @@ fun FilePreviewScreen(
             if (showFloatingBar) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = isBarsVisible,
-                    enter = androidx.compose.animation.slideInVertically(
-                        animationSpec = tween(260, easing = FastOutSlowInEasing),
+                    enter = androidx.compose.animation.fadeIn(
+                        animationSpec = tween(240, easing = LinearOutSlowInEasing)
+                    ) + androidx.compose.animation.slideInVertically(
+                        animationSpec = tween(320, easing = FastOutSlowInEasing),
                         initialOffsetY = { it }
-                    ) + androidx.compose.animation.fadeIn(tween(220)),
-                    exit = androidx.compose.animation.slideOutVertically(
-                        animationSpec = tween(260, easing = FastOutSlowInEasing),
+                    ) + androidx.compose.animation.scaleIn(
+                        animationSpec = tween(320, easing = FastOutSlowInEasing),
+                        initialScale = 0.94f,
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
+                    ),
+                    exit = androidx.compose.animation.fadeOut(
+                        animationSpec = tween(150, easing = LinearOutSlowInEasing)
+                    ) + androidx.compose.animation.slideOutVertically(
+                        animationSpec = tween(240, easing = FastOutLinearInEasing),
                         targetOffsetY = { it }
-                    ) + androidx.compose.animation.fadeOut(tween(220))
+                    )
                 ) {
                     Box(
                         modifier = Modifier
@@ -1783,10 +1815,23 @@ fun FilePreviewScreen(
             // Subtle Floating Back & Exit Pill when !isBarsVisible (Focus mode)
             androidx.compose.animation.AnimatedVisibility(
                 visible = !isBarsVisible,
-                enter = androidx.compose.animation.fadeIn(tween(220)) +
-                    androidx.compose.animation.slideInVertically(tween(260, easing = FastOutSlowInEasing)) { -it },
-                exit = androidx.compose.animation.fadeOut(tween(220)) +
-                    androidx.compose.animation.slideOutVertically(tween(260, easing = FastOutSlowInEasing)) { -it },
+                enter = androidx.compose.animation.fadeIn(
+                    animationSpec = tween(220, delayMillis = 140, easing = LinearOutSlowInEasing)
+                ) + androidx.compose.animation.slideInVertically(
+                    animationSpec = tween(300, delayMillis = 140, easing = FastOutSlowInEasing),
+                    initialOffsetY = { -it / 2 }
+                ) + androidx.compose.animation.scaleIn(
+                    animationSpec = tween(300, delayMillis = 140, easing = FastOutSlowInEasing),
+                    initialScale = 0.9f,
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                ),
+                exit = androidx.compose.animation.fadeOut(
+                    animationSpec = tween(120, easing = LinearOutSlowInEasing)
+                ) + androidx.compose.animation.scaleOut(
+                    animationSpec = tween(160, easing = FastOutLinearInEasing),
+                    targetScale = 0.9f,
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                ),
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .statusBarsPadding()
@@ -3728,6 +3773,13 @@ fun ImagePreview(
         }
     }
 
+    // Tracks which pager page currently owns a non-identity zoom. While a page is
+    // zoomed, horizontal swipes must pan the image instead of flipping to the next
+    // photo; otherwise the pager steals the second finger of a pinch and the image
+    // visibly jumps/rebounds.
+    var zoomedPage by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(pagerState.currentPage) { zoomedPage = null }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -3736,19 +3788,49 @@ fun ImagePreview(
     ) {
         androidx.compose.foundation.pager.HorizontalPager(
             state = pagerState,
+            userScrollEnabled = zoomedPage == null,
             modifier = Modifier.fillMaxSize()
         ) { page ->
             val file = imageFiles[page]
             val zoomSpec = remember {
-                me.saket.telephoto.zoomable.ZoomSpec(maxZoomFactor = 15f)
+                // 15x made every pinch end in a blurry, janky bitmap on low-end
+                // devices. 6x keeps text/details readable without decoding a
+                // poster-sized bitmap.
+                me.saket.telephoto.zoomable.ZoomSpec(maxZoomFactor = 6f)
             }
             val zoomableState = me.saket.telephoto.zoomable.rememberZoomableState(zoomSpec = zoomSpec)
             val zoomableImageState = me.saket.telephoto.zoomable.rememberZoomableImageState(zoomableState = zoomableState)
+            // Decode at a bounded resolution: a 48MP camera photo decoded at original
+            // size is tens of megabytes and is the usual cause of pinch-zoom stutter.
+            val imageRequest = remember(file.absolutePath) {
+                coil.request.ImageRequest.Builder(context)
+                    .data(file)
+                    .size(2048)
+                    .crossfade(false)
+                    .build()
+            }
+            LaunchedEffect(zoomableState, page) {
+                androidx.compose.runtime.snapshotFlow { zoomableState.zoomFraction ?: 1f }
+                    .collect { fraction ->
+                        if (page == pagerState.currentPage) {
+                            val isZoomed = fraction > 1.02f
+                            zoomedPage = if (isZoomed) page else null
+                        }
+                    }
+            }
+            // Leaving a page must not leave it pre-zoomed for the next visit.
+            LaunchedEffect(page, pagerState.currentPage) {
+                if (page != pagerState.currentPage && (zoomableState.zoomFraction ?: 1f) > 1.02f) {
+                    zoomableState.resetZoom()
+                }
+            }
 
             me.saket.telephoto.zoomable.coil.ZoomableAsyncImage(
-                model = file,
+                model = imageRequest,
                 contentDescription = "Image preview",
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clipToBounds(),
                 state = zoomableImageState,
                 onClick = { onTap() }
             )
@@ -3958,8 +4040,13 @@ fun PdfPreview(
                                         requirePassword = true
                                     },
                                     onError = { message ->
-                                        pdfErrorMessage = message
-                                        isPdfReady = false
+                                        // A late script error after the document is
+                                        // already on screen must not replace a working
+                                        // reader with the full-page error state.
+                                        if (!isPdfReady) {
+                                            pdfErrorMessage = message
+                                            isPdfReady = false
+                                        }
                                     },
                                     onSingleTap = { latestSingleTap.value() },
                                     onDoubleTap = {

@@ -784,18 +784,26 @@
       }
     }
 
-    async function loadPdf() {
-      if (pdfDocument) return pdfDocument;
-      if (loadingPromise) return loadingPromise;
+    // v1.4.1: `useWorkerFetch` is disabled because this reader is served through
+    // WebViewClient.shouldInterceptRequest. Requests issued inside the PDF worker are
+    // not reliably intercepted on Android WebView, so the document fetch was leaving
+    // the appasset domain and failing with "Failed to fetch". Fetching on the main
+    // thread keeps every byte on the intercepted path.
+    //
+    // If a range request still fails (some WebView builds reject a 206 response for a
+    // custom scheme), the loader retries once with range support disabled, which turns
+    // the transfer into one full 200 response.
+    let rangeDisabled = false;
 
+    function createLoadingTask(disableRange) {
       const loadingTask = pdfjsLib.getDocument({
         url: pdfUrl,
         cMapUrl: assetBase + 'cmaps/',
         cMapPacked: true,
         standardFontDataUrl: assetBase + 'standard_fonts/',
         isEvalSupported: false,
-        useWorkerFetch: true,
-        disableRange: false,
+        useWorkerFetch: false,
+        disableRange: Boolean(disableRange),
         disableStream: true,
         disableAutoFetch: true
       });
@@ -803,11 +811,71 @@
         passwordUpdater = updatePassword;
         bridgeCall('onPdfPasswordRequired', Number(reason) || 1);
       };
-      loadingPromise = loadingTask.promise.then(async function (documentProxy) {
+      return loadingTask;
+    }
+
+    function isNetworkFailure(error) {
+      const message = String(error && (error.message || error) || '').toLowerCase();
+      return message.indexOf('fetch') >= 0 ||
+        message.indexOf('network') >= 0 ||
+        message.indexOf('http') >= 0 ||
+        message.indexOf('xhr') >= 0;
+    }
+
+    async function openDocument() {
+      let lastError = null;
+      const attempts = rangeDisabled ? [true] : [false, true];
+      for (const disableRange of attempts) {
+        let loadingTask = null;
+        try {
+          loadingTask = createLoadingTask(disableRange);
+          const documentProxy = await loadingTask.promise;
+          pdfDocument = documentProxy;
+          await prepareDocument(documentProxy);
+          rangeDisabled = Boolean(disableRange);
+          return documentProxy;
+        } catch (error) {
+          lastError = error;
+          try { if (loadingTask && loadingTask.destroy) loadingTask.destroy(); } catch (ignored) {}
+          // A password prompt is a valid user-facing state, and a corrupt PDF will
+          // not get better on a second attempt. Only retry transport failures.
+          if (!isNetworkFailure(error)) break;
+        }
+      }
+
+      // Last-resort path: pull the bytes ourselves on the main thread and hand the
+      // already-decoded ArrayBuffer to PDF.js. This bypasses every streaming/range
+      // decision inside the library and works whenever the intercepted URL is
+      // reachable at all.
+      if (isNetworkFailure(lastError)) {
+        const response = await fetch(pdfUrl, { credentials: 'omit' });
+        if (!response.ok) throw lastError;
+        const buffer = await response.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({
+          data: buffer,
+          cMapUrl: assetBase + 'cmaps/',
+          cMapPacked: true,
+          standardFontDataUrl: assetBase + 'standard_fonts/',
+          isEvalSupported: false,
+          useWorkerFetch: false
+        });
+        loadingTask.onPassword = function (updatePassword, reason) {
+          passwordUpdater = updatePassword;
+          bridgeCall('onPdfPasswordRequired', Number(reason) || 1);
+        };
+        const documentProxy = await loadingTask.promise;
         pdfDocument = documentProxy;
         await prepareDocument(documentProxy);
         return documentProxy;
-      }).catch(function (error) {
+      }
+      throw lastError;
+    }
+
+    function loadPdf() {
+      if (pdfDocument) return Promise.resolve(pdfDocument);
+      if (loadingPromise) return loadingPromise;
+
+      loadingPromise = openDocument().catch(function (error) {
         loadingPromise = null;
         bridgeCall('onPdfError', String(error && (error.message || error) || 'Could not open this PDF'));
         throw error;
