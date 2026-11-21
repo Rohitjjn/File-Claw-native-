@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-11-21 (UTC)
 **Checkout:** `arena/ea756912-file-claw-native` at `2f6d3492de46b3d8f71515404d170af4e35c8459` (`chore: ignore gradle build cache files`)
-**Baseline:** this commit is also the available `main` / `origin/main` tip in this checkout. Repository is a shallow/grafted clone containing only this commit in reachable history. The initial working tree was clean. No application code was changed in this audit.
+**Baseline:** this commit was the available `main` / `origin/main` tip at the time of the original audit. The initial working tree was clean and that audit made no application changes. A later owner-authorized DOCX implementation and CI verification are recorded in the dated follow-up at the end of this document; that follow-up supersedes the original “no device/test” status for the specific covered paths only.
 
 ## Executive summary
 
@@ -62,6 +62,14 @@ The owner authorized scoped DOCX rehabilitation. The implementation is recorded 
 - Successful run artifact: `docx-rehabilitation-c561dbae50be7d81ba03f7293f9ead952fd842ba` (35,748,211 bytes; debug APK and reports), available from https://github.com/Rohitjjn/File-Claw-native-/actions/runs/44931079956. The sandbox cannot fetch the artifact ZIP from GitHub's external artifact-storage host, so it is linked at the Actions run rather than copied into the workspace. No release was published.
 - Print dialog/cancellation, renderer-failure recovery, rotation/lifecycle, heavy-file behavior, and owner-device symptoms have not been physically reproduced or verified. The instrumented fixture establishes only the covered preview/render/search scenarios. No user-visible bug root cause has been confirmed.
 
-## Next decision
+## Latest DOCX blank-preview follow-up (2026-11-21)
 
-Finish CI on the corrected workflow and exact latest commit. If green, provide the debug APK artifact and report the issue-by-issue evidence with explicit runtime limitations. Then stop for physical-device feedback; do not start PDF rehabilitation.
+The owner authorized investigation and repair of the normal-preview blank screen only; no PDF/other-format scope was added. Current branch is `arena/ea756912-file-claw-native`. Implementation commit `1842560fe886712f77275c90da4c7c4a8678d09e` passed GitHub Actions run [`44939493750`](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/44939493750): JVM unit tests, lint, Detekt task, Kotlin compilation, debug APK build, pinned Android emulator WebView instrumentation, bundled-JS checks, and artifact upload. Uploaded artifact `docx-rehabilitation-1842560fe886712f77275c90da4c7c4a8678d09e` is 35,786,947 bytes and contains the debug APK/reports. The sandbox cannot download from GitHub’s external artifact-storage host; use the run’s Artifacts panel. Local Gradle tests remain blocked because Java is absent, but CI ran them successfully.
+
+The implementation removes the hidden staging-to-visible node transfer, uses attached output/scroller measurements, delays ready until visible layout/content/positive zoom is validated, presents an actionable render error, adds content-free structured diagnostics and normal/print fixture coverage. The emulator suite covers synthetic basic/Hindi/table/bold, image, portrait/landscape and explicit multi-page documents, local status/bytes, visible page/text, CSS viewports 360×800 and 412×915, print mode, and a forced offscreen-page rejection. Node search tests passed 5/5.
+
+**Root cause is not confirmed.** Before-change source showed hidden offscreen staging, later transfer, and readiness without checking final viewport visibility. That is a plausible geometry/layout failure mode only. The owner’s exact document/device was not reproduced, no real before/after logs or asset-byte measurement were captured, and CI does not substitute for physical-device verification. Normal preview and print share the local HTML/renderer/asset route but use separate WebViews and different viewport/zoom setup. Print readiness was synthesized in tests; actual PrintManager output/cancellation was not device-tested.
+
+**Required next action:** on the owner’s device and exact file, capture `DocxPreviewDiag` from routing through ready/error, check asset response and streamed bytes, WebView URL/lifecycle, JS engine/fetch/render outcome, page/output/scroller/viewport rectangles and visibility styles, zoom/transform/scroll, and Android callback timing. Compare normal with print for the same file; rotate and retry once. Do not claim resolution until visible normal preview and callback timing are confirmed on that device. Details are in `FILE_FORMAT_REHABILITATION.md` and `ISSUE_REGISTER.md` (`AUD-DOCX-012`).
+
+The prior workflow assessment above describes the original audit point; `.github/workflows/docx-verify.yml` was added for this authorized DOCX verification and runs on push/PR.

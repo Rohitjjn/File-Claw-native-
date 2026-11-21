@@ -7,7 +7,7 @@ Severity definitions: **Critical** = immediate data/security risk; **High** = su
 
 ## Owner-authorized DOCX remediation and verification update
 
-The implementation was validated on commit `c561dbae50be7d81ba03f7293f9ead952fd842ba` by GitHub Actions run [44931079956](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/44931079956). JVM unit tests, lint, the Detekt task, Kotlin compilation, debug APK assembly, Android WebView instrumentation, JS tests, and artifact upload all passed. This is CI/emulator evidence for the covered paths, not physical-device validation. The user-reported blank screen, zoom, rotation, or print failures were not reproduced, so a unique runtime root cause is not asserted.
+The earlier approved DOCX implementation passed CI run `44931079956`; the latest blank-preview follow-up is validated on commit `1842560fe886712f77275c90da4c7c4a8678d09e` by run [44939493750](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/44939493750). Unit tests, lint, Detekt task, Kotlin compilation, debug APK assembly, Android WebView instrumentation, JS tests, and artifact upload passed. This is CI/emulator evidence, not physical-device validation. The owner-reported blank screen has not been reproduced, and root cause remains unconfirmed.
 
 | Audit ID | Baseline root cause / scope | Remediation and regression coverage | Verification and remaining limits |
 |---|---|---|---|
@@ -17,6 +17,7 @@ The implementation was validated on commit `c561dbae50be7d81ba03f7293f9ead952fd8
 | AUD-DOCX-004 | Oversized DOCX followed an archive route without a dedicated preview-limit state. | Explicit formatted-preview size policy and DOCX-specific limit UI; no promise of unlimited preview. | Policy unit tests and CI passed. Above-cap real files/low-memory device behavior not measured. |
 | AUD-DOCX-005 | Renderer `.docx` nodes were described as pages without verified Word pagination. | Page counts are marked approximate and jump UI explains renderer estimates. | Static/UI implementation compiled in CI; no equivalence to Microsoft Word pagination is claimed or verified. |
 | AUD-DOCX-006 | Compositor pinch preview could overflow horizontally and touch cancellation could leave transient state. | Pinch preview clips horizontal overflow; touch end/cancel share cleanup and commit logic. | CI instrumentation exercised resize/render path, not actual pinch gestures. Physical zoom/rotation/viewport behavior remains unverified. |
+| AUD-DOCX-012 | Owner reports normal preview blank while toolbar works and print shows content; source root cause is unconfirmed. | Direct attached rendering, scroller/page sizing, visible-content/zoom readiness validation, structured diagnostics, actionable error, forced-offscreen regression. | CI run `44939493750` passed synthetic Android WebView normal/print cases. Exact owner file/device and physical-device resolution remain unverified. |
 | AUD-DOCX-008 | No Android/WebView fixture exercised the actual bundled editor; only helper tests existed. | Synthetic OOXML fixture plus instrumentation test exercises streamed local loading, visible content, Hindi/table text, resize, approximate page count, and cross-run search in normal and print-mode WebViews. | CI emulator instrumentation passed. Does not invoke Android `PrintManager`, test cancellation/rotation/recovery, or replace a physical device matrix. |
 
 The prior detailed baseline entries below should be read as findings at the baseline commit; where they say “proposed solution” or “no tests”, the table above supersedes that status for the approved DOCX changes. It does not supersede unrelated-format, release-workflow, or documentation findings.
@@ -310,7 +311,7 @@ The prior detailed baseline entries below should be read as findings at the base
 
 ## DOCX rehabilitation addendum (2026-11-21)
 
-Expanded source trace, renderer limitations, test inventory, repair plan, compatibility matrix and architecture assessment are in `docs/FILE_FORMAT_REHABILITATION.md`. The following additional entries are static findings or coverage gaps, not reproduced device defects. The audit remains documentation-only and waits for product-owner defect details and implementation approval.
+Expanded source trace, renderer limitations, test inventory, repair plan, compatibility matrix and architecture assessment are in `docs/FILE_FORMAT_REHABILITATION.md`. The blank-preview follow-up is owner-authorized and implemented with synthetic WebView coverage, but the owner’s device symptom remains unreproduced and the root cause unconfirmed. The issue entries below distinguish source findings, emulator evidence, and unverified device behavior.
 
 ### AUD-DOCX-007 — Search count exceeds retained navigable/highlighted matches after 5,000
 - **Feature / format:** DOCX in-document search; **severity:** Medium (result-count/navigation contract ambiguity).
@@ -325,19 +326,15 @@ Expanded source trace, renderer limitations, test inventory, repair plan, compat
 - **Verification:** Browser test at 4,999 / 5,000 / 5,001 and much larger counts, then Android WebView UI test.
 - **Evidence / status:** Static code fact; user-visible mismatch requires runtime reproduction.
 
-### AUD-DOCX-008 — DOCX integration and fixture coverage is helper-heavy; no real DOCX or Android test layer is present
-- **Feature / format:** DOCX open/render/recovery/print lifecycle; **severity:** Medium (regression-detection gap).
-- **Affected files/modules:** `app/src/test/java/com/example/core/format/DocxExtractorTest.kt`, `DocxZoomPolicyTest.kt`, `app/src/test/java/com/example/ui/screens/DocxTextRecoveryTest.kt`, `app/src/main/assets/editor/docx_editor.html`, `FilePreviewScreen.kt`, `FilePrintHelper.kt`.
-- **Observed behavior:** Extractor tests create tiny ZIP/XML fixtures inline; zoom/recovery tests validate pure helper policies. No discovered real binary DOCX fixture and no `app/src/androidTest/` directory. The tests do not exercise local asset loading, JS bridge, Compose navigation, renderer failure, print, rotation, memory or cleanup.
-- **Expected behavior:** Keep helper tests but add small reproducible OOXML fixtures and an Android WebView/app integration layer for high-risk behaviors.
-- **Root cause:** Not established; this is a measured inventory gap, not a claim about test intent.
-- **Reproduction:** Test/assets inventory and source review; no browser/device run.
-- **Existing coverage:** As listed; repository-wide inventory at the observed checkout is 32 JVM test files / 222 literal `@Test` annotations. These are not executed test counts or coverage metrics.
-- **Proposed solution:** Follow fixture and phased test plan in `docs/FILE_FORMAT_REHABILITATION.md` after approval; preserve existing tests.
-- **Regression risks:** Flaky WebView/PrintManager tests, emulator maintenance, fixture licensing and increased CI time.
-- **Verification:** CI JUnit/compile results plus pinned-API instrumentation and manual device matrix; report all missing checks honestly.
-- **Evidence / status:** Coverage gap confirmed by repository inventory; no Gradle tests ran because Java is unavailable.
-
+### AUD-DOCX-008 — DOCX end-to-end coverage remains partial (updated 2026-11-21)
+- **Feature / format:** DOCX open/render/print; **severity:** Medium (remaining regression-detection gap).
+- **Affected files/modules:** `app/src/androidTest/java/com/example/ui/screens/DocxPreviewPipelineTest.kt`, `app/src/main/assets/editor/docx_editor.html`, `FilePreviewScreen.kt`, `FilePrintHelper.kt`.
+- **Observed behavior:** The earlier helper-only test gap is partially addressed by generated OOXML fixtures rendered through the actual bundled editor and local `WebViewAssetLoader` in Android WebView. Coverage includes normal/print modes, representative text/table/image/orientation/explicit-page-break content, 360×800 and 412×915 CSS viewports, fetch bytes, visible geometry/zoom/readiness, and a forced offscreen-page failure. It is not a Compose navigation or actual PrintManager job test.
+- **Root cause:** Not applicable to this coverage gap.
+- **Existing coverage:** CI run `44939493750` on `1842560fe886712f77275c90da4c7c4a8678d09e` passed unit/lint/Detekt/Kotlin compile/debug APK and pinned-emulator instrumentation. Five Node search tests pass locally. No physical-device, rotation/lifecycle, cancellation, memory, accessibility, or owner-file test was performed. Java is unavailable locally.
+- **Proposed solution:** Keep the synthetic suite and add focused device/app lifecycle cases only after measuring the owner-reported scenario. Do not describe this as complete format conformance.
+- **Regression risks:** WebView/runtime variation; emulator fixture behavior may not represent actual device viewport or PrintManager behavior.
+- **Evidence / status:** Synthetic integration gap is partially closed; owner-device symptom remains unverified. Details and artifact link are in `FILE_FORMAT_REHABILITATION.md`.
 ### AUD-DOCX-009 — ZIP detector only inspects the first 256 central-directory names for OOXML refinement
 - **Feature / format:** DOCX format detection; **severity:** Low/Medium (edge-case misrouting risk).
 - **Affected files/modules:** `app/src/main/java/com/example/core/format/FormatDetector.kt:362-402`.
@@ -376,3 +373,14 @@ Expanded source trace, renderer limitations, test inventory, repair plan, compat
 - **Regression risks:** Incorrectly pinning an unrelated upstream release, altering the bundle or forgetting legal notices.
 - **Verification:** Reproducible artifact hash/source mapping, exact upstream license and shipped notice check.
 - **Evidence / status:** Hashes and public upstream metadata inspected; bundled version/source remains unresolved. This is not a conclusion that the artifact is unlicensed.
+
+### AUD-DOCX-012 — Owner-reported blank normal DOCX preview (root cause unconfirmed)
+- **Feature / format:** DOCX normal preview; **severity:** High (reported complete blank content area while toolbar remains usable).
+- **Affected files/modules:** `app/src/main/assets/editor/docx_editor.html`, `app/src/main/java/com/example/ui/screens/FilePreviewScreen.kt`, `MainViewModel.kt`, `FilePrintHelper.kt`, `DocxPreviewDiagnostics.kt`.
+- **Owner report:** Normal preview is blank with toolbar working; printing the same DOCX shows content. The picture-in-picture video at the screenshot edge is a YouTube overlay, not document content.
+- **Source evidence before change:** Renderer rendered in an offscreen hidden staging node, transferred its children to the visible output, sized against window dimensions, and called ready without verifying final visible page/content geometry. This is an evidenced implementation pattern, not a confirmed causal diagnosis.
+- **Changes:** Render directly in attached output; measure fit against scroller/page; validate page/content intersection, dimensions and positive effective zoom after animation-frame layout synchronization; delay Android ready until valid; show an actionable error when render succeeds without visible content; add privacy-conscious Kotlin/JS diagnostics and normal/print synthetic WebView fixtures.
+- **Expected behavior:** A visible document page/text precedes the ready callback and loading-overlay dismissal; otherwise show the error/recovery action. Normal preview and print use the same local editor/renderer but separate WebViews and layout/zoom configurations.
+- **Reproduction / root cause:** The owner’s file/device was not available for a captured run. **Not reproduced here; root cause remains unconfirmed.** No actual owner-file HTTP/asset byte trace or before/after diagnostic payload exists.
+- **Verification:** CI run [`44939493750`](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/44939493750), exact implementation SHA `1842560fe886712f77275c90da4c7c4a8678d09e`, passed all JVM/lint/Detekt/compile/APK/Android WebView/JS steps. Synthetic tests include forced page-offscreen rejection, normal/print fixture runs, 360×800 and 412×915 CSS viewports, local fetch status/bytes, representative document content, portrait/landscape, image and explicit multi-page input. Five Node search tests passed locally.
+- **Limitations / status:** Emulator fixtures verify the implemented checks but do not prove the owner’s issue is fixed. Physical-device verification of the exact file, WebView version, print path, rotation and callback/log sequence remains mandatory before a resolution claim. CI artifact is `docx-rehabilitation-1842560fe886712f77275c90da4c7c4a8678d09e` (35,786,947 bytes; APK/reports) and is linked from the Actions run. See `FILE_FORMAT_REHABILITATION.md` for physical-device steps.
