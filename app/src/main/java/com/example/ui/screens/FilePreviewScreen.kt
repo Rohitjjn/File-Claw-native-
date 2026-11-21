@@ -5119,15 +5119,36 @@ fun DocxPreviewWebView(
                                 override fun handle(path: String): android.webkit.WebResourceResponse? {
                                     if (path != "document.docx") return null
                                     val documentFile = File(fileEntity.path)
-                                    if (!documentFile.isFile) return null
+                                    val assetUrl = "https://appassets.androidplatform.net/docx-src/$path"
+                                    if (!documentFile.isFile) {
+                                        com.example.utils.DocxPreviewDiagnostics.log(
+                                            "asset_request", "assetRequestUrl" to assetUrl,
+                                            "fileName" to fileEntity.name, "responseStatus" to 404,
+                                            "fileSizeBytes" to 0L
+                                        )
+                                        return null
+                                    }
+                                    val sizeBytes = documentFile.length()
+                                    com.example.utils.DocxPreviewDiagnostics.log(
+                                        "asset_request", "assetRequestUrl" to assetUrl,
+                                        "fileName" to fileEntity.name, "responseStatus" to 200,
+                                        "responseLength" to sizeBytes
+                                    )
                                     return runCatching {
                                         android.webkit.WebResourceResponse(
                                             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                             null,
                                             200,
                                             "OK",
-                                            mapOf("Content-Length" to documentFile.length().toString()),
-                                            java.io.FileInputStream(documentFile)
+                                            mapOf("Content-Length" to sizeBytes.toString()),
+                                            com.example.utils.DocxCountingInputStream(
+                                                java.io.FileInputStream(documentFile), documentFile.name, sizeBytes
+                                            )
+                                        )
+                                    }.onFailure { error ->
+                                        com.example.utils.DocxPreviewDiagnostics.log(
+                                            "asset_response_error", "fileName" to documentFile.name,
+                                            "errorKind" to (error::class.java.simpleName)
                                         )
                                     }.getOrNull()
                                 }
@@ -5135,6 +5156,13 @@ fun DocxPreviewWebView(
                             .build()
                         android.webkit.WebView(viewContext).apply {
                             val ownerWebView = this
+                            val createdAtElapsedMs = android.os.SystemClock.elapsedRealtime()
+                            com.example.utils.DocxPreviewDiagnostics.log(
+                                "webview_created", "fileName" to fileEntity.name,
+                                "fileSizeBytes" to File(fileEntity.path).length(),
+                                "url" to "https://appassets.androidplatform.net/assets/editor/docx_editor.html",
+                                "widthPx" to width, "heightPx" to height
+                            )
                             webViewRef = this
                             latestWebViewCreatedCallback.value(this)
                             settings.apply {
@@ -5155,6 +5183,15 @@ fun DocxPreviewWebView(
                                 loadWithOverviewMode = true
                             }
                             setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+                            com.example.utils.DocxPreviewDiagnostics.log(
+                                "webview_settings", "mode" to "normal_preview",
+                                "javaScriptEnabled" to settings.javaScriptEnabled,
+                                "domStorageEnabled" to settings.domStorageEnabled,
+                                "useWideViewPort" to settings.useWideViewPort,
+                                "loadWithOverviewMode" to settings.loadWithOverviewMode,
+                                "allowFileAccess" to settings.allowFileAccess,
+                                "allowContentAccess" to settings.allowContentAccess
+                            )
 
                             val pageChangedCallback = latestPageChangedCallback
                             addJavascriptInterface(object : Any() {
@@ -5167,11 +5204,30 @@ fun DocxPreviewWebView(
                                 }
 
                                 @android.webkit.JavascriptInterface
+                                fun onDocxDiagnostic(payload: String) {
+                                    com.example.utils.DocxPreviewDiagnostics.logJavascriptMetrics(payload)
+                                }
+
+                                @android.webkit.JavascriptInterface
                                 fun onDocumentLoaded(totalPages: Int) {
                                     postForCurrentWebView {
-                                        isWebViewLoading = false
-                                        latestDocumentReadyCallback.value()
-                                        pageChangedCallback.value(1, totalPages)
+                                        if (totalPages <= 0) {
+                                            com.example.utils.DocxPreviewDiagnostics.log(
+                                                "android_ready_rejected", "reason" to "zero_pages"
+                                            )
+                                            recoverFromRenderFailure(ownerWebView, "The renderer returned no visible pages.")
+                                        } else {
+                                            com.example.utils.DocxPreviewDiagnostics.log(
+                                                "android_document_loaded", "pages" to totalPages,
+                                                "callbackElapsedMs" to (android.os.SystemClock.elapsedRealtime() - createdAtElapsedMs),
+                                                "webViewWidthPx" to ownerWebView.width,
+                                                "webViewHeightPx" to ownerWebView.height,
+                                                "documentReady" to true
+                                            )
+                                            isWebViewLoading = false
+                                            latestDocumentReadyCallback.value()
+                                            pageChangedCallback.value(1, totalPages)
+                                        }
                                     }
                                 }
 
@@ -5215,7 +5271,27 @@ fun DocxPreviewWebView(
                             }, "Android")
 
                             webViewClient = object : android.webkit.WebViewClient() {
+                                override fun onPageStarted(
+                                    view: android.webkit.WebView?, url: String?, favicon: android.graphics.Bitmap?
+                                ) {
+                                    com.example.utils.DocxPreviewDiagnostics.log(
+                                        "webview_lifecycle", "lifecycle" to "page_started",
+                                        "url" to (url ?: ""), "isCurrent" to (view === ownerWebView)
+                                    )
+                                }
+
+                                override fun onPageCommitVisible(view: android.webkit.WebView?, url: String?) {
+                                    com.example.utils.DocxPreviewDiagnostics.log(
+                                        "webview_lifecycle", "lifecycle" to "page_commit_visible",
+                                        "url" to (url ?: ""), "isCurrent" to (view === ownerWebView)
+                                    )
+                                }
+
                                 override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                    com.example.utils.DocxPreviewDiagnostics.log(
+                                        "webview_lifecycle", "lifecycle" to "page_finished",
+                                        "url" to (url ?: ""), "isCurrent" to (view === ownerWebView)
+                                    )
                                     if (view !== ownerWebView || webViewRef !== ownerWebView) return
                                     // Apply the CURRENT zoom factor (not a stale factory-time
                                     // capture) BEFORE loadDocx so the document never flashes at
@@ -5244,7 +5320,14 @@ fun DocxPreviewWebView(
                                     view: android.webkit.WebView?,
                                     request: android.webkit.WebResourceRequest?
                                 ): android.webkit.WebResourceResponse? {
-                                    return request?.url?.let { docxAssetLoader.shouldInterceptRequest(it) }
+                                    val uri = request?.url ?: return null
+                                    if (uri.path?.startsWith("/docx-src/") == true) {
+                                        com.example.utils.DocxPreviewDiagnostics.log(
+                                            "asset_intercept", "assetRequestUrl" to uri.toString(),
+                                            "lifecycle" to "shouldInterceptRequest"
+                                        )
+                                    }
+                                    return docxAssetLoader.shouldInterceptRequest(uri)
                                 }
 
                                 override fun onReceivedError(
@@ -5253,8 +5336,13 @@ fun DocxPreviewWebView(
                                     error: android.webkit.WebResourceError?
                                 ) {
                                     super.onReceivedError(view, request, error)
+                                    com.example.utils.DocxPreviewDiagnostics.log(
+                                        "webview_resource_error", "url" to (request?.url?.toString() ?: ""),
+                                        "errorCode" to (error?.errorCode ?: 0),
+                                        "isMainFrame" to (request?.isForMainFrame == true),
+                                        "descriptionKind" to "WebResourceError"
+                                    )
                                     if (request?.isForMainFrame == true) {
-                                        android.util.Log.e("WebViewDocx", "Error: ${error?.description}")
                                         view?.let { failedWebView ->
                                             recoverFromRenderFailure(
                                                 failedWebView,
@@ -5272,9 +5360,9 @@ fun DocxPreviewWebView(
                                     view: android.webkit.WebView,
                                     detail: android.webkit.RenderProcessGoneDetail
                                 ): Boolean {
-                                    android.util.Log.e(
-                                        "WebViewDocx",
-                                        "Renderer process gone (crashed=${detail.didCrash()}); switching to text-only preview"
+                                    com.example.utils.DocxPreviewDiagnostics.log(
+                                        "renderer_process_gone", "crashed" to detail.didCrash(),
+                                        "webViewWidthPx" to view.width, "webViewHeightPx" to view.height
                                     )
                                     recoverFromRenderFailure(view, "The document renderer stopped unexpectedly.")
                                     return true
@@ -5286,12 +5374,22 @@ fun DocxPreviewWebView(
                                     errorResponse: android.webkit.WebResourceResponse?
                                 ) {
                                     super.onReceivedHttpError(view, request, errorResponse)
-                                    android.util.Log.e("WebViewDocx", "HTTP Error: ${errorResponse?.statusCode}")
+                                    com.example.utils.DocxPreviewDiagnostics.log(
+                                        "webview_http_error", "url" to (request?.url?.toString() ?: ""),
+                                        "responseStatus" to (errorResponse?.statusCode ?: 0)
+                                    )
                                 }
                             }
                             webChromeClient = object : android.webkit.WebChromeClient() {
                                 override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
-                                    android.util.Log.d("WebViewDocx", "${consoleMessage?.message()} -- From line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
+                                    val level = consoleMessage?.messageLevel()
+                                    if (level == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
+                                        val source = consoleMessage.sourceId()?.substringAfterLast('/')?.take(100).orEmpty()
+                                        android.util.Log.e(
+                                            com.example.utils.DocxPreviewDiagnostics.TAG,
+                                            "javascript_console_error source=$source line=${consoleMessage.lineNumber()}"
+                                        )
+                                    }
                                     return true
                                 }
                             }

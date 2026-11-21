@@ -576,10 +576,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val spec = detection.spec
         val ext = FormatRegistry.extensionOf(file.name).ifEmpty { entity.extension.lowercase() }
         return when (spec.kind) {
-            FileKind.DOCX -> when (val route = com.example.core.format.DocxPreviewPolicy.route(file.length())) {
-                com.example.core.format.DocxPreviewPolicy.Route.FormattedPreview -> FileContentState.DocxSuccess(entity)
-                is com.example.core.format.DocxPreviewPolicy.Route.LimitExceeded ->
-                    FileContentState.DocxPreviewLimitExceeded(entity, route.maxBytes)
+            FileKind.DOCX -> {
+                val sizeBytes = file.length()
+                val route = com.example.core.format.DocxPreviewPolicy.route(sizeBytes)
+                val decision = when (route) {
+                    com.example.core.format.DocxPreviewPolicy.Route.FormattedPreview -> "formatted_preview"
+                    is com.example.core.format.DocxPreviewPolicy.Route.LimitExceeded -> "preview_limit_exceeded"
+                }
+                com.example.utils.DocxPreviewDiagnostics.log(
+                    "file_route",
+                    "fileName" to file.name,
+                    "fileSizeBytes" to sizeBytes,
+                    "decision" to decision
+                )
+                when (route) {
+                    com.example.core.format.DocxPreviewPolicy.Route.FormattedPreview -> FileContentState.DocxSuccess(entity)
+                    is com.example.core.format.DocxPreviewPolicy.Route.LimitExceeded ->
+                        FileContentState.DocxPreviewLimitExceeded(entity, route.maxBytes)
+                }
             }
             FileKind.PPTX -> webDocument(file, entity, password) { FileContentState.PptxSuccess(it, entity) }
             FileKind.PDF -> FileContentState.PdfSuccess(entity)
