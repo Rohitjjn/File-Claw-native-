@@ -33,7 +33,6 @@ jobs:
         run: |
           set -euo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
           if [ ! -x "$SDKMANAGER" ]; then
             echo "Android command-line tools missing from runner: $ANDROID_HOME" >&2
             exit 1
@@ -42,12 +41,9 @@ jobs:
           "$SDKMANAGER" --install \
             "platform-tools" \
             "platforms;android-34" \
-            "build-tools;34.0.0" \
-            "emulator" \
-            "system-images;android-34;google_apis;x86_64"
-          # sdkmanager installs tools but does not guarantee they are on PATH for later steps.
-          printf '%s\n' "$ANDROID_HOME/platform-tools" "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
-          printf 'no\n' | "$AVDMANAGER" create avd --name docx-api-34 --package "system-images;android-34;google_apis;x86_64" --device pixel_2 --force
+            "build-tools;34.0.0"
+          # sdkmanager installs tools but does not guarantee them on PATH for later steps.
+          printf '%s\n' "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
 
       - name: Run unit tests, lint, Detekt, WebView instrumentation and debug APK build
         run: |
@@ -68,29 +64,17 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Start Android emulator and run DOCX WebView integration tests
-        run: |
-          set -euo pipefail
-          "$ANDROID_HOME/emulator/emulator" -avd docx-api-34 \
-            -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
-            -gpu swiftshader_indirect > "$RUNNER_TEMP/docx-emulator.log" 2>&1 &
-          EMULATOR_PID=$!
-          trap 'kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
-          if ! timeout 180s adb wait-for-device; then
-            echo "Emulator did not register with adb within 180 seconds" >&2
-            cat "$RUNNER_TEMP/docx-emulator.log" >&2 || true
-            adb devices -l >&2 || true
-            exit 1
-          fi
-          if ! timeout 300s bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 2; done'; then
-            echo "Emulator did not finish booting within 300 seconds" >&2
-            cat "$RUNNER_TEMP/docx-emulator.log" >&2 || true
-            adb devices -l >&2 || true
-            exit 1
-          fi
-          adb shell settings put global window_animation_scale 0
-          adb shell settings put global transition_animation_scale 0
-          adb shell settings put global animator_duration_scale 0
-          ./gradlew :app:connectedDebugAndroidTest --stacktrace
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        timeout-minutes: 15
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect
+          disable-animations: true
+          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
 
       - name: Verify bundled DOCX JavaScript and search regression tests
         if: always()
@@ -114,4 +98,3 @@ jobs:
             app/build/reports/detekt/
             app/build/outputs/androidTest-results/connected/
             app/build/reports/androidTests/connected/
-            ${{ runner.temp }}/docx-emulator.log
