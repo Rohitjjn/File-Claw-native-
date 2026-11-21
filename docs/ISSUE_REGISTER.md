@@ -1,9 +1,25 @@
 # Verified application issue register
 
-**Audit date:** 2026-11-21 UTC · **Inspected revision:** `2f6d3492de46b3d8f71515404d170af4e35c8459`
-**Scope:** static source/documentation/workflow audit. No app changes or device reproduction were performed. “Confirmed from code” means the relevant implementation path is present; it does not imply a device reproducer or user-visible impact was demonstrated. Anything not reproduced is explicitly marked accordingly.
+**Audit date:** 2026-11-21 UTC · **Baseline inspected revision:** `2f6d3492de46b3d8f71515404d170af4e35c8459`
+**Baseline scope:** static source/documentation/workflow audit only; the initial audit made no app changes or device reproduction. This register preserves that evidence and is followed by the owner-authorized DOCX remediation/verification update below. “Confirmed from code” means the relevant implementation path is present; it does not imply that an owner-reported symptom was reproduced. Anything not reproduced is explicitly marked accordingly.
 
-Severity definitions: **Critical** = immediate data/security risk; **High** = substantial security, crash, data loss, or core workflow impact; **Medium** = important functional/compatibility limitation; **Low** = contained polish/debt. Priorities are audit triage recommendations, not owner approval to implement.
+Severity definitions: **Critical** = immediate data/security risk; **High** = substantial security, crash, data loss, or core workflow impact; **Medium** = important functional/compatibility limitation; **Low** = contained polish/debt. Initial priorities were audit triage recommendations; owner-authorized DOCX implementation is now in progress/completed as tracked below. No other format is authorized.
+
+## Owner-authorized DOCX remediation and verification update
+
+The implementation was validated on commit `c561dbae50be7d81ba03f7293f9ead952fd842ba` by GitHub Actions run [44931079956](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/44931079956). JVM unit tests, lint, the Detekt task, Kotlin compilation, debug APK assembly, Android WebView instrumentation, JS tests, and artifact upload all passed. This is CI/emulator evidence for the covered paths, not physical-device validation. The user-reported blank screen, zoom, rotation, or print failures were not reproduced, so a unique runtime root cause is not asserted.
+
+| Audit ID | Baseline root cause / scope | Remediation and regression coverage | Verification and remaining limits |
+|---|---|---|---|
+| AUD-DOCX-001 | DOCX path eagerly encoded file bytes as Base64 despite local streamed preview. | DOCX content state no longer retains Base64; `WebViewAssetLoader` streams `/docx-src/document.docx`; stream error enters bounded text recovery. Files: `MainViewModel.kt`, `FilePreviewScreen.kt`, `docx_editor.html`. | CI unit/compile/instrumentation passed. Heap profile/large-file device measurement not performed. |
+| AUD-DOCX-002 | Recovery inflated an unbounded ZIP XML entry and could block the UI path. | `DocxExtractor` enforces XML, ZIP-scan, character, and paragraph caps; recovery runs on IO and stale-WebView results are ignored. Tests cover XML/scan/text boundaries, paragraph/break/tab content. | CI unit/compile/instrumentation passed. No hostile-file stress/fuzz or physical recovery test. |
+| AUD-DOCX-003 | Search inspected individual DOM text nodes and missed phrases split across styled runs. | New literal Unicode case-insensitive matcher joins text-node values, maps ranges back to nodes, groups highlights, and retains bounded navigable matches. Files: `docx_search.js`, `docx_editor.html`. | 5/5 Node tests and CI WebView fixture cross-run search assertions passed. Broader headers/footers/pagination semantics remain untested. |
+| AUD-DOCX-004 | Oversized DOCX followed an archive route without a dedicated preview-limit state. | Explicit formatted-preview size policy and DOCX-specific limit UI; no promise of unlimited preview. | Policy unit tests and CI passed. Above-cap real files/low-memory device behavior not measured. |
+| AUD-DOCX-005 | Renderer `.docx` nodes were described as pages without verified Word pagination. | Page counts are marked approximate and jump UI explains renderer estimates. | Static/UI implementation compiled in CI; no equivalence to Microsoft Word pagination is claimed or verified. |
+| AUD-DOCX-006 | Compositor pinch preview could overflow horizontally and touch cancellation could leave transient state. | Pinch preview clips horizontal overflow; touch end/cancel share cleanup and commit logic. | CI instrumentation exercised resize/render path, not actual pinch gestures. Physical zoom/rotation/viewport behavior remains unverified. |
+| AUD-DOCX-008 | No Android/WebView fixture exercised the actual bundled editor; only helper tests existed. | Synthetic OOXML fixture plus instrumentation test exercises streamed local loading, visible content, Hindi/table text, resize, approximate page count, and cross-run search in normal and print-mode WebViews. | CI emulator instrumentation passed. Does not invoke Android `PrintManager`, test cancellation/rotation/recovery, or replace a physical device matrix. |
+
+The prior detailed baseline entries below should be read as findings at the baseline commit; where they say “proposed solution” or “no tests”, the table above supersedes that status for the approved DOCX changes. It does not supersede unrelated-format, release-workflow, or documentation findings.
 
 ## A. Confirmed bugs / code-path defects
 
