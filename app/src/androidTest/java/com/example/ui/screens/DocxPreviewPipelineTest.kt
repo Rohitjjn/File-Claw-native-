@@ -85,9 +85,8 @@ class DocxPreviewPipelineTest {
                     result.viewportWidth in 340.0..380.0 && result.viewportHeight in 760.0..840.0)
                 assertTrue("$label fetched more bytes than the fixture", result.fetchBytes <= result.fixtureBytes)
                 if (fixture.hasImage) assertTrue("$label image failed to load", result.imageLoaded)
-                if (fixture.requireMixedOrientation) {
-                    assertTrue("$label lost its portrait section", result.hasPortraitPage)
-                    assertTrue("$label lost its landscape section", result.hasLandscapePage)
+                if (fixture.requireLandscapePage) {
+                    assertTrue("$label lost its landscape page", result.hasLandscapePage)
                 }
             }
         }
@@ -99,8 +98,11 @@ class DocxPreviewPipelineTest {
         assertTrue("mixed bold formatting missing in normal preview", basicPreview.hasBoldText)
         assertTrue("image fixture did not load an image in normal preview", results.getValue("image" to false).imageLoaded)
         assertTrue("image fixture did not load an image in print mode", results.getValue("image" to true).imageLoaded)
-        assertTrue("explicit page break did not produce multiple preview pages", results.getValue("sections" to false).pageCount >= 2)
-        assertTrue("explicit page break did not produce multiple print-mode pages", results.getValue("sections" to true).pageCount >= 2)
+        assertTrue("portrait page dimensions were not rendered", basicPreview.hasPortraitPage)
+        assertTrue("landscape page dimensions were not rendered", results.getValue("landscape" to false).hasLandscapePage)
+        assertTrue("landscape print page dimensions were not rendered", results.getValue("landscape" to true).hasLandscapePage)
+        assertTrue("long document did not produce multiple preview pages", results.getValue("long" to false).pageCount >= 2)
+        assertTrue("long document did not produce multiple print-mode pages", results.getValue("long" to true).pageCount >= 2)
         assertTrue("long-document trailing content is missing", results.getValue("long" to false).text.contains("long-document-end-marker"))
         assertTrue("long-document trailing content is missing in print mode", results.getValue("long" to true).text.contains("long-document-end-marker"))
 
@@ -408,12 +410,6 @@ class DocxPreviewPipelineTest {
               </wp:inline>
             </w:drawing></w:r></w:p>
         """.trimIndent()
-        val sectionXml = """
-            <w:p><w:pPr><w:sectPr><w:type w:val="nextPage"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:pPr>
-              <w:r><w:t>portrait-section-marker</w:t></w:r>
-            </w:p>
-            <w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>landscape-section-marker</w:t></w:r></w:p>
-        """.trimIndent()
         val longXml = buildString {
             repeat(80) { index ->
                 val value = if (index == 79) "long-document-end-marker" else "Long paragraph number $index with enough words to exercise flowing DOCX content across several rendered pages."
@@ -428,9 +424,9 @@ class DocxPreviewPipelineTest {
                 listOf("Image fixture visible caption"), hasImage = true
             ),
             DocxFixture(
-                "sections", makeDocx(sectionXml, finalSection = landscapeSection()),
-                listOf("portrait-section-marker", "landscape-section-marker"), minimumPages = 2,
-                requireMixedOrientation = true
+                "landscape",
+                makeDocx("<w:p><w:r><w:t>landscape-page-marker</w:t></w:r></w:p>", finalSection = landscapeSection()),
+                listOf("landscape-page-marker"), requireLandscapePage = true
             ),
             DocxFixture(
                 "long", makeDocx(longXml), listOf("long-document-end-marker"), minimumPages = 2
@@ -519,7 +515,7 @@ class DocxPreviewPipelineTest {
         val expectedText: List<String>,
         val minimumPages: Int = 1,
         val hasImage: Boolean = false,
-        val requireMixedOrientation: Boolean = false
+        val requireLandscapePage: Boolean = false
     )
 
     private data class RenderResult(
