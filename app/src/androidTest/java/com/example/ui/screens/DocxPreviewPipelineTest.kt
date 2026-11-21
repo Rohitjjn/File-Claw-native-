@@ -414,6 +414,9 @@ class DocxPreviewPipelineTest {
             repeat(80) { index ->
                 val value = if (index == 79) "long-document-end-marker" else "Long paragraph number $index with enough words to exercise flowing DOCX content across several rendered pages."
                 append("<w:p><w:r><w:t>").append(value).append("</w:t></w:r></w:p>")
+                if (index < 79 && (index + 1) % 20 == 0) {
+                    append("<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>")
+                }
             }
         }
 
