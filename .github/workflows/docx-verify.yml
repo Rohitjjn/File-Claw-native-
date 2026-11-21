@@ -76,6 +76,40 @@ jobs:
           disable-animations: true
           script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
 
+      - name: Surface Android instrumentation failures
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import html
+          import xml.etree.ElementTree as ET
+
+          reports = sorted(Path('app/build/outputs/androidTest-results/connected').rglob('*.xml'))
+          failures = []
+          for report in reports:
+              try:
+                  root = ET.parse(report).getroot()
+              except (ET.ParseError, OSError):
+                  continue
+              for case in root.iter('testcase'):
+                  for failure in list(case.findall('failure')) + list(case.findall('error')):
+                      message = failure.get('message') or (failure.text or '').strip() or 'No failure detail in XML'
+                      message = ' '.join(html.unescape(message).split())[:1500]
+                      failures.append((case.get('classname', ''), case.get('name', 'unknown'), message))
+
+          summary = Path(__import__('os').environ['GITHUB_STEP_SUMMARY'])
+          if failures:
+              lines = ['## Android instrumentation failures', '']
+              for classname, name, message in failures:
+                  detail = f'{classname}.{name}: {message}'
+                  print(f'::error title=Android instrumentation failure::{detail}')
+                  lines.extend((f'### `{classname}.{name}`', '', message, ''))
+              summary.write_text('\n'.join(lines))
+          else:
+              print(f'No Android instrumentation failures found in {len(reports)} XML reports.')
+              summary.write_text(f'No Android instrumentation failures found in {len(reports)} XML reports.\n')
+          PY
+
       - name: Verify bundled DOCX JavaScript and search regression tests
         if: always()
         run: |
