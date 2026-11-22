@@ -368,7 +368,7 @@ fun FilePreviewScreen(
     val fileState by viewModel.currentFileState.collectAsState()
     val expandedZipPaths by viewModel.expandedZipPaths.collectAsState()
     val settings by viewModel.settingsState.collectAsState()
-    
+
     val activeFile = remember(fileState) { fileState.fileOrNull }
     val isDarkTheme = MaterialTheme.colorScheme.background == com.example.ui.theme.ClaudeOnyx
 
@@ -388,7 +388,7 @@ fun FilePreviewScreen(
     val canBeRenderedInWeb = remember(activeFile) {
         activeFile?.extension?.lowercase() in setOf("html", "htm", "js", "ts", "css", "xml", "txt", "json", "md")
     }
-    
+
     var currentPdfPage by remember { mutableStateOf(1) }
     var totalPdfPages by remember { mutableStateOf(0) }
     var showPropertiesDialog by remember { mutableStateOf(false) }
@@ -873,7 +873,7 @@ fun FilePreviewScreen(
                     return@AnimatedVisibility
                 }
                 val titleText = fileState.fileOrNull?.name ?: "Preview"
-                
+
                 var showMenu by remember { mutableStateOf(false) }
                 val context = LocalContext.current
 
@@ -2554,14 +2554,4 @@ fun FilePreviewScreen(
             containerColor = MaterialTheme.colorScheme.surface
         )
     }
-}
-
-/** Unwrap themed/Compose context wrappers to reach the host Activity for orientation requests. */
-internal fun Context.findHostActivity(): Activity? {
-    var current: Context? = this
-    while (current is ContextWrapper) {
-        if (current is Activity) return current
-        current = current.baseContext
-    }
-    return current as? Activity
 }
