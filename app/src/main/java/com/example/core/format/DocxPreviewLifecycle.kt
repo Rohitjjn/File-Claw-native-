@@ -90,7 +90,8 @@ fun classifyDocxPreviewFailure(code: String): DocxPreviewFailure = when {
         code.contains("PACKAGE", ignoreCase = true) -> DocxPreviewFailure.INVALID_DOCUMENT
     code.contains("EMPTY", ignoreCase = true) || code.contains("NO_PAGES", ignoreCase = true) ->
         DocxPreviewFailure.EMPTY_DOCUMENT
-    code.contains("LAYOUT", ignoreCase = true) || code.contains("VISIBLE", ignoreCase = true) ->
+    code.contains("LAYOUT", ignoreCase = true) || code.contains("VISIBLE", ignoreCase = true) ||
+        code.contains("VIEWPORT", ignoreCase = true) ->
         DocxPreviewFailure.LAYOUT_FAILED
     code.contains("RENDER", ignoreCase = true) -> DocxPreviewFailure.RENDER_FAILED
     else -> DocxPreviewFailure.LOAD_FAILED
