@@ -14,8 +14,8 @@ run in the build sandbox; **(not verified)** means the change could not be compi
 
 ### Verification (this working tree)
 - **PASS (measured):** `node --test tools/docx-tests/docx-search.test.cjs` — 5/5 tests. `node --check` passed for the new viewer, search helper, docx-preview bundle and JSZip bundle. `git diff --check` passed.
-- **CI run 45005699103 on `08f00ca8622db101cc18afdd65e6127bc609faac`:** unit tests, lint, Detekt, Kotlin compilation and `assembleDebug` step passed; Node tests passed. Android instrumentation reported one failure: the print-mode test waited for an extra `onPrintReady` callback even though production uses the validated `onReady` callback. The redundant callback expectation/code was removed; rerun pending.
-- **Artifact:** Actions uploaded `docx-rehabilitation-08f00ca8622db101cc18afdd65e6127bc609faac` (35,901,113 bytes). Downloading the archive failed with `EOF` from GitHub’s artifact blob host, so its internal file listing/APK entry could not be independently inspected. `assembleDebug` succeeded in that run.
+- **CI run 45006492661 on `420e6e85c64e4b8d79093a5b2f41dea498d75ccf`: PASS.** The combined Gradle step passed `:app:testDebugUnitTest`, `:app:lintDebug`, `:app:detekt`, `:app:compileDebugKotlin`, and `:app:assembleDebug`; Android emulator `:app:connectedDebugAndroidTest` passed; Node suite and bundle syntax checks passed. It is the run after fixing the previous run’s print test assertion (which expected an unnecessary extra callback).
+- **Artifact:** Actions lists uploaded artifact `docx-rehabilitation-420e6e85c64e4b8d79093a5b2f41dea498d75ccf`, 35,838,246 bytes (artifact record ID 14748053813). The workflow succeeded including `assembleDebug` and artifact upload. The sandbox download attempt failed with `EOF` from GitHub’s artifact blob host, so the APK filename/content could not be independently listed here.
 - **Local Gradle:** NOT RUN; sandbox has no `java`, `JAVA_HOME`, or Android SDK. **Physical device:** NOT VERIFIED; the reported blank-preview root cause remains unconfirmed.
 
 ## [Unreleased] 2026-11-21 — Engineering reset, audit baseline and DOCX handoff
