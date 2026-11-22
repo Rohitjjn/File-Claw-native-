@@ -65,6 +65,8 @@ jobs:
             tail -n 100 "$log_file" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             tail -n 100 "$log_file"
+            diagnostic=$(tail -n 45 "$log_file" | tr '\n' ' ' | sed -e 's/%/%25/g' -e 's/\r/%0D/g')
+            echo "::error title=Gradle verification details::$diagnostic"
             exit "$gradle_status"
           fi
 
