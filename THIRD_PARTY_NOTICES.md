@@ -3,8 +3,8 @@
 ## Bundled in `app/src/main/assets/`
 | Library | Version | License | Verified from |
 |---|---|---|---|
-| JSZip | 3.10.1 | MIT **or** GPLv3 (dual) | header of `docx/jszip.min.js` |
-| docx-preview | not stated in file | upstream: Apache-2.0 (**verify**) | no license text shipped in the bundle |
+| JSZip | 3.10.2 | MIT **or** GPLv3-or-later (dual) | `app/src/main/assets/docx_viewer/JSZIP_LICENSE` |
+| docx-preview | 0.4.1 | Apache-2.0 | `app/src/main/assets/docx_viewer/DOCX_PREVIEW_LICENSE` |
 | pptx-preview | not stated in file | upstream: MIT (**verify**) | no license text shipped in the bundle |
 | x-spreadsheet | not stated in file | upstream: MIT (**verify**) | no license text shipped in the bundle |
 | PDF.js | 4.10.38 | Apache-2.0 | `app/src/main/assets/pdfjs/LICENSE` |

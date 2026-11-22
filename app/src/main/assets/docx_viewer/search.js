@@ -24,14 +24,13 @@
         const matches = [];
         let total = 0;
         let spanIndex = 0;
-
-        for (const found of text.matchAll(matcher)) {
+        let found;
+        while ((found = matcher.exec(text)) !== null) {
             total++;
             if (matches.length >= limit) continue;
             const start = found.index;
             const end = start + found[0].length;
             while (spanIndex < spans.length && spans[spanIndex].end <= start) spanIndex++;
-
             const ranges = [];
             for (let i = spanIndex; i < spans.length && spans[i].start < end; i++) {
                 const span = spans[i];
@@ -43,7 +42,6 @@
             }
             matches.push({ ranges });
         }
-
         return { total, truncated: total > matches.length, matches };
     }
 

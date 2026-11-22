@@ -4,6 +4,12 @@
 **Checkout:** `arena/ea756912-file-claw-native` at `2f6d3492de46b3d8f71515404d170af4e35c8459` (`chore: ignore gradle build cache files`)
 **Baseline:** this commit was the available `main` / `origin/main` tip at the time of the original audit. The initial working tree was clean and that audit made no application changes. A later owner-authorized DOCX implementation and CI verification are recorded in the dated follow-up at the end of this document; that follow-up supersedes the original “no device/test” status for the specific covered paths only.
 
+## Current DOCX rebuild working-tree update (2026-11-21)
+
+The current branch is rebuilding the DOCX viewer after the design checkpoint; this update supersedes older source-map and test-path descriptions below for the DOCX-only subsystem. New sources are under `app/src/main/java/com/example/ui/preview/docx/`; local renderer assets are under `app/src/main/assets/docx_viewer/`. `FilePreviewScreen.kt` routes only the DOCX success case to the new composable. `FilePrintHelper.kt` uses the same local HTML/assets/stream and keeps the existing bounded extractor fallback. The old DOCX-specific screen, editor HTML/search assets, duplicate DOCX libraries and obsolete Android fixture test were removed. The shared `editor/jszip.min.js` remains because PPTX still uses it. No other format viewer source was changed.
+
+Verification on this working tree: Node syntax checks passed for both new handwritten JS files and both pinned bundles; Node search tests passed **5/5**; `git diff --check` passed. Gradle/JVM/Android checks have not run: `java`, `JAVA_HOME`, and Android SDK environment variables are absent. Android WebView instrumentation and physical-device behavior are unverified. Earlier CI results in the historical DOCX addendum refer to previous commits/bundles and are not evidence for this rebuild.
+
 ## Executive summary
 
 File Claw is an existing single-module Android application built with Kotlin, Jetpack Compose, Room, Android platform APIs, and bundled local JavaScript/WebView renderers. It supports a wide format registry; its format coverage is mixed: some formats have full viewers, some are text-extracted/read-only, and some are recognized but intentionally identify-only. DOCX has both a bundled `docx-preview` WebView renderer and a pure-Kotlin text-recovery extractor.

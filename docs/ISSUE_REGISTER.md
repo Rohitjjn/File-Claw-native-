@@ -5,6 +5,12 @@
 
 Severity definitions: **Critical** = immediate data/security risk; **High** = substantial security, crash, data loss, or core workflow impact; **Medium** = important functional/compatibility limitation; **Low** = contained polish/debt. Initial priorities were audit triage recommendations; owner-authorized DOCX implementation is now in progress/completed as tracked below. No other format is authorized.
 
+## Current DOCX rebuild status (2026-11-21; supersedes older implementation details below)
+
+The owner-authorized rebuild now replaces the earlier `editor/docx_editor.html` path with a modular `ui.preview.docx` screen/host/bridge and a new offline asset bundle. The print WebView is wired to that same bundle. `DocxExtractor` and `FilePrintHelper` are retained; non-DOCX viewer source is unchanged. The bundled versions are `docx-preview` 0.4.1 (Apache-2.0) and JSZip 3.10.2 (MIT or GPL-3.0-or-later), with notices/licenses included.
+
+The new JVM and Android instrumentation coverage is checked in but has **not** run locally. Static Node checks passed and the Node search suite is 5/5. Gradle/JVM, lint, Detekt, Kotlin compile, instrumentation and APK tasks are pending because this sandbox has no Java/Android SDK. No current CI run or artifact exists yet for this working tree. Prior CI rows below apply only to their recorded SHAs. The owner’s file/device remains unavailable; root cause and physical resolution are unconfirmed.
+
 ## Owner-authorized DOCX remediation and verification update
 
 The earlier approved DOCX implementation passed CI run `44931079956`; the latest blank-preview follow-up is validated on commit `1842560fe886712f77275c90da4c7c4a8678d09e` by run [44939493750](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/44939493750). Unit tests, lint, Detekt task, Kotlin compilation, debug APK assembly, Android WebView instrumentation, JS tests, and artifact upload passed. This is CI/emulator evidence, not physical-device validation. The owner-reported blank screen has not been reproduced, and root cause remains unconfirmed.

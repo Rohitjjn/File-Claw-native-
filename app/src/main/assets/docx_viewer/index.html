@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="color-scheme" content="light dark">
+    <title>DOCX viewer</title>
+    <style>
+        :root { color-scheme: light; --paper: #faf9f5; --ink: #191817; --edge: #dfd9d2; }
+        :root.dark { color-scheme: dark; --paper: #151514; --ink: #f4f2ef; --edge: #393633; }
+        * { box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--paper); color: var(--ink); font-family: "Noto Sans Devanagari", "Noto Sans", system-ui, sans-serif; }
+        #scroller { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px 8px 28px; }
+        #status { position: sticky; z-index: 5; top: 0; margin: 12px auto; padding: 12px 16px; width: fit-content; max-width: calc(100% - 24px); border: 1px solid var(--edge); border-radius: 10px; background: var(--paper); color: var(--ink); box-shadow: 0 2px 10px #0002; }
+        #status[hidden] { display: none; }
+        #status.error { position: relative; width: auto; color: #a31520; border-color: #d98389; }
+        #stage { position: relative; width: 100%; min-height: 24px; }
+        #spacer { width: 100%; height: 0; }
+        #scaled-document { position: absolute; top: 0; left: 0; width: max-content; transform-origin: top left; will-change: transform; }
+        #scaled-document .docx-wrapper { background: transparent !important; padding: 0 !important; }
+        #scaled-document .docx, #scaled-document section.docx { margin: 0 auto 20px !important; box-sizing: border-box !important; border-radius: 6px; background: white !important; color: #191817 !important; box-shadow: 0 3px 16px #0002 !important; }
+        :root.dark #scaled-document .docx, :root.dark #scaled-document section.docx { background: #202020 !important; color: #eeeeed !important; box-shadow: 0 3px 16px #0008 !important; }
+        :root.dark #scaled-document .docx * { border-color: #555 !important; }
+        #scaled-document img { max-width: 100%; }
+        mark.docx-highlight { background: #ffe082 !important; color: #17130d !important; border-radius: 2px; }
+        mark.docx-highlight-active { background: #ff9800 !important; outline: 2px solid #e65100; }
+        @media print {
+            html, body { width: auto; height: auto; overflow: visible; background: #fff; }
+            #scroller { position: static; overflow: visible; height: auto; padding: 0; }
+            #status, #spacer { display: none !important; }
+            #stage { min-height: 0; }
+            #scaled-document { position: static; left: auto !important; transform: none !important; width: auto !important; }
+            #scaled-document .docx, #scaled-document section.docx { box-shadow: none !important; border: 0 !important; border-radius: 0 !important; break-after: page; page-break-after: always; }
+            #scaled-document .docx:last-child, #scaled-document section.docx:last-child { break-after: auto; page-break-after: auto; }
+        }
+    </style>
+    <script defer src="jszip.min.js"></script>
+    <script defer src="docx-preview.min.js"></script>
+    <script defer src="search.js"></script>
+    <script defer src="viewer.js"></script>
+</head>
+<body>
+    <main id="scroller" aria-label="Word document preview">
+        <div id="status" role="status" aria-live="polite">Loading document…</div>
+        <div id="stage"><div id="spacer" aria-hidden="true"></div><div id="scaled-document"></div></div>
+    </main>
+</body>
+</html>

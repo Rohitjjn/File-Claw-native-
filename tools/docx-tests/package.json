@@ -1,0 +1,7 @@
+{
+  "name": "file-claw-docx-viewer-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

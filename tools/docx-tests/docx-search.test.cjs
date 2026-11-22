@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { findMatches } = require('../../app/src/main/assets/editor/docx_search.js');
+const { findMatches } = require('../../app/src/main/assets/docx_viewer/search.js');
 
 function textNode(value) {
   return { nodeValue: value };
@@ -27,10 +27,10 @@ test('escapes regular-expression syntax and matches case-insensitively', () => {
   assert.equal(result.matches[0].ranges[0].start, 2);
 });
 
-test('counts every occurrence but retains a bounded, navigable first 5000', () => {
-  const result = findMatches([textNode('x '.repeat(5001))], 'x', 5000);
-  assert.equal(result.total, 5001);
-  assert.equal(result.matches.length, 5000);
+test('counts every occurrence but retains a bounded, navigable first 500', () => {
+  const result = findMatches([textNode('x '.repeat(501))], 'x', 500);
+  assert.equal(result.total, 501);
+  assert.equal(result.matches.length, 500);
   assert.equal(result.truncated, true);
 });
 

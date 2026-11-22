@@ -3,6 +3,20 @@
 Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measured)** were produced by a real
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there. See `PROJECT_STATUS.md` and `ISSUE_REGISTER.md` for the current checkout baseline.
 
+## [Unreleased] 2026-11-21 — DOCX preview subsystem rebuild
+
+### Added / changed
+- Added an offline DOCX viewer bundle under `app/src/main/assets/docx_viewer/`, pinned to `docx-preview` 0.4.1 (Apache-2.0) and JSZip 3.10.2 (MIT or GPL-3.0-or-later); included full license texts and updated the notices.
+- Replaced the legacy DOCX-only WebView composable with a `ui.preview.docx` subsystem: immutable lifecycle reducer, isolated WebView host and JSON-only generation-scoped bridge, fit-width/user zoom controller, pinch/double-tap handling, bounded cross-node Unicode search/navigation, and labeled `DocxExtractor` recovery. `FilePreviewScreen` now routes DOCX into the new surface.
+- Updated the DOCX print WebView to use the same local bundle and document stream; retained its PrintManager adapter and bounded text-print fallback. PDF/PPTX/other format viewer sources were not changed.
+- Replaced legacy DOCX instrumentation fixture code with viewer/print WebView integration and rendered-pixel visibility coverage. Added JVM policy tests and moved Node search tests to the new asset path.
+- Removed legacy DOCX HTML/search/library copies and the old DOCX screen/instrumentation source; retained `editor/jszip.min.js` because the separate PPTX preview uses it.
+
+### Verification (this working tree)
+- **PASS (measured):** `node --test tools/docx-tests/docx-search.test.cjs` — 5/5 tests. `node --check` passed for the new viewer, search helper, docx-preview bundle and JSZip bundle. `git diff --check` passed.
+- **NOT RUN:** Android/JVM Gradle tests, lint, Detekt, Kotlin compilation, instrumentation, debug APK assembly and CI. The sandbox has no `java` executable, `JAVA_HOME`, or Android SDK. The CI workflow has been pointed at the new assets and will be checked after push.
+- **NOT VERIFIED:** owner’s physical-device DOCX/print/rotation/zoom behavior; the reported blank-preview root cause remains unconfirmed.
+
 ## [Unreleased] 2026-11-21 — Engineering reset, audit baseline and DOCX handoff
 
 ### Added

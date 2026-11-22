@@ -171,7 +171,7 @@ object FilePrintHelper {
                 DocxPreviewDiagnostics.log(
                     "webview_created", "mode" to "print", "fileName" to docxFile.name,
                     "fileSizeBytes" to docxFile.length(),
-                    "url" to "https://appassets.androidplatform.net/assets/editor/docx_editor.html?print=1",
+                    "url" to "https://appassets.androidplatform.net/assets/docx_viewer/index.html?print=1&generation=1",
                     "widthPx" to tempWebView.width, "heightPx" to tempWebView.height
                 )
 
@@ -221,6 +221,8 @@ object FilePrintHelper {
                     builtInZoomControls = false
                     displayZoomControls = false
                     setSupportZoom(false)
+                    useWideViewPort = false
+                    loadWithOverviewMode = false
                     allowFileAccess = false
                     allowContentAccess = false
                 }
@@ -250,8 +252,8 @@ object FilePrintHelper {
                     fallbackJob.cancel()
                     activeWebViews.remove(tempWebView)
                     tempWebView.stopLoading()
-                    tempWebView.removeJavascriptInterface("Android")
-                    tempWebView.destroy()
+            tempWebView.removeJavascriptInterface("DocxBridge")
+            tempWebView.destroy()
                 }
 
                 fun cleanup() {
@@ -387,45 +389,33 @@ object FilePrintHelper {
 
                 tempWebView.addJavascriptInterface(object : Any() {
                     @android.webkit.JavascriptInterface
-                    fun onDocxDiagnostic(payload: String) {
-                        DocxPreviewDiagnostics.logJavascriptMetrics(payload)
-                    }
-
-                    @android.webkit.JavascriptInterface
-                    fun onPrintReady() {
+                    fun onReady(payload: String) {
                         mainHandler.post {
+                            val pages = runCatching { org.json.JSONObject(payload).optInt("pages") }.getOrDefault(0)
                             DocxPreviewDiagnostics.log(
-                                "print_ready", "fileName" to docxFile.name,
-                                "callbackElapsedMs" to (android.os.SystemClock.elapsedRealtime() - createdAtElapsedMs)
-                            )
-                            triggerPrint()
-                        }
-                    }
-
-                    @android.webkit.JavascriptInterface
-                    fun onDocumentLoaded(totalPages: Int) {
-                        mainHandler.post {
-                            DocxPreviewDiagnostics.log(
-                                "android_document_loaded", "mode" to "print", "pages" to totalPages,
+                                "android_document_loaded", "mode" to "print", "pages" to pages,
                                 "callbackElapsedMs" to (android.os.SystemClock.elapsedRealtime() - createdAtElapsedMs),
                                 "webViewWidthPx" to tempWebView.width,
                                 "webViewHeightPx" to tempWebView.height,
-                                "documentReady" to (totalPages > 0)
+                                "documentReady" to (pages > 0)
                             )
+                            if (pages > 0) triggerPrint() else fallbackTextPrint("No visible pages")
                         }
                     }
 
                     @android.webkit.JavascriptInterface
-                    fun onDocumentError(error: String) {
+                    fun onFailure(payload: String) {
                         mainHandler.post {
-                            DocxPreviewDiagnostics.log(
-                                "document_error", "mode" to "print",
-                                "reason" to DocxPreviewDiagnostics.safeString(error, 120)
-                            )
+                            val error = runCatching { org.json.JSONObject(payload).optString("code", "render failed") }
+                                .getOrDefault("render failed")
+                            DocxPreviewDiagnostics.log("document_error", "mode" to "print", "reason" to error)
                             fallbackTextPrint(error)
                         }
                     }
-                }, "Android")
+
+                    @android.webkit.JavascriptInterface
+                    fun onPrintReady() { mainHandler.post { triggerPrint() } }
+                }, "DocxBridge")
 
                 tempWebView.webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
@@ -446,7 +436,12 @@ object FilePrintHelper {
                                 "lifecycle" to "shouldInterceptRequest"
                             )
                         }
-                        return docxAssetLoader.shouldInterceptRequest(uri)
+                        val local = uri.scheme == "https" && uri.host == "appassets.androidplatform.net"
+                        val response = if (local) docxAssetLoader.shouldInterceptRequest(uri) else null
+                        return response ?: android.webkit.WebResourceResponse(
+                            "text/plain", "utf-8", 403, "Forbidden", emptyMap(),
+                            java.io.ByteArrayInputStream(ByteArray(0))
+                        )
                     }
 
                     override fun onPageFinished(view: WebView?, url: String?) {
@@ -454,7 +449,15 @@ object FilePrintHelper {
                             "webview_lifecycle", "mode" to "print", "lifecycle" to "page_finished",
                             "url" to (url ?: "")
                         )
-                        view?.evaluateJavascript("loadDocx(false);", null)
+                        view?.evaluateJavascript("DocxViewer.setTheme(false);", null)
+                    }
+
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView?, request: android.webkit.WebResourceRequest?
+                    ): Boolean {
+                        val uri = request?.url ?: return true
+                        return !(uri.scheme == "https" && uri.host == "appassets.androidplatform.net" &&
+                            (uri.path?.startsWith("/assets/docx_viewer/") == true || uri.path?.startsWith("/docx-src/") == true))
                     }
 
                     override fun onReceivedError(
@@ -500,7 +503,10 @@ object FilePrintHelper {
                 mainHandler.postDelayed({
                     if (!printSubmitted) fallbackTextPrint("Format timeout")
                 }, 12000)
-                tempWebView.loadUrl("https://appassets.androidplatform.net/assets/editor/docx_editor.html?print=1")
+                tempWebView.loadUrl(
+                    "https://appassets.androidplatform.net/assets/docx_viewer/index.html?print=1&generation=1&file=" +
+                        android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx")
+                )
             } catch (e: Exception) {
                 createdWebView?.let { webView ->
                     activeWebViews.remove(webView)
