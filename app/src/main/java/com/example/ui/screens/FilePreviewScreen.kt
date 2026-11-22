@@ -401,7 +401,8 @@ fun FilePreviewScreen(
     // system-theme seed for documents that still support dark mode.
     var pdfViewRotation by remember(activeFile?.path) { mutableIntStateOf(0) }
 
-    var isDocxNightMode by remember(activeFile?.path) { mutableStateOf(isDarkTheme) }
+    var docxNightModeOverride by remember(activeFile?.path) { mutableStateOf<Boolean?>(null) }
+    val isDocxNightMode = docxNightModeOverride ?: isDarkTheme
     var scrollToPage by remember { mutableStateOf<Int?>(null) }
     // Loop 14: bumped on every explicit jump (scrubber release, Go-to-Page dialog) so
     // re-navigating to the SAME page number still re-fires the WebView navigation
@@ -455,6 +456,7 @@ fun FilePreviewScreen(
     var pdfSearchSnapshot by remember { mutableStateOf(PdfSearchSnapshot()) }
     var docxPreviewWebView by remember { mutableStateOf<android.webkit.WebView?>(null) }
     var docxPreviewReady by remember(activeFile?.path) { mutableStateOf(false) }
+    val docxViewerState = com.example.ui.preview.docx.rememberDocxViewerState(activeFile?.path)
     var fullPreviewText by remember(activeFile?.path) { mutableStateOf<String?>(null) }
     var largeTextSearchMatches by remember(activeFile?.path) { mutableStateOf<List<TextFileSearchMatch>>(emptyList()) }
     var largeTextSearchCompletedQuery by remember(activeFile?.path) { mutableStateOf("") }
@@ -488,6 +490,19 @@ fun FilePreviewScreen(
 
     val context = LocalContext.current
     val printScope = rememberCoroutineScope()
+
+    LaunchedEffect(activeFile?.path, docxPreviewReady, docxPreviewWebView) {
+        docxViewerState.setPrintAction {
+            activeFile?.let { entity ->
+                val renderedWebView = docxPreviewWebView
+                if (docxPreviewReady && renderedWebView != null) {
+                    com.example.utils.FilePrintHelper.printWebView(context, renderedWebView, entity.name)
+                } else {
+                    com.example.utils.FilePrintHelper.printDocx(context, File(entity.path), entity.name)
+                }
+            }
+        }
+    }
 
     // Seed the inline editor with the currently displayed content every time edit mode starts.
     LaunchedEffect(isEditMode) {
@@ -653,7 +668,10 @@ fun FilePreviewScreen(
             val next = InViewerSearchNavigation.nextIndex(currentMatchIndex, largeTextSearchMatches.size)
             if (next != null) currentMatchIndex = next
         } else {
-            searchTriggerNext++
+            if (fileState is MainViewModel.FileContentState.DocxSuccess) {
+                docxViewerState.findNext()
+                searchTriggerNext = docxViewerState.nextSearchRequest
+            } else searchTriggerNext++
         }
         Unit
     }
@@ -668,7 +686,10 @@ fun FilePreviewScreen(
             val prev = InViewerSearchNavigation.prevIndex(currentMatchIndex, largeTextSearchMatches.size)
             if (prev != null) currentMatchIndex = prev
         } else {
-            searchTriggerPrev++
+            if (fileState is MainViewModel.FileContentState.DocxSuccess) {
+                docxViewerState.findPrevious()
+                searchTriggerPrev = docxViewerState.previousSearchRequest
+            } else searchTriggerPrev++
         }
         Unit
     }
@@ -905,7 +926,7 @@ fun FilePreviewScreen(
                                         showMenu = false
                                         if (!isEditMode) {
                                             activeFile?.let { fileEntity ->
-                                                shareFile(context, File(fileEntity.path), fileEntity.extension)
+                                                shareFile(context, File(fileEntity.path), if (fileState is MainViewModel.FileContentState.DocxSuccess) "docx" else fileEntity.extension)
                                             }
                                         }
                                     },
@@ -974,7 +995,7 @@ fun FilePreviewScreen(
                                             text = { Text(if (isDocxNightMode) "Light Mode" else "Dark Mode") },
                                             onClick = {
                                                 showMenu = false
-                                                isDocxNightMode = !isDocxNightMode
+                                                docxNightModeOverride = !isDocxNightMode
                                             },
                                             leadingIcon = {
                                                 Icon(
@@ -1061,13 +1082,13 @@ fun FilePreviewScreen(
                                                 ext == "pdf" -> {
                                                     com.example.utils.FilePrintHelper.printPdf(context, java.io.File(entity.path), entity.name)
                                                 }
-                                                ext in setOf("docx", "doc") -> {
-                                                    val renderedWebView = docxPreviewWebView
-                                                    if (docxPreviewReady && renderedWebView != null) {
-                                                        com.example.utils.FilePrintHelper.printWebView(context, renderedWebView, entity.name)
-                                                    } else {
-                                                        com.example.utils.FilePrintHelper.printDocx(context, java.io.File(entity.path), entity.name)
-                                                    }
+                                                fileState is MainViewModel.FileContentState.DocxSuccess ||
+                                                    fileState is MainViewModel.FileContentState.DocxPreviewLimitExceeded ||
+                                                    ext in setOf("docx", "docm", "dotx", "dotm") -> {
+                                                    docxViewerState.print()
+                                                }
+                                                ext == "doc" -> {
+                                                    com.example.utils.FilePrintHelper.printDocx(context, java.io.File(entity.path), entity.name)
                                                 }
                                                 ext == "md" || ext == "txt" -> {
                                                     val textState = fileState as? MainViewModel.FileContentState.TextSuccess
@@ -1207,6 +1228,21 @@ fun FilePreviewScreen(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                             ) {
+                                if (isDocx) {
+                                    Surface(
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.clickable { showJumpDialog = true }
+                                    ) {
+                                        Text(
+                                            text = "≈$currentPdfPage / ${totalPdfPages.coerceAtLeast(1)}",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
                                 if (isPdf) {
                                     // Page indicator / Jump button
                                     Surface(
@@ -1318,6 +1354,11 @@ fun FilePreviewScreen(
                                         )
                                     }
 
+                                    TextButton(
+                                        onClick = { docxZoomFactor = com.example.core.format.DocxZoomPolicy.DEFAULT_ZOOM },
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                                    ) { Text("Fit", fontSize = 12.sp) }
+
                                     // Zoom percentage chip
                                     Surface(
                                         shape = RoundedCornerShape(16.dp),
@@ -1367,7 +1408,7 @@ fun FilePreviewScreen(
 
                                     // DOCX Night Mode toggle
                                     IconButton(
-                                        onClick = { isDocxNightMode = !isDocxNightMode },
+                                        onClick = { docxNightModeOverride = !isDocxNightMode },
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
@@ -1380,16 +1421,7 @@ fun FilePreviewScreen(
 
                                     // Print DOCX
                                     IconButton(
-                                        onClick = {
-                                            activeFile?.let {
-                                                val renderedWebView = docxPreviewWebView
-                                                if (docxPreviewReady && renderedWebView != null) {
-                                                    com.example.utils.FilePrintHelper.printWebView(context, renderedWebView, it.name)
-                                                } else {
-                                                    com.example.utils.FilePrintHelper.printDocx(context, java.io.File(it.path), it.name)
-                                                }
-                                            }
-                                        },
+                                        onClick = { docxViewerState.print() },
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
@@ -1400,9 +1432,21 @@ fun FilePreviewScreen(
                                         )
                                     }
 
+                                    IconButton(
+                                        onClick = { activeFile?.let { openDocxExternally(context, File(it.path)) } },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Language,
+                                            contentDescription = "Open DOCX externally",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
                                     // Share DOCX
                                     IconButton(
-                                        onClick = { activeFile?.let { shareFile(context, File(it.path), it.extension) } },
+                                        onClick = { activeFile?.let { shareFile(context, File(it.path), "docx") } },
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
@@ -2104,8 +2148,8 @@ fun FilePreviewScreen(
                 is MainViewModel.FileContentState.DocxSuccess -> {
                     DocxPreviewWebView(
                         fileEntity = state.file,
+                        viewerState = docxViewerState,
                         isNightMode = isDocxNightMode,
-                        viewModel = viewModel,
                         modifier = Modifier.fillMaxSize(),
                         onPageChanged = { page, total ->
                             currentPdfPage = page
@@ -2260,6 +2304,7 @@ fun FilePreviewScreen(
                     onClick = {
                         val pNum = pageInput.toIntOrNull()
                         if (pNum != null && pNum in 1..totalPdfPages) {
+                            if (fileState is MainViewModel.FileContentState.DocxSuccess) docxViewerState.goToPage(pNum)
                             scrollToPage = pNum - 1
                             pageJumpToken++
                         } else {

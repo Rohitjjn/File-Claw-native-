@@ -400,6 +400,7 @@ internal fun shareFile(context: android.content.Context, file: File, extension: 
         )
         val mimeType = when (extension.lowercase()) {
             "pdf" -> "application/pdf"
+            "docx", "docm", "dotx", "dotm" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             "csv" -> "text/csv"
             "zip" -> "application/zip"
             "png", "jpg", "jpeg", "webp" -> "image/*"

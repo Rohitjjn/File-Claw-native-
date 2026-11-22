@@ -19,6 +19,10 @@ internal fun DocxWebViewHost(
     file: File,
     generation: Long,
     dark: Boolean,
+    paper: String,
+    pagePaper: String,
+    ink: String,
+    edge: String,
     zoom: Float,
     searchQuery: String,
     next: Int,
@@ -59,7 +63,7 @@ internal fun DocxWebViewHost(
                     }
                 }).build()
             web = WebView(context).apply {
-                setBackgroundColor(if (dark) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+setBackgroundColor(android.graphics.Color.parseColor(paper))
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = false
@@ -96,7 +100,7 @@ internal fun DocxWebViewHost(
                     onFailure = { code -> if (alive.get()) onFailure(code) },
                     onPageFinished = { page ->
                         if (alive.get() && page === web) page.evaluateJavascript(
-                            "DocxViewer.setZoom(${DocxZoomAndGesture.coerce(zoom)});DocxViewer.setTheme($dark);", null
+                            "DocxViewer.setZoom(${DocxZoomAndGesture.coerce(zoom)});DocxViewer.setTheme($dark,${org.json.JSONObject.quote(paper)},${org.json.JSONObject.quote(pagePaper)},${org.json.JSONObject.quote(ink)},${org.json.JSONObject.quote(edge)});", null
                         )
                     }
                 )
@@ -109,13 +113,13 @@ internal fun DocxWebViewHost(
             web
         },
         update = { web ->
-            web.setBackgroundColor(if (dark) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+            web.setBackgroundColor(android.graphics.Color.parseColor(paper))
             if (web.progress >= 100 && viewerReady) {
                 val plan = DocxSearchController.plan(searchCursor, searchQuery, next, previous)
                 searchCursor = plan.cursor
                 val actions = buildString {
                     append("DocxViewer.setZoom(${DocxZoomAndGesture.coerce(zoom)});")
-                    append("DocxViewer.setTheme($dark);")
+                    append("DocxViewer.setTheme($dark,${org.json.JSONObject.quote(paper)},${org.json.JSONObject.quote(pagePaper)},${org.json.JSONObject.quote(ink)},${org.json.JSONObject.quote(edge)});")
                     if (scrollToPage != null && scrollToPage != lastPage) {
                         append("DocxViewer.goToPage($scrollToPage);")
                         lastPage = scrollToPage

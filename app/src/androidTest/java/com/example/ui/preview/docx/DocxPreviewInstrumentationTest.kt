@@ -66,6 +66,16 @@ class DocxPreviewInstrumentationTest {
         try {
             assertTrue("Print-mode render did not complete: ${failure.get()}", ready.await(45, TimeUnit.SECONDS))
             assertTrue("Print-mode document failure: ${failure.get()}", failure.get() == null)
+            val themeCheck = CountDownLatch(1)
+            val themeResult = AtomicReference<String?>(null)
+            instrumentation.runOnMainSync {
+                web.evaluateJavascript(
+                    "(function(){DocxViewer.setTheme(true,'#181715','#252320','#faf9f5','#2d2c2a');return getComputedStyle(document.documentElement).getPropertyValue('--paper').trim()+'|'+getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim()+'|'+(document.getElementById('spacer')===null)+'|'+document.getElementById('scaled-document').style.transform;})()"
+                ) { value -> themeResult.set(value); themeCheck.countDown() }
+            }
+            assertTrue("Theme and layout check timed out", themeCheck.await(5, TimeUnit.SECONDS))
+            assertTrue("Theme tokens or normal-flow zoom missing: ${themeResult.get()}",
+                themeResult.get()?.contains("#181715|#252320|true|") == true)
         } finally {
             instrumentation.runOnMainSync { web.stopLoading(); web.removeJavascriptInterface("DocxBridge"); web.destroy() }
         }

@@ -83,11 +83,10 @@
         const availableWidth = Math.max(160, els.scroller.clientWidth - 16);
         fitScale = Math.min(1, Math.max(.05, availableWidth / naturalWidth));
         const scale = fitScale * userZoom;
-        els.document.style.transform = 'scale(' + scale + ')';
+        // CSS zoom participates in normal layout and scroll sizing. This avoids the
+        // transform + synthetic spacer workaround that desynchronized touch/scroll.
         els.document.style.width = naturalWidth + 'px';
-        els.document.style.left = Math.max(0, (availableWidth - naturalWidth * scale) / 2) + 'px';
-        const naturalHeight = Math.max(els.document.scrollHeight, ...Array.from(els.document.querySelectorAll('.docx, section.docx')).map(e => e.offsetTop + e.offsetHeight));
-        els.spacer.style.height = Math.max(24, naturalHeight * scale) + 'px';
+        els.document.style.zoom = String(scale);
         send('onZoomChanged', { zoom: userZoom, fitScale, effectiveScale: scale });
     }
 
@@ -229,7 +228,6 @@
         renderId = generation;
         readySent = false;
         els.document.replaceChildren();
-        els.spacer.style.height = '0';
         clearHighlights();
         status('Loading document…');
         if (!window.JSZip || !window.docx || typeof window.docx.renderAsync !== 'function') throw new Error('RENDERER_UNAVAILABLE');
@@ -307,14 +305,19 @@
             if (page) els.scroller.scrollTo({ top: els.scroller.scrollTop + page.getBoundingClientRect().top - els.scroller.getBoundingClientRect().top, behavior: 'smooth' });
         },
         clearSearch() { clearHighlights(); send('onSearchResults', { total: 0, current: 0, truncated: false }); },
-        setTheme(dark) { document.documentElement.classList.toggle('dark', !!dark); },
+        setTheme(dark, paper, pagePaper, ink, edge) {
+            const root = document.documentElement;
+            root.classList.toggle('dark', !!dark);
+            for (const [name, value] of [['--paper', paper], ['--page-paper', pagePaper], ['--ink', ink], ['--page-ink', ink], ['--edge', edge], ['--page-edge', edge]]) {
+                if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) root.style.setProperty(name, value);
+            }
+        },
         getState() { return { ready: readySent, pages: pageCount(), zoom: userZoom }; }
     };
 
     document.addEventListener('DOMContentLoaded', () => {
         els.scroller = document.getElementById('scroller');
         els.stage = document.getElementById('stage');
-        els.spacer = document.getElementById('spacer');
         els.document = document.getElementById('scaled-document');
         els.status = document.getElementById('status');
         configureGestures();

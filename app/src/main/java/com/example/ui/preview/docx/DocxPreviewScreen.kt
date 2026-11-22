@@ -25,19 +25,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.format.DocxExtractor
+import com.example.ui.theme.ClaudeAlabaster
+import com.example.ui.theme.ClaudeCharcoal
+import com.example.ui.theme.ClaudeWhite
+import com.example.ui.theme.ClaudeDarkBorder
+import com.example.ui.theme.ClaudeDarkSurface
+import com.example.ui.theme.ClaudeDarkText
+import com.example.ui.theme.ClaudeOnyx
+import com.example.ui.theme.ClaudeSandBorder
+import androidx.compose.ui.graphics.toArgb
 import com.example.data.RecentFileEntity
-import com.example.viewmodel.MainViewModel
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private fun Color.toCssHex(): String = "#" + toArgb().toUInt().toString(16).takeLast(6)
+
 /** DOCX-only compose surface. Toolbar, print and the other file viewers remain owned by the caller. */
 @Composable
 fun DocxPreviewWebView(
     fileEntity: RecentFileEntity,
+    viewerState: DocxViewerState,
     isNightMode: Boolean,
-    viewModel: MainViewModel,
     modifier: Modifier = Modifier,
     onPageChanged: (Int, Int) -> Unit = { _, _ -> },
     scrollToPage: Int? = null,
@@ -62,23 +72,36 @@ fun DocxPreviewWebView(
     var state by remember(fileEntity.path) { mutableStateOf(reducer.state) }
     var extracted by remember(fileEntity.path) { mutableStateOf<DocxExtractor.ExtractedDocx?>(null) }
     var reload by remember(fileEntity.path) { mutableIntStateOf(0) }
+    var recoveringText by remember(fileEntity.path) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun fail(code: String) {
         if (!reducer.fail(generation, classifyDocxFailure(code), code)) return
         state = reducer.state
+        viewerState.setError(code)
+    }
+
+    fun recoverTextExplicitly() {
+        if (recoveringText || state.stage != DocxPreviewStage.FAILED) return
+        recoveringText = true
+        val failedGeneration = generation
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching { DocxExtractor.extractText(File(fileEntity.path)) }
                     .getOrElse { DocxExtractor.ExtractedDocx(fileEntity.name, emptyList(), "", 0, 0) }
             }
-            if (generation != state.generation || state.stage != DocxPreviewStage.FAILED) return@launch
+            if (generation != failedGeneration || state.stage != DocxPreviewStage.FAILED) return@launch
             extracted = result
+            recoveringText = false
             onRendererFallback(true)
         }
     }
 
-    Box(modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
+    val paper = if (isNightMode) ClaudeOnyx else ClaudeAlabaster
+    val pagePaper = if (isNightMode) ClaudeDarkSurface else ClaudeWhite
+    val ink = if (isNightMode) ClaudeDarkText else ClaudeCharcoal
+    val edge = if (isNightMode) ClaudeDarkBorder else ClaudeSandBorder
+    Box(modifier.fillMaxSize().background(paper)) {
         if (extracted != null) {
             val doc = extracted!!
             Column(Modifier.fillMaxSize()) {
@@ -108,10 +131,34 @@ fun DocxPreviewWebView(
                     }
                 }
             }
+        } else if (state.stage == DocxPreviewStage.FAILED) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("Formatted DOCX preview unavailable", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Reason: ${state.detailCode ?: "render failed"}. The document has not been converted to plain text.",
+                    modifier = Modifier.padding(top = 8.dp),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                TextButton(onClick = recoverTextExplicitly, enabled = !recoveringText) {
+                    Text(if (recoveringText) "Recovering text…" else "Show recovered text")
+                }
+                TextButton(onClick = {
+                    val nextGeneration = reducer.begin()
+                    generation = nextGeneration
+                    state = reducer.state
+                    recoveringText = false
+                    reload++
+                }) { Text("Retry formatted view") }
+            }
         } else {
             androidx.compose.runtime.key(fileEntity.path, reload) {
                 DocxWebViewHost(
                     file = File(fileEntity.path), generation = generation, dark = isNightMode,
+                    paper = paper.toCssHex(), pagePaper = pagePaper.toCssHex(), ink = ink.toCssHex(), edge = edge.toCssHex(),
                     zoom = zoomFactor, searchQuery = searchQuery, next = searchTriggerNext, previous = searchTriggerPrev,
                     scrollToPage = scrollToPage,
                     onReady = { pages ->
@@ -120,15 +167,26 @@ fun DocxPreviewWebView(
                         }
                         if (reducer.ready(generation, pages, visibleContent = true)) {
                             state = reducer.state
+                            viewerState.setReady(pages)
+                            viewerState.setPage(1, pages)
                             onPageChanged(1, pages)
                             onDocumentReady()
                             onRendererFallback(false)
                         }
                     },
-                    onPageChanged = onPageChanged,
+                    onPageChanged = { page, pages ->
+                        viewerState.setPage(page, pages)
+                        onPageChanged(page, pages)
+                    },
                     onFailure = ::fail,
-                    onSearch = onSearchResultCount,
-                    onZoom = onZoomChanged,
+                    onSearch = { total, current, truncated ->
+                        viewerState.setSearchResults(total, current)
+                        onSearchResultCount(total, current, truncated)
+                    },
+                    onZoom = { factor ->
+                        viewerState.setZoom(factor)
+                        onZoomChanged(factor)
+                    },
                     onTap = onSingleTap,
                     onDoubleTap = onDoubleTap,
                     onCreated = onWebViewCreated,
@@ -138,6 +196,12 @@ fun DocxPreviewWebView(
 
         }
     }
+
+    LaunchedEffect(fileEntity.path, reload) {
+        if (state.stage != DocxPreviewStage.FAILED) viewerState.setLoading()
+    }
+    LaunchedEffect(searchQuery) { viewerState.setSearch(searchQuery) }
+    LaunchedEffect(zoomFactor) { viewerState.setZoom(zoomFactor) }
 
     LaunchedEffect(scrollToPage, state.stage) {
         if (scrollToPage != null && state.stage == DocxPreviewStage.READY) onScrollProgressHandled()

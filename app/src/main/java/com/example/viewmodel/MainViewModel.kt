@@ -552,8 +552,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                // Content-first routing: magic bytes decide, the extension is only a hint.
-                val detection = FormatDetector.detect(file, file.name)
+                // Preserve MIME from a content:// import when available. DOCX extension/MIME
+                // routing is handled by FormatDetector so damaged packages reach the DOCX
+                // validator/recovery UI rather than being misclassified as editable text.
+                val sourceMime = fileEntity.sourceUri?.let { source ->
+                    runCatching {
+                        getApplication<android.app.Application>().contentResolver.getType(android.net.Uri.parse(source))
+                    }.getOrNull()
+                }
+                val detection = FormatDetector.detect(file, file.name, sourceMime)
                 _currentFileState.value = buildContentState(file, finalEntity, detection, archivePassword, settingsState.value.defaultEncoding)
             } catch (e: OutOfMemoryError) {
                 _currentFileState.value = FileContentState.Error("This file is too large to open in memory on this device.")

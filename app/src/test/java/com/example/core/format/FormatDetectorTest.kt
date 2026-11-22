@@ -115,6 +115,21 @@ class FormatDetectorTest {
         assertEquals("stl", detect("noext", ascii).spec.id)
     }
 
+    @Test fun docxExtensionAndMimeRouteCorruptTextToDocxRenderer() {
+        val corrupt = "This file is not a valid Word package".toByteArray()
+        assertEquals("docx", FormatDetector.detect(corrupt, corrupt.size.toLong(), "broken.docx").spec.id)
+        val docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        assertEquals(
+            "docx",
+            FormatDetector.detect(
+                corrupt, corrupt.size.toLong(), "imported_file", mimeType = docxMime
+            ).spec.id
+        )
+        val imported = File(dir, "provider-file.bin").apply { writeBytes(corrupt) }
+        assertEquals("docx", FormatDetector.detect(imported, imported.name, docxMime).spec.id)
+        assertEquals("text", FormatDetector.detect(corrupt, corrupt.size.toLong(), "notes.txt").spec.id)
+    }
+
     @Test fun zipFamilyRefinement() {
         assertEquals("docx", FormatDetector.detect(zip("a.zip", "word/document.xml" to "<x/>")).spec.id)
         assertEquals("xlsx", FormatDetector.detect(zip("b.bin", "xl/workbook.xml" to "<x/>")).spec.id)

@@ -256,7 +256,7 @@ object FormatDetector {
     )
 
     /** Detect from a file on disk. Reads at most [HEADER_BYTES] plus the ZIP central directory when needed. */
-    fun detect(file: File, displayName: String = file.name): Detection {
+    fun detect(file: File, displayName: String = file.name, mimeType: String? = null): Detection {
         val header = ByteArray(HEADER_BYTES)
         var n = 0
         try {
@@ -280,7 +280,7 @@ object FormatDetector {
             zipMime = info.second
         }
         val gzipIsTar = hit?.id == "gz" && gzipContainsTar(file)
-        return detect(hdr, file.length(), displayName, zipEntries, zipMime, gzipIsTar)
+        return detect(hdr, file.length(), displayName, zipEntries, zipMime, gzipIsTar, mimeType)
     }
 
     /** Pure detection from already-read bytes. [zipEntries] and [zipMimetype] refine ZIP-based formats. */
@@ -290,12 +290,25 @@ object FormatDetector {
         fileName: String,
         zipEntries: List<String>? = null,
         zipMimetype: String? = null,
-        gzipIsTar: Boolean = false
+        gzipIsTar: Boolean = false,
+        mimeType: String? = null
     ): Detection {
         val ext = FormatRegistry.extensionOf(fileName)
         val extSpec = FormatRegistry.byExtension(ext)
         val hit = MagicSniffer.sniff(header, header.size, totalLength)
         val informativeExt = extSpec != null && ext !in uninformative
+
+        // A DOCX name or authoritative DOCX MIME is a viewer-route contract. In
+        // particular, don't silently turn a damaged/text-corrupt .docx into TextSuccess;
+        // the formatted DOCX renderer owns validation and presents recovery explicitly.
+        val normalizedMime = mimeType?.substringBefore(';')?.trim()?.lowercase()
+        if (ext in setOf("docx", "docm", "dotx", "dotm") ||
+            normalizedMime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+            normalizedMime == "application/vnd.ms-word.document.macroenabled.12" ||
+            normalizedMime == "application/vnd.ms-word.template.macroenabled.12") {
+            return Detection(FormatRegistry.byId("docx")!!, Confidence.MEDIUM,
+                if (normalizedMime?.startsWith("application/vnd.") == true) "mime:docx" else "ext:$ext")
+        }
 
         // 1. Strong binary signature always wins over the extension.
         if (hit != null && hit.strong) {

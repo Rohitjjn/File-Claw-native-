@@ -373,6 +373,25 @@ internal fun escapeHtml(value: String): String = value
     .replace("\"", "&quot;")
     .replace("'", "&#39;")
 
+/** Opens a read-only copy with an installed external viewer using a scoped content URI. */
+internal fun openDocxExternally(context: Context, file: File) {
+    if (!file.isFile || !file.canRead()) {
+        android.widget.Toast.makeText(context, "DOCX file is unavailable or cannot be read", android.widget.Toast.LENGTH_LONG).show()
+        return
+    }
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        clipData = android.content.ClipData.newUri(context.contentResolver, file.name, uri)
+    }
+    try {
+        context.startActivity(Intent.createChooser(intent, "Open DOCX with"))
+    } catch (_: android.content.ActivityNotFoundException) {
+        android.widget.Toast.makeText(context, "No compatible document viewer is installed", android.widget.Toast.LENGTH_LONG).show()
+    }
+}
+
 /** Opens a PDF with an installed external viewer using a scoped content URI. */
 internal fun openPdfInBrowser(context: Context, file: File) {
     if (!file.isFile || !file.canRead()) {
