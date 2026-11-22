@@ -143,7 +143,7 @@ fun DocxPreviewWebView(
                     modifier = Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodyMedium
                 )
-                TextButton(onClick = recoverTextExplicitly, enabled = !recoveringText) {
+                TextButton(onClick = { recoverTextExplicitly() }, enabled = !recoveringText) {
                     Text(if (recoveringText) "Recovering text…" else "Show recovered text")
                 }
                 TextButton(onClick = {
