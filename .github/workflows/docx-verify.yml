@@ -70,6 +70,34 @@ jobs:
               diagnostic=$(tail -n 45 "$log_file" | tr '\n' ' ' | sed -e 's/%/%25/g' -e 's/\r/%0D/g')
             fi
             echo "::error title=Gradle verification details::$diagnostic"
+            python3 - <<'PY'
+          from pathlib import Path
+          import html
+          import os
+          import xml.etree.ElementTree as ET
+
+          reports = sorted(Path('app/build/test-results/testDebugUnitTest').rglob('*.xml'))
+          failures = []
+          for report in reports:
+              try:
+                  root = ET.parse(report).getroot()
+              except (ET.ParseError, OSError):
+                  continue
+              for case in root.iter('testcase'):
+                  for failure in list(case.findall('failure')) + list(case.findall('error')):
+                      message = failure.get('message') or (failure.text or '').strip() or 'No failure detail in XML'
+                      detail = f"{case.get('classname', '')}.{case.get('name', 'unknown')}: {' '.join(html.unescape(message).split())[:1200]}"
+                      failures.append(detail)
+
+          if failures:
+              summary = Path(os.environ['GITHUB_STEP_SUMMARY'])
+              with summary.open('a') as output:
+                  output.write('\n## JVM unit test failures\n')
+                  for detail in failures:
+                      output.write(f'\n- `{detail}`\n')
+                      escaped = detail.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                      print(f'::error title=JVM unit test failure::{escaped}')
+          PY
             exit "$gradle_status"
           fi
 
