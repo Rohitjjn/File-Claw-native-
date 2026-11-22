@@ -48,13 +48,25 @@ jobs:
       - name: Run unit tests, lint, Detekt, WebView instrumentation and debug APK build
         run: |
           set -euo pipefail
+          log_file="$RUNNER_TEMP/docx-gradle-verification.log"
+          set +e
           ./gradlew \
             :app:testDebugUnitTest \
             :app:lintDebug \
             :app:detekt \
             :app:compileDebugKotlin \
             :app:assembleDebug \
-            --stacktrace
+            --stacktrace --console=plain 2>&1 | tee "$log_file"
+          gradle_status=${PIPESTATUS[0]}
+          set -e
+          if [ "$gradle_status" -ne 0 ]; then
+            echo "## Gradle verification failure (last 100 lines)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 100 "$log_file" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 100 "$log_file"
+            exit "$gradle_status"
+          fi
 
       - name: Enable hardware acceleration for the Android emulator
         run: |
