@@ -78,7 +78,7 @@ fun DocxPreviewWebView(
     fun fail(code: String) {
         if (!reducer.fail(generation, classifyDocxFailure(code), code)) return
         state = reducer.state
-        viewerState.setError(code)
+        viewerState.reportError(code)
     }
 
     fun recoverTextExplicitly() {
@@ -184,7 +184,7 @@ fun DocxPreviewWebView(
                         onSearchResultCount(total, current, truncated)
                     },
                     onZoom = { factor ->
-                        viewerState.setZoom(factor)
+                        viewerState.updateZoom(factor)
                         onZoomChanged(factor)
                     },
                     onTap = onSingleTap,
@@ -201,7 +201,7 @@ fun DocxPreviewWebView(
         if (state.stage != DocxPreviewStage.FAILED) viewerState.setLoading()
     }
     LaunchedEffect(searchQuery) { viewerState.setSearch(searchQuery) }
-    LaunchedEffect(zoomFactor) { viewerState.setZoom(zoomFactor) }
+    LaunchedEffect(zoomFactor) { viewerState.updateZoom(zoomFactor) }
 
     LaunchedEffect(scrollToPage, state.stage) {
         if (scrollToPage != null && state.stage == DocxPreviewStage.READY) onScrollProgressHandled()

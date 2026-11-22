@@ -492,7 +492,7 @@ fun FilePreviewScreen(
     val printScope = rememberCoroutineScope()
 
     LaunchedEffect(activeFile?.path, docxPreviewReady, docxPreviewWebView) {
-        docxViewerState.setPrintAction {
+        docxViewerState.installPrintAction {
             activeFile?.let { entity ->
                 val renderedWebView = docxPreviewWebView
                 if (docxPreviewReady && renderedWebView != null) {

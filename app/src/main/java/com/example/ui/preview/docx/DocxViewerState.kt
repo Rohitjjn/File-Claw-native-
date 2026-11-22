@@ -51,8 +51,8 @@ class DocxViewerState {
         currentPage = currentPage.coerceIn(1, pageCount.coerceAtLeast(1))
         error = null
     }
-    fun setError(message: String) { stage = DocxPreviewStage.FAILED; error = message }
-    fun setZoom(value: Float) { zoom = DocxZoomPolicy.coerce(value) }
+    fun reportError(message: String) { stage = DocxPreviewStage.FAILED; error = message }
+    fun updateZoom(value: Float) { zoom = DocxZoomPolicy.coerce(value) }
     fun setSearch(query: String) { searchQuery = query; currentMatch = 0; totalMatches = 0 }
     fun setSearchResults(total: Int, current: Int) {
         totalMatches = total.coerceAtLeast(0)
@@ -66,7 +66,7 @@ class DocxViewerState {
     fun findPrevious() { previousSearchRequest++ }
     /** Requests a one-based page; the WebView adapter translates it to its zero-based index. */
     fun goToPage(page: Int) { requestedPage = page.coerceAtLeast(1) }
-    fun setPrintAction(action: (() -> Unit)?) { printAction = action }
+    fun installPrintAction(action: (() -> Unit)?) { printAction = action }
     fun print() { printAction?.invoke() }
 }
 

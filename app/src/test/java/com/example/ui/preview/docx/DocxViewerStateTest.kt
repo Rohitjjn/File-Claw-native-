@@ -15,7 +15,7 @@ class DocxViewerStateTest {
         state.setPage(3, 4)
         assertEquals(3, state.currentPage)
         assertEquals(4, state.pageCount)
-        state.setZoom(9f)
+        state.updateZoom(9f)
         assertEquals(5f, state.zoom)
         state.setSearch("needle")
         state.setSearchResults(7, 5)
@@ -29,10 +29,10 @@ class DocxViewerStateTest {
         assertEquals(7, state.totalMatches)
         assertEquals(5, state.currentMatch)
         var printed = false
-        state.setPrintAction { printed = true }
+        state.installPrintAction { printed = true }
         state.print()
         assertTrue(printed)
-        state.setError("INVALID_PACKAGE")
+        state.reportError("INVALID_PACKAGE")
         assertTrue(state.hasError)
         assertFalse(state.isLoading)
         assertEquals("INVALID_PACKAGE", state.error)
