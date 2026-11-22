@@ -19,7 +19,7 @@ class DocxPreviewLifecycleTest {
         assertEquals(DocxPreviewStage.LAYOUT, lifecycle.snapshot.stage)
         assertTrue(lifecycle.markReady(generation, estimatedPageCount = 2, visibleLayout = true))
         assertEquals(DocxPreviewStage.READY, lifecycle.snapshot.stage)
-        assertEquals(2, lifecycle.snapshot.estimatedPageCount)
+        assertEquals(2, lifecycle.snapshot.estimatedPageCount ?: -1)
         assertFalse(lifecycle.fail(generation, DocxPreviewFailure.RENDER_FAILED, "late"))
     }
 
