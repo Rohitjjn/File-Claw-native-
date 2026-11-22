@@ -73,7 +73,6 @@
         readySent = true;
         status('');
         send('onReady', { generation: id, pages: count, title: document.title });
-        if (new URLSearchParams(location.search).get('print') === '1') send('onPrintReady', {});
         reportPage();
     }
 

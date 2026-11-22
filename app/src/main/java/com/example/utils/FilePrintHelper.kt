@@ -412,9 +412,6 @@ object FilePrintHelper {
                             fallbackTextPrint(error)
                         }
                     }
-
-                    @android.webkit.JavascriptInterface
-                    fun onPrintReady() { mainHandler.post { triggerPrint() } }
                 }, "DocxBridge")
 
                 tempWebView.webViewClient = object : WebViewClient() {

@@ -31,7 +31,6 @@ class DocxPreviewInstrumentationTest {
         val context = instrumentation.targetContext
         val fixture = fixtureDocx()
         val ready = CountDownLatch(1)
-        val printReady = CountDownLatch(1)
         val failure = AtomicReference<String?>(null)
         lateinit var web: WebView
         instrumentation.runOnMainSync {
@@ -50,7 +49,6 @@ class DocxPreviewInstrumentationTest {
                 settings.loadWithOverviewMode = false
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onReady(payload: String) { if (JSONObject(payload).optInt("pages") > 0) ready.countDown() }
-                    @JavascriptInterface fun onPrintReady() { printReady.countDown() }
                     @JavascriptInterface fun onFailure(payload: String) { failure.set(payload); ready.countDown() }
                 }, "DocxBridge")
                 webViewClient = object : WebViewClient() {
@@ -68,7 +66,6 @@ class DocxPreviewInstrumentationTest {
         try {
             assertTrue("Print-mode render did not complete: ${failure.get()}", ready.await(45, TimeUnit.SECONDS))
             assertTrue("Print-mode document failure: ${failure.get()}", failure.get() == null)
-            assertTrue("Shared renderer did not issue print readiness", printReady.await(10, TimeUnit.SECONDS))
         } finally {
             instrumentation.runOnMainSync { web.stopLoading(); web.removeJavascriptInterface("DocxBridge"); web.destroy() }
         }
