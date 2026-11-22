@@ -302,10 +302,12 @@ object FormatDetector {
         // particular, don't silently turn a damaged/text-corrupt .docx into TextSuccess;
         // the formatted DOCX renderer owns validation and presents recovery explicitly.
         val normalizedMime = mimeType?.substringBefore(';')?.trim()?.lowercase()
-        if (ext in setOf("docx", "docm", "dotx", "dotm") ||
+        val declaredDocx = ext in setOf("docx", "docm", "dotx", "dotm") ||
             normalizedMime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
             normalizedMime == "application/vnd.ms-word.document.macroenabled.12" ||
-            normalizedMime == "application/vnd.ms-word.template.macroenabled.12") {
+            normalizedMime == "application/vnd.ms-word.template.macroenabled.12"
+        val docxPackageIdentified = hit?.id == "zip" && zipEntries?.contains("word/document.xml") == true
+        if (declaredDocx && !docxPackageIdentified) {
             return Detection(FormatRegistry.byId("docx")!!, Confidence.MEDIUM,
                 if (normalizedMime?.startsWith("application/vnd.") == true) "mime:docx" else "ext:$ext")
         }
