@@ -704,10 +704,17 @@
             }
         }
 
+        let loadStarted = false;
         function loadDocx(isDark) {
+            if (loadStarted) {
+                emitDiagnostic('duplicate_load_ignored', { fetchCount: diagnostics.fetchCount });
+                return;
+            }
+            loadStarted = true;
             if (!isPrintMode) setDarkMode(isDark);
 
             if (typeof docx === 'undefined' || typeof JSZip === 'undefined') {
+                emitDiagnostic('engine_unavailable', { rendererAvailable: false });
                 showLoadError("Document preview engine components could not be loaded.");
                 return;
             }
