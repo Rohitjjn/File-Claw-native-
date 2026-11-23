@@ -27,7 +27,13 @@ data class DocxPreviewState(
     val failure: DocxPreviewFailure? = null,
     val detailCode: String? = null,
     /** The renderer's page estimate, not Microsoft Word pagination. */
-    val estimatedPages: Int? = null
+    val estimatedPages: Int? = null,
+    val contentHeightPx: Int = 0,
+    val contentWidthPx: Int = 0,
+    val bytesLoaded: Long = 0L,
+    val totalBytes: Long = 0L,
+    val largeFileWarning: Boolean = false,
+    val cacheHit: Boolean = false
 )
 
 /** Pure reducer: terminal/stale callbacks cannot turn a failed or replaced render into READY. */
@@ -58,9 +64,15 @@ class DocxPreviewReducer {
         return true
     }
 
-    fun ready(generation: Long, pages: Int, visibleContent: Boolean): Boolean {
-        if (pages <= 0 || !visibleContent || !transition(generation, DocxPreviewStage.READY)) return false
-        state = state.copy(estimatedPages = pages)
+    fun ready(generation: Long, pages: Int, contentHeightPx: Int, contentWidthPx: Int, visibleContent: Boolean): Boolean {
+        if (pages <= 0 || contentHeightPx <= 0 || contentWidthPx <= 0 || !visibleContent ||
+            !transition(generation, DocxPreviewStage.READY)
+        ) return false
+        state = state.copy(
+            estimatedPages = pages,
+            contentHeightPx = contentHeightPx,
+            contentWidthPx = contentWidthPx
+        )
         return true
     }
 

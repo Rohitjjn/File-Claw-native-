@@ -18,9 +18,10 @@
         #scaled-document { position: relative; flex: 0 0 auto; width: max-content; }
         #scaled-document .docx-wrapper { background: transparent !important; padding: 0 !important; }
         #scaled-document .docx, #scaled-document section.docx { margin: 0 auto 20px !important; box-sizing: border-box !important; border-radius: 6px; background: var(--page-paper) !important; color: var(--page-ink) !important; border-color: var(--page-edge) !important; box-shadow: 0 3px 16px #0002 !important; }
-        #scaled-document .docx *, #scaled-document section.docx * { color: inherit; }
-        #scaled-document .docx table, #scaled-document .docx td, #scaled-document .docx th,
-        #scaled-document section.docx table, #scaled-document section.docx td, #scaled-document section.docx th { border-color: var(--page-edge) !important; }
+        #scaled-document .docx p, #scaled-document section.docx p { overflow-wrap: anywhere; }
+        #scaled-document .docx table, #scaled-document section.docx table { max-width: 100%; border-collapse: collapse; overflow-wrap: anywhere; }
+        #scaled-document .docx td, #scaled-document .docx th,
+        #scaled-document section.docx td, #scaled-document section.docx th { border-color: var(--page-edge) !important; }
         :root.dark #scaled-document .docx, :root.dark #scaled-document section.docx { box-shadow: 0 3px 16px #0008 !important; }
         #scaled-document img { max-width: 100%; }
         mark.docx-highlight { background: #ffe082 !important; color: #17130d !important; border-radius: 2px; }
@@ -38,6 +39,7 @@
     <script defer src="jszip.min.js"></script>
     <script defer src="docx-preview.min.js"></script>
     <script defer src="search.js"></script>
+    <script defer src="render-readiness.js"></script>
     <script defer src="viewer.js"></script>
 </head>
 <body>

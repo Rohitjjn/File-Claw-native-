@@ -4,6 +4,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.compose.runtime.Composable
@@ -28,9 +30,10 @@ internal fun DocxWebViewHost(
     next: Int,
     previous: Int,
     scrollToPage: Int?,
-    onReady: (Int) -> Unit,
+    onVisualRender: (Long, Int, Int, Int, Int) -> Unit,
     onPageChanged: (Int, Int) -> Unit,
-    onFailure: (String) -> Unit,
+    onProgress: (Long, Long, Long) -> Unit,
+    onFailure: (Long, String) -> Unit,
     onSearch: (Int, Int, Boolean) -> Unit,
     onZoom: (Float) -> Unit,
     onTap: () -> Unit,
@@ -63,7 +66,11 @@ internal fun DocxWebViewHost(
                     }
                 }).build()
             web = WebView(context).apply {
-setBackgroundColor(android.graphics.Color.parseColor(paper))
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(android.graphics.Color.parseColor(paper))
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = false
@@ -81,14 +88,15 @@ setBackgroundColor(android.graphics.Color.parseColor(paper))
                 }
                 val bridge = DocxJsBridge(
                     isCurrent = { alive.get() },
-                    onReady = { id, pages ->
+                    onVisualRender = { id, pages, height, width, visiblePages ->
                         if (id == generation) {
                             viewerReady = true
-                            onReady(pages)
+                            onVisualRender(id, pages, height, width, visiblePages)
                         }
                     },
                     onPageChanged = onPageChanged,
-                    onFailure = { id, code -> if (id == generation) onFailure(code) },
+                    onProgress = { id, loaded, total -> if (id == generation) onProgress(id, loaded, total) },
+                    onFailure = { id, code -> if (id == generation) onFailure(id, code) },
                     onSearch = onSearch,
                     onZoom = onZoom,
                     onTap = onTap,
@@ -97,7 +105,7 @@ setBackgroundColor(android.graphics.Color.parseColor(paper))
                 addJavascriptInterface(bridge, "DocxBridge")
                 webViewClient = DocxWebViewClient(
                     assets = loader,
-                    onFailure = { code -> if (alive.get()) onFailure(code) },
+                    onFailure = { code -> if (alive.get()) onFailure(generation, code) },
                     onPageFinished = { page ->
                         if (alive.get() && page === web) page.evaluateJavascript(
                             "DocxViewer.setZoom(${DocxZoomAndGesture.coerce(zoom)});DocxViewer.setTheme($dark,${org.json.JSONObject.quote(paper)},${org.json.JSONObject.quote(pagePaper)},${org.json.JSONObject.quote(ink)},${org.json.JSONObject.quote(edge)});", null

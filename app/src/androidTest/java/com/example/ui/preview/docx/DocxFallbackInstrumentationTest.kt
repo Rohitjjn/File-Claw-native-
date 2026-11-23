@@ -39,7 +39,7 @@ class DocxFallbackInstrumentationTest {
         )
         composeRule.setContent {
             FilesClawTheme {
-                DocxPreviewWebView(
+                DocxPreviewScreen(
                     fileEntity = entity,
                     viewerState = rememberDocxViewerState(file.absolutePath),
                     isNightMode = false

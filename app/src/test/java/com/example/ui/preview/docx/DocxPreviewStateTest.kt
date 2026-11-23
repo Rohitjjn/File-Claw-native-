@@ -11,13 +11,14 @@ class DocxPreviewStateTest {
         val first = reducer.begin()
         val second = reducer.begin()
         assertFalse(reducer.transition(first, DocxPreviewStage.VALIDATING))
-        assertFalse(reducer.ready(second, 1, visibleContent = false))
+        assertFalse(reducer.ready(second, 1, contentHeightPx = 0, contentWidthPx = 400, visibleContent = true))
         assertTrue(reducer.transition(second, DocxPreviewStage.VALIDATING))
         assertTrue(reducer.transition(second, DocxPreviewStage.RENDERING))
         assertTrue(reducer.transition(second, DocxPreviewStage.LAYOUT))
-        assertTrue(reducer.ready(second, 3, visibleContent = true))
+        assertTrue(reducer.ready(second, 3, contentHeightPx = 2400, contentWidthPx = 720, visibleContent = true))
         assertEquals(DocxPreviewStage.READY, reducer.state.stage)
         assertEquals(3, reducer.state.estimatedPages)
+        assertEquals(2400, reducer.state.contentHeightPx)
         assertFalse(reducer.fail(second, DocxPreviewFailure.RENDER_FAILED, "late failure"))
     }
 

@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
-import com.example.ui.preview.docx.DocxPreviewWebView
+import com.example.ui.preview.docx.DocxPreviewInfoDialog
+import com.example.ui.preview.docx.DocxPreviewScreen
+import com.example.ui.preview.docx.DocxPrintController
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -393,6 +395,7 @@ fun FilePreviewScreen(
     var currentPdfPage by remember { mutableStateOf(1) }
     var totalPdfPages by remember { mutableStateOf(0) }
     var showPropertiesDialog by remember { mutableStateOf(false) }
+    var showDocxInfoDialog by remember(activeFile?.path) { mutableStateOf(false) }
 
     // Loop 14: PDF view rotation in 90-degree steps (toolbar Rotate button). Pure
     // viewer state — the PDF.js document session is never reloaded, so password
@@ -421,10 +424,6 @@ fun FilePreviewScreen(
         )
     }
     var docxZoomInput by remember(activeFile?.path) { mutableStateOf(DocxZoomPolicy.defaultPercent().toString()) }
-    // Loop 12 (Bug A): true between the first pinch frame and the gesture settle. The
-    // DOCX zoom pipeline switches to the compositor-only preview path while it is set
-    // and applies one authoritative CSS zoom when it flips back to false.
-    var docxPinchActive by remember { mutableStateOf(false) }
     var searchTriggerNext by remember { mutableIntStateOf(0) }
     var searchTriggerPrev by remember { mutableIntStateOf(0) }
 
@@ -494,12 +493,13 @@ fun FilePreviewScreen(
     LaunchedEffect(activeFile?.path, docxPreviewReady, docxPreviewWebView) {
         docxViewerState.installPrintAction {
             activeFile?.let { entity ->
-                val renderedWebView = docxPreviewWebView
-                if (docxPreviewReady && renderedWebView != null) {
-                    com.example.utils.FilePrintHelper.printWebView(context, renderedWebView, entity.name)
-                } else {
-                    com.example.utils.FilePrintHelper.printDocx(context, File(entity.path), entity.name)
-                }
+                DocxPrintController.print(
+                    context = context,
+                    file = File(entity.path),
+                    title = entity.name,
+                    preview = docxPreviewWebView,
+                    previewReady = docxPreviewReady
+                )
             }
         }
     }
@@ -1419,7 +1419,7 @@ fun FilePreviewScreen(
                                         )
                                     }
 
-                                    // Print DOCX
+                                    // Print or save as PDF through the existing DOCX PrintManager path.
                                     IconButton(
                                         onClick = { docxViewerState.print() },
                                         modifier = Modifier.size(36.dp)
@@ -1427,6 +1427,18 @@ fun FilePreviewScreen(
                                         Icon(
                                             Icons.Outlined.Print,
                                             contentDescription = "Print or export as PDF",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { showDocxInfoDialog = true },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Info,
+                                            contentDescription = "Document information",
                                             modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.onSurface
                                         )
@@ -2146,7 +2158,7 @@ fun FilePreviewScreen(
                     )
                 }
                 is MainViewModel.FileContentState.DocxSuccess -> {
-                    DocxPreviewWebView(
+                    DocxPreviewScreen(
                         fileEntity = state.file,
                         viewerState = docxViewerState,
                         isNightMode = isDocxNightMode,
@@ -2166,18 +2178,10 @@ fun FilePreviewScreen(
                             searchResultsTruncated = truncated
                         },
                         zoomFactor = docxZoomFactor,
-                        pinchActive = docxPinchActive,
                         onWebViewCreated = { docxPreviewWebView = it },
                         onDocumentReady = { docxPreviewReady = true },
                         onSingleTap = { isBarsVisible = !isBarsVisible },
                         onZoomChanged = { factor -> docxZoomFactor = factor },
-                        onPinchZoom = { delta ->
-                            docxPinchActive = true
-                            docxZoomFactor = com.example.core.format.DocxZoomPolicy.applyPinch(docxZoomFactor, delta)
-                        },
-                        onPinchSettled = {
-                            docxPinchActive = false
-                        },
                         onDoubleTap = {
                             docxZoomFactor = com.example.core.format.DocxZoomPolicy.toggleDoubleTap(docxZoomFactor)
                         },
@@ -2237,6 +2241,14 @@ fun FilePreviewScreen(
         com.example.ui.component.FilePropertiesBottomSheet(
             fileEntity = activeFile,
             onDismissRequest = { showPropertiesDialog = false }
+        )
+    }
+
+    if (showDocxInfoDialog && activeFile != null && fileState is MainViewModel.FileContentState.DocxSuccess) {
+        DocxPreviewInfoDialog(
+            fileEntity = activeFile,
+            estimatedPages = docxViewerState.pageCount,
+            onDismissRequest = { showDocxInfoDialog = false }
         )
     }
 

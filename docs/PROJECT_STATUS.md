@@ -2,6 +2,12 @@
 
 **Audit date:** 2026-11-21 (UTC)
 
+## Latest task state — standalone DOCX rebuild (2026-11-21)
+
+Work is being integrated on `arena/ea756912-file-claw-native`, which advanced remotely while this implementation was prepared from base `2f6d3492de46b3d8f71515404d170af4e35c8459`. The dedicated `ui/preview/docx/` Compose screen, reducer/ViewModel/state, offline WebView host and generation-scoped bridge, streaming/validation loader, bounded ZIP cache, cross-run Unicode search, visual-layout readiness, zoom/page navigation, print integration, retry/text recovery, and file information UI are implemented. Legacy DOCX duplicate assets were removed; the shared editor JSZip required by PPTX remains. Existing PrintManager behavior is retained. Other preview implementations were moved to separate source files to preserve their routes while DOCX is isolated.
+
+**Local checks:** Node tests **8/8 PASS** (5 search, 3 readiness); JavaScript syntax checks and `git diff --check` pass. The Android test helper app ID matches Gradle `applicationId` (`com.aistudio.filesclaw.apxqzy`). The new JVM/Android build, lint, emulator WebView tests, APK assembly, and Actions upload remain pending for the integrated SHA. Java/JDK is unavailable here; do not run Gradle locally. Exact-SHA CI evidence and artifact details must be recorded after pushing. Physical-device behavior and the owner’s exact document remain unverified; no root cause or resolution is claimed.
+
 ## PROMPT 7 DOCX route/viewer follow-up (2026-11-21; working-tree changes)
 
 Changes are on `arena/ea756912-file-claw-native`, based on `b16d9473a8d59752edf56b8182622f1824a15fe0`; they are uncommitted. Static route review found all in-app list/search/recent taps funnel through `MainViewModel.openFile`; imported `ACTION_VIEW` URIs are copied locally and also opened there. `FormatDetector` treated `.docx` as a signature-expected container and explicitly returned plain-text detection when the header looked textual. That explains a source-level DOCX-to-text interception path; the owner-reported device symptom was not reproduced. This follow-up routes DOCX extensions and retained source-URI DOCX MIME types to the DOCX renderer, leaving other format detection unchanged.

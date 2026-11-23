@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased] 2026-11-21 — DOCX rebuild verification checkpoint
+
+- Added the stand-alone `ui/preview/docx/` preview path and locally bundled renderer, safe stream/cache, visual-ready callback, search/navigation, info, retry/recovery, and print integration. Retained the existing PrintManager path and shared PPTX JSZip asset; other viewer routes remain present in split source files.
+- Added JVM/Android checks and a push-triggered GitHub Actions workflow that builds an APK, runs WebView fixtures, captures emulator screenshots, and uploads the APK/reports.
+- **Local verified checks:** Node regression tests **8/8 PASS**; JavaScript syntax checks and `git diff --check` PASS. Android/Kotlin/Gradle/Actions results for this task are **pending**; JDK is absent locally. Physical-device behavior is unverified.
+
 Format: [Keep a Changelog](https://keepachangelog.com). Numbers marked **(measured)** were produced by a real
 run in the build sandbox; **(not verified)** means the change could not be compiled or run there. See `PROJECT_STATUS.md` and `ISSUE_REGISTER.md` for the current checkout baseline.
 

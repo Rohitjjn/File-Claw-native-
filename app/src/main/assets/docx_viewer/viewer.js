@@ -1,6 +1,6 @@
 (function () {
     'use strict';
-    const MAX_BYTES = 64 * 1024 * 1024;
+    const MAX_BYTES = 25 * 1024 * 1024;
     const MAX_TEXT_CHARS = 2000000;
     const MAX_MATCHES = 500;
     const els = {};
@@ -8,6 +8,7 @@
     let userZoom = 1;
     let fitScale = 1;
     let matches = [];
+    let currentSearchQuery = '';
     let totalMatches = 0;
     let matchesTruncated = false;
     let matchIndex = -1;
@@ -30,19 +31,34 @@
         els.status.classList.toggle('error', !!error);
     }
 
-    function visibleContent() {
+    function visibleLayoutMetrics() {
         const rect = els.document.getBoundingClientRect();
-        if (!els.document.querySelector('.docx, section.docx')) return false;
         const viewport = els.scroller.getBoundingClientRect();
-        const visible = Array.from(els.document.querySelectorAll('.docx, section.docx')).some(page => {
+        const pages = Array.from(els.document.querySelectorAll('.docx, section.docx'));
+        let visiblePageCount = 0;
+        let top = Number.POSITIVE_INFINITY;
+        let bottom = 0;
+        let right = 0;
+        pages.forEach(page => {
             const box = page.getBoundingClientRect();
-            return box.width > 16 && box.height > 16 && box.right > viewport.left && box.left < viewport.right &&
-                box.bottom > viewport.top && box.top < viewport.bottom;
+            top = Math.min(top, box.top);
+            bottom = Math.max(bottom, box.bottom);
+            right = Math.max(right, box.right);
+            if (box.width > 16 && box.height > 16 && box.right > viewport.left && box.left < viewport.right &&
+                box.bottom > viewport.top && box.top < viewport.bottom) visiblePageCount++;
         });
+        const contentHeight = Math.max(els.document.scrollHeight || 0, rect.height || 0,
+            Number.isFinite(top) ? bottom - top : 0);
+        const contentWidth = Math.max(els.document.scrollWidth || 0, rect.width || 0, right - rect.left);
+        return { pageCount: pages.length, contentHeight, contentWidth, visiblePageCount };
+    }
+
+    function visibleContent() {
+        const metrics = visibleLayoutMetrics();
         const text = (els.document.innerText || '').trim().length > 0;
         const image = Array.from(els.document.querySelectorAll('img')).some(i => i.complete && i.naturalWidth > 0);
         const table = !!els.document.querySelector('table');
-        return rect.width > 16 && rect.height > 16 && visible && (text || image || table);
+        return window.DocxRenderReadiness.hasVisibleLayout(metrics) && (text || image || table);
     }
 
     function pageCount() {
@@ -68,11 +84,17 @@
 
     function reportReady(id) {
         if (id !== renderId || readySent) return;
-        const count = pageCount();
-        if (!count || !visibleContent()) return;
+        const metrics = visibleLayoutMetrics();
+        if (!window.DocxRenderReadiness.hasVisibleLayout(metrics) || !visibleContent()) return;
         readySent = true;
         status('');
-        send('onReady', { generation: id, pages: count, title: document.title });
+        send('onDocumentVisuallyRendered', {
+            generation: id,
+            pageCount: metrics.pageCount,
+            contentHeight: Math.ceil(metrics.contentHeight),
+            contentWidth: Math.ceil(metrics.contentWidth),
+            visiblePageCount: metrics.visiblePageCount
+        });
         reportPage();
     }
 
@@ -117,6 +139,7 @@
             parent.normalize();
         }
         matches = [];
+        currentSearchQuery = '';
         totalMatches = 0;
         matchesTruncated = false;
         matchIndex = -1;
@@ -129,6 +152,7 @@
             send('onSearchResults', { total: 0, current: 0, truncated: false });
             return;
         }
+        currentSearchQuery = needle;
         const walker = document.createTreeWalker(els.document, NodeFilter.SHOW_TEXT, {
             acceptNode(node) {
                 if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
@@ -148,8 +172,8 @@
         const found = window.DocxSearch.findMatches(nodes, needle, MAX_MATCHES);
         totalMatches = found.total;
         matchesTruncated = found.truncated;
-        matches = found.matches;
-        for (const entry of matches.slice().reverse()) {
+        for (const entry of found.matches.slice().reverse()) {
+            const group = [];
             for (const rangeInfo of entry.ranges.slice().reverse()) {
                 const node = rangeInfo.node;
                 if (!node.parentNode || rangeInfo.end > node.nodeValue.length) continue;
@@ -158,22 +182,27 @@
                 range.setEnd(node, rangeInfo.end);
                 const mark = document.createElement('mark');
                 mark.className = 'docx-highlight';
-                try { range.surroundContents(mark); } catch (_) { /* Text-only ranges should be surroundable. */ }
+                try {
+                    range.surroundContents(mark);
+                    group.unshift(mark);
+                } catch (_) { /* Text-only ranges should be surroundable. */ }
             }
+            entry.marks = group;
         }
-        matches = Array.from(els.document.querySelectorAll('mark.docx-highlight'));
+        matches = found.matches.map(entry => entry.marks || []).filter(group => group.length > 0);
         matchIndex = matches.length ? 0 : -1;
         if (matches.length) activateMatch(0, false);
         send('onSearchResults', { total: found.total, current: matches.length ? 1 : 0, truncated: found.truncated });
     }
 
     function activateMatch(index, scroll) {
-        matches.forEach(mark => mark.classList.remove('docx-highlight-active'));
+        matches.forEach(group => group.forEach(mark => mark.classList.remove('docx-highlight-active')));
         if (!matches.length) return;
         matchIndex = (index + matches.length) % matches.length;
-        const mark = matches[matchIndex];
-        mark.classList.add('docx-highlight-active');
-        if (scroll) {
+        const group = matches[matchIndex];
+        group.forEach(mark => mark.classList.add('docx-highlight-active'));
+        const mark = group[0];
+        if (scroll && mark) {
             const scale = fitScale * userZoom;
             const rect = mark.getBoundingClientRect();
             els.scroller.scrollTo({ top: Math.max(0, els.scroller.scrollTop + rect.top - 80), behavior: 'smooth' });
@@ -183,9 +212,7 @@
     }
 
     function rebuildHighlights() {
-        const active = els.document.querySelector('mark.docx-highlight-active');
-        const query = active ? active.textContent : '';
-        if (query) search(query);
+        if (currentSearchQuery) search(currentSearchQuery);
     }
 
     function configureGestures() {
@@ -224,6 +251,41 @@
         }, { passive: false });
     }
 
+    async function readDocumentStream(response, generation) {
+        const total = Math.max(0, Number(response.headers.get('content-length') || 0));
+        if (total > MAX_BYTES) throw new Error('RESOURCE_LIMIT_EXCEEDED');
+        const reader = response.body && response.body.getReader ? response.body.getReader() : null;
+        if (!reader) {
+            const fallback = await response.arrayBuffer();
+            if (fallback.byteLength > MAX_BYTES) throw new Error('RESOURCE_LIMIT_EXCEEDED');
+            send('onProgress', { generation, loaded: fallback.byteLength, total: fallback.byteLength });
+            return fallback;
+        }
+
+        const target = total > 0 ? new Uint8Array(total) : null;
+        const chunks = [];
+        let loaded = 0;
+        while (true) {
+            const next = await reader.read();
+            if (next.done) break;
+            const chunk = next.value;
+            loaded += chunk.byteLength;
+            if (loaded > MAX_BYTES || (target && loaded > target.byteLength)) {
+                await reader.cancel();
+                throw new Error(loaded > MAX_BYTES ? 'RESOURCE_LIMIT_EXCEEDED' : 'LOAD_LENGTH_MISMATCH');
+            }
+            if (target) target.set(chunk, loaded - chunk.byteLength);
+            else chunks.push(chunk);
+            status(total > 0 ? `Loading document… ${Math.floor(loaded * 100 / total)}%` : 'Loading document…');
+            send('onProgress', { generation, loaded, total });
+        }
+        if (target) return target.slice(0, loaded).buffer;
+        const combined = new Uint8Array(loaded);
+        let offset = 0;
+        chunks.forEach(chunk => { combined.set(chunk, offset); offset += chunk.byteLength; });
+        return combined.buffer;
+    }
+
     async function load(fileUrl, generation) {
         renderId = generation;
         readySent = false;
@@ -233,9 +295,7 @@
         if (!window.JSZip || !window.docx || typeof window.docx.renderAsync !== 'function') throw new Error('RENDERER_UNAVAILABLE');
         const response = await fetch(fileUrl);
         if (!response.ok) throw new Error('LOAD_FAILED_' + response.status);
-        const length = Number(response.headers.get('content-length') || 0);
-        if (length > MAX_BYTES) throw new Error('RESOURCE_LIMIT_EXCEEDED');
-        const buffer = await response.arrayBuffer();
+        const buffer = await readDocumentStream(response, generation);
         if (buffer.byteLength > MAX_BYTES) throw new Error('RESOURCE_LIMIT_EXCEEDED');
         status('Preparing document…');
         try {

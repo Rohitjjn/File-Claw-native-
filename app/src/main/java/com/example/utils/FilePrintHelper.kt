@@ -389,17 +389,25 @@ object FilePrintHelper {
 
                 tempWebView.addJavascriptInterface(object : Any() {
                     @android.webkit.JavascriptInterface
-                    fun onReady(payload: String) {
+                    fun onDocumentVisuallyRendered(payload: String) {
                         mainHandler.post {
-                            val pages = runCatching { org.json.JSONObject(payload).optInt("pages") }.getOrDefault(0)
+                            val metrics = runCatching { org.json.JSONObject(payload) }.getOrNull()
+                            val pages = metrics?.optInt("pageCount", 0) ?: 0
+                            val contentHeight = metrics?.optInt("contentHeight", 0) ?: 0
+                            val visiblePages = metrics?.optInt("visiblePageCount", 0) ?: 0
                             DocxPreviewDiagnostics.log(
-                                "android_document_loaded", "mode" to "print", "pages" to pages,
+                                "android_document_visually_rendered", "mode" to "print", "pages" to pages,
+                                "contentHeight" to contentHeight, "visiblePages" to visiblePages,
                                 "callbackElapsedMs" to (android.os.SystemClock.elapsedRealtime() - createdAtElapsedMs),
                                 "webViewWidthPx" to tempWebView.width,
                                 "webViewHeightPx" to tempWebView.height,
-                                "documentReady" to (pages > 0)
+                                "documentReady" to (pages > 0 && contentHeight > 0 && visiblePages > 0)
                             )
-                            if (pages > 0) triggerPrint() else fallbackTextPrint("No visible pages")
+                            if (pages > 0 && contentHeight > 0 && visiblePages > 0) {
+                                triggerPrint()
+                            } else {
+                                fallbackTextPrint("No visible pages")
+                            }
                         }
                     }
 
