@@ -7,12 +7,12 @@ set -e
 cat "$log_file"
 if [ "$gradle_status" -ne 0 ]; then
   {
-    echo "## Android instrumentation Gradle output (last 160 lines)"
+    echo "## Android instrumentation compiler/test failure details"
     echo '```text'
-    tail -n 160 "$log_file"
+    grep -nE '(^e: |^w: |error:|FAILED|Failure|failed|Exception|AssertionError|Tests run:)' "$log_file" | tail -n 100 || tail -n 240 "$log_file"
     echo '```'
   } >> "$GITHUB_STEP_SUMMARY"
-  diagnostic=$(grep -E 'FAILED|Failure|failed|Exception|AssertionError|Tests run:' "$log_file" | tail -n 30 | tr '\n' ' ' | sed 's/%/%25/g')
+  diagnostic=$(grep -E '(^e: |^w: |error:|FAILED|Failure|failed|Exception|AssertionError|Tests run:)' "$log_file" | tail -n 60 | tr '\n' ' ' | sed 's/%/%25/g')
   if [ -n "$diagnostic" ]; then
     echo "::error title=Android instrumentation Gradle failure::$diagnostic"
   fi
