@@ -1,3 +1,13 @@
+## Latest DOCX visual-frame/readiness investigation (2026-11-21)
+
+The active branch is `arena/ea756912-file-claw-native`. The reported failure is **not yet root-caused**. Actions run [45206520707](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45206520707) failed on SHA `53a7a36b854a62a9e2dcd1cfea02d1c88d85677e`: the 412×915 visual-pixel assertion observed a blank WebView, and the Unicode/table/search test ended in an instrumentation process crash. Build/unit/lint/JS verification and artifact upload passed, but the run is not a green delivery. Its APK artifact must not be represented as passing. Earlier run [45205000092](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45205000092) passed on older SHA `9f2704387d7da92ca17bbe7f1c884381c241cff3`; it is not evidence for this failure or the current changes.
+
+Source tracing found the app promoted preview readiness directly from a JavaScript DOM/layout callback without waiting for Chromium's visual state to be committed. This creates a **plausible timing window** between positive DOM geometry and visible pixels, but it has not been reproduced as the cause of the owner-visible blank frame. The process crash is a separate unresolved symptom; the available instrumentation report does not establish a lifecycle cause. The fixtures did already call `stopLoading`, remove the bridge, and `destroy` in `finally`, but did not consistently detach from a parent first or wait on compositor visual state before bitmap capture.
+
+Working-tree remediation now waits for `WebView.postVisualStateCallback` before notifying Compose that the document is visually ready. Instrumentation uses that same visual-state signal before pixel assertions and resize/screenshot checks, replaces fixed sleeps with callback/latch waits, and centralizes main-thread teardown (stop loading, remove bridge, detach if parented, destroy). Default zoom, 50%–500% bounds, rotation/anchor behavior, tap gestures, and tray UI are not intentionally changed. No changes were made to `.agents/` or `skills-lock.json`.
+
+**Local verification:** Node DOCX tests pass **12/12**, `node --check app/src/main/assets/docx_viewer/viewer.js` passes, and `git diff --check` passes. Java/JDK is unavailable in this sandbox, so Android compilation and emulator tests require GitHub Actions. The current instrumentation patch has not yet run in CI; do not claim the issue fixed or a green artifact until a new exact-SHA workflow run passes. The owner's physical device and exact DOCX remain unverified.
+
 # Project status and audit baseline
 
 **Audit date:** 2026-11-21 (UTC)

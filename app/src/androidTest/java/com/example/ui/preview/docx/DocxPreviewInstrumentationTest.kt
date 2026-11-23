@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.SystemClock
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -22,6 +23,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import android.util.Base64
 import java.util.zip.ZipEntry
@@ -29,6 +31,8 @@ import java.util.zip.ZipOutputStream
 
 @RunWith(AndroidJUnit4::class)
 class DocxPreviewInstrumentationTest {
+    private val visualStateRequestIds = AtomicLong()
+
     @Test fun defaultZoomSettlesAndRotationKeepsTheSameDocumentAndReadingPosition() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -39,6 +43,8 @@ class DocxPreviewInstrumentationTest {
         val effectiveScaleReports = java.util.concurrent.CopyOnWriteArrayList<Pair<Long, Float>>()
         val singleTaps = java.util.concurrent.atomic.AtomicInteger(0)
         val doubleTaps = java.util.concurrent.atomic.AtomicInteger(0)
+        val singleTapDelivered = CountDownLatch(1)
+        val doubleTapDelivered = CountDownLatch(1)
         val finishedPages = java.util.concurrent.atomic.AtomicInteger(0)
         lateinit var web: WebView
         instrumentation.runOnMainSync {
@@ -56,7 +62,9 @@ class DocxPreviewInstrumentationTest {
                 settings.useWideViewPort = false
                 settings.loadWithOverviewMode = false
                 addJavascriptInterface(object {
-                    @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) { ready.countDown() }
+                    @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
+                        signalAfterVisualState(web, ready)
+                    }
                     @JavascriptInterface fun onFailure(payload: String) { failures.set(payload); ready.countDown() }
                     @JavascriptInterface fun onZoomChanged(payload: String) {
                         val zoom = JSONObject(payload)
@@ -65,8 +73,14 @@ class DocxPreviewInstrumentationTest {
                             SystemClock.elapsedRealtime() to zoom.optDouble("effectiveScale", -1.0).toFloat()
                         )
                     }
-                    @JavascriptInterface fun onDocumentTap() { singleTaps.incrementAndGet() }
-                    @JavascriptInterface fun onDocumentDoubleTap(payload: String) { doubleTaps.incrementAndGet() }
+                    @JavascriptInterface fun onDocumentTap() {
+                        singleTaps.incrementAndGet()
+                        singleTapDelivered.countDown()
+                    }
+                    @JavascriptInterface fun onDocumentDoubleTap(payload: String) {
+                        doubleTaps.incrementAndGet()
+                        doubleTapDelivered.countDown()
+                    }
                 }, "DocxBridge")
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
@@ -85,14 +99,10 @@ class DocxPreviewInstrumentationTest {
         try {
             assertTrue("DOCX render timed out: ${failures.get()}", ready.await(45, TimeUnit.SECONDS))
             assertTrue("DOCX renderer failed: ${failures.get()}", failures.get() == null)
-            Thread.sleep(800)
             assertTrue("Opening the document must report the default user zoom of 1.0: ${zoomReports}",
                 zoomReports.isNotEmpty() && zoomReports.all { kotlin.math.abs(it - 1f) < .001f })
-            val recentScales = effectiveScaleReports
-                .filter { SystemClock.elapsedRealtime() - it.first < 500 }
-                .map { (it.second * 10000).toInt() }
-                .distinct()
-            assertTrue("Fit scale should settle instead of oscillating: $recentScales", recentScales.size <= 1)
+            val reportedScales = effectiveScaleReports.map { (it.second * 10000).toInt() }.distinct()
+            assertTrue("Fit scale should settle instead of oscillating: $reportedScales", reportedScales.size <= 1)
 
             val prepared = CountDownLatch(1)
             val position = AtomicReference<String?>(null)
@@ -114,7 +124,12 @@ class DocxPreviewInstrumentationTest {
                 web.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
                 web.layout(0, 0, width, height)
             }
-            Thread.sleep(1200)
+            val resizeLayout = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                web.evaluateJavascript("document.documentElement.getBoundingClientRect().width") { resizeLayout.countDown() }
+            }
+            assertTrue("Resize layout did not reach the DOM", resizeLayout.await(5, TimeUnit.SECONDS))
+            awaitVisualState(instrumentation, web, "rotation-sized resize")
             val afterLatch = CountDownLatch(1)
             val afterValue = AtomicReference<String?>(null)
             instrumentation.runOnMainSync {
@@ -138,8 +153,8 @@ class DocxPreviewInstrumentationTest {
                 }
             }
             assertTrue("Single click dispatch timed out", singleClick.await(5, TimeUnit.SECONDS))
-            Thread.sleep(450)
-            assertTrue("Single tap should toggle focus once", singleTaps.get() == 1 && doubleTaps.get() == 0)
+            assertTrue("Single tap should toggle focus once", singleTapDelivered.await(5, TimeUnit.SECONDS))
+            assertTrue("Single tap should not be treated as a double tap", singleTaps.get() == 1 && doubleTaps.get() == 0)
 
             val doubleClick = CountDownLatch(1)
             instrumentation.runOnMainSync {
@@ -148,7 +163,7 @@ class DocxPreviewInstrumentationTest {
                 }
             }
             assertTrue("Double-click dispatch timed out", doubleClick.await(5, TimeUnit.SECONDS))
-            Thread.sleep(100)
+            assertTrue("Double tap callback timed out", doubleTapDelivered.await(5, TimeUnit.SECONDS))
             assertTrue("Double tap must zoom without producing two single-tap focus toggles",
                 singleTaps.get() == 1 && doubleTaps.get() == 1)
             val finalZoom = CountDownLatch(1)
@@ -162,7 +177,7 @@ class DocxPreviewInstrumentationTest {
             val finalZoomJson = JSONObject(org.json.JSONTokener(finalZoomValue.get()).nextValue().toString())
             assertTrue("Double tap should return 1.75x to the default 1.0x", kotlin.math.abs(finalZoomJson.optDouble("zoom") - 1.0) < .001)
         } finally {
-            instrumentation.runOnMainSync { web.stopLoading(); web.removeJavascriptInterface("DocxBridge"); web.destroy() }
+            destroyWebView(instrumentation, web)
         }
     }
 
@@ -192,7 +207,7 @@ class DocxPreviewInstrumentationTest {
                         val metrics = JSONObject(payload)
                         if (metrics.optInt("pageCount") > 0 && metrics.optInt("contentHeight") > 0 &&
                             metrics.optInt("visiblePageCount") > 0
-                        ) ready.countDown()
+                        ) signalAfterVisualState(web, ready)
                     }
                     @JavascriptInterface fun onFailure(payload: String) { failure.set(payload); ready.countDown() }
                 }, "DocxBridge")
@@ -222,7 +237,7 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Theme tokens or normal-flow zoom missing: ${themeResult.get()}",
                 themeResult.get()?.contains("#181715|#252320|true|") == true)
         } finally {
-            instrumentation.runOnMainSync { web.stopLoading(); web.removeJavascriptInterface("DocxBridge"); web.destroy() }
+            destroyWebView(instrumentation, web)
         }
     }
 
@@ -272,7 +287,7 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Offscreen page incorrectly reported ready", ready.count == 1L)
             assertTrue("Failure should identify visibility/layout", error.get()?.contains("LAYOUT_FAILED") == true)
         } finally {
-            instrumentation.runOnMainSync { web.stopLoading(); web.removeJavascriptInterface("DocxBridge"); web.destroy() }
+            destroyWebView(instrumentation, web)
         }
     }
 
@@ -304,7 +319,7 @@ class DocxPreviewInstrumentationTest {
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         result.set(JSONObject(payload))
-                        ready.countDown()
+                        signalAfterVisualState(web, ready)
                     }
                     @JavascriptInterface fun onFailure(payload: String) { failure.set(payload); ready.countDown() }
                     @JavascriptInterface fun onSearchResults(payload: String) {
@@ -368,8 +383,13 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Cross-run search did not report its match", searched.await(10, TimeUnit.SECONDS))
             assertTrue("One cross-run phrase must count as one logical match", matchCount.get() == 1)
 
+            val searchRendered = CountDownLatch(1)
             instrumentation.runOnMainSync {
-                web.evaluateJavascript("DocxViewer.search('styled phrase');", null)
+                web.evaluateJavascript("DocxViewer.search('styled phrase')") { searchRendered.countDown() }
+            }
+            assertTrue("Search mutation did not complete", searchRendered.await(5, TimeUnit.SECONDS))
+            awaitVisualState(instrumentation, web, "search highlight")
+            instrumentation.runOnMainSync {
                 val bitmap = Bitmap.createBitmap(web.width, web.height, Bitmap.Config.ARGB_8888)
                 web.draw(android.graphics.Canvas(bitmap))
                 saveScreenshot(context, bitmap, "docx-360x800.png")
@@ -385,7 +405,7 @@ class DocxPreviewInstrumentationTest {
             captureFailureScreenshot(context, web, "docx-360x800-failure.png")
             throw failure
         } finally {
-            instrumentation.runOnMainSync { web.stopLoading(); web.removeJavascriptInterface("DocxBridge"); web.destroy() }
+            destroyWebView(instrumentation, web)
         }
     }
 
@@ -417,7 +437,7 @@ class DocxPreviewInstrumentationTest {
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         readiness.set(JSONObject(payload))
-                        finished.countDown()
+                        signalAfterVisualState(web, finished)
                     }
                     @JavascriptInterface fun onFailure(payload: String) {
                         failure.set(payload)
@@ -462,7 +482,35 @@ class DocxPreviewInstrumentationTest {
             captureFailureScreenshot(context, web, "docx-412x915-failure.png")
             throw testFailure
         } finally {
-            instrumentation.runOnMainSync { web.stopLoading(); web.removeJavascriptInterface("DocxBridge"); web.destroy() }
+            destroyWebView(instrumentation, web)
+        }
+    }
+
+    private fun signalAfterVisualState(web: WebView, latch: CountDownLatch) {
+        val posted = web.post {
+            web.postVisualStateCallback(visualStateRequestIds.incrementAndGet()) {
+                latch.countDown()
+            }
+        }
+        if (!posted) latch.countDown()
+    }
+
+    private fun awaitVisualState(instrumentation: android.app.Instrumentation, web: WebView, description: String) {
+        val rendered = CountDownLatch(1)
+        instrumentation.runOnMainSync {
+            web.postVisualStateCallback(visualStateRequestIds.incrementAndGet()) {
+                rendered.countDown()
+            }
+        }
+        assertTrue("WebView did not commit visual state for $description", rendered.await(10, TimeUnit.SECONDS))
+    }
+
+    private fun destroyWebView(instrumentation: android.app.Instrumentation, web: WebView) {
+        instrumentation.runOnMainSync {
+            web.stopLoading()
+            web.removeJavascriptInterface("DocxBridge")
+            (web.parent as? ViewGroup)?.removeView(web)
+            web.destroy()
         }
     }
 

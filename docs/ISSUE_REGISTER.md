@@ -1,3 +1,12 @@
+## Latest DOCX visual-frame/readiness investigation (2026-11-21)
+
+| Audit ID | Evidence-based finding / hypothesis | Remediation / status |
+|---|---|---|
+| AUD-DOCX-018 | Actions run [45206520707](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45206520707) failed the 412×915 rendered-pixel assertion with “WebView was visually blank.” In `DocxWebViewHost`, Compose readiness was raised as soon as the JS bridge reported positive DOM geometry; no Chromium visual-state commit was awaited. That ordering is a plausible blank-frame race, **not a confirmed root cause**. | The host now gates readiness on `WebView.postVisualStateCallback`; instrumentation waits for that visual-state callback before pixel capture and viewport-resize assertions. Pending new CI verification. Exact owner device/file not reproduced. |
+| AUD-DOCX-019 | The same failed run ended the Unicode/table/search instrumentation test in a process crash. The available report has no detailed crash evidence. Existing tests performed WebView stop/bridge removal/destroy in `finally`; this does not establish or exclude a renderer lifecycle problem. | Test teardown now runs on main, removes the bridge, detaches a parented WebView before destroy, and centralizes cleanup. Arbitrary render/resize/tap sleeps have been replaced with readiness/event latches; tap behavior is still asserted through the callbacks. The process-crash cause remains unknown until repeatable diagnostics or a green exact-SHA emulator run. |
+
+Run `45206520707` is failed, not a passing artifact source. Earlier run `45205000092` passed on older code SHA `9f2704387d7da92ca17bbe7f1c884381c241cff3` and does not validate this patch. Local Node checks pass 12/12; Java is not installed here, so Android compilation and instrumentation depend on Actions. No new Actions result exists yet. Keep the root-cause and physical-device status open.
+
 # Verified application issue register
 
 **Audit date:** 2026-11-21 UTC · **Baseline inspected revision:** `2f6d3492de46b3d8f71515404d170af4e35c8459`
