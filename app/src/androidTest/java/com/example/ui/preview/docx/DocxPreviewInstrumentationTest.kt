@@ -23,6 +23,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import android.util.Base64
@@ -85,6 +86,8 @@ class DocxPreviewInstrumentationTest {
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
                         request?.url?.let(loader::shouldInterceptRequest)
+                    override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean =
+                        reportRendererGone(failures, ready, detail)
                     override fun onPageFinished(view: WebView?, url: String?) { finishedPages.incrementAndGet() }
                 }
                 val density = resources.displayMetrics.density
@@ -214,6 +217,8 @@ class DocxPreviewInstrumentationTest {
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
                         request?.url?.let(loader::shouldInterceptRequest)
+                    override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean =
+                        reportRendererGone(failure, ready, detail)
                 }
                 val width = (412 * resources.displayMetrics.density).toInt()
                 val height = (915 * resources.displayMetrics.density).toInt()
@@ -270,6 +275,8 @@ class DocxPreviewInstrumentationTest {
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
                         request?.url?.let(loader::shouldInterceptRequest)
+                    override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean =
+                        reportRendererGone(error, failed, detail)
                     override fun onPageFinished(view: WebView?, url: String?) {
                         view?.evaluateJavascript("var s=document.createElement('style');s.textContent='#scaled-document{transform:translateX(-5000px)!important}';document.head.appendChild(s);", null)
                     }
@@ -299,6 +306,7 @@ class DocxPreviewInstrumentationTest {
         val searched = CountDownLatch(1)
         val matchCount = AtomicReference(0)
         val failure = AtomicReference<String?>(null)
+        val rendererGone = AtomicBoolean(false)
         val result = AtomicReference<JSONObject?>(null)
         lateinit var web: WebView
         instrumentation.runOnMainSync {
@@ -331,6 +339,8 @@ class DocxPreviewInstrumentationTest {
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
                         request?.url?.let(loader::shouldInterceptRequest)
+                    override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean =
+                        reportRendererGone(failure, ready, detail, rendererGone)
                     override fun onPageFinished(view: WebView?, url: String?) {
                         view?.evaluateJavascript("DocxViewer.setZoom(1)", null)
                     }
@@ -402,7 +412,7 @@ class DocxPreviewInstrumentationTest {
                 assertTrue("Rendered WebView pixels are indistinguishable from the blank background", changed > 50)
             }
         } catch (failure: Throwable) {
-            captureFailureScreenshot(context, web, "docx-360x800-failure.png")
+            if (!rendererGone.get()) captureFailureScreenshot(context, web, "docx-360x800-failure.png")
             throw failure
         } finally {
             destroyWebView(instrumentation, web)
@@ -416,6 +426,7 @@ class DocxPreviewInstrumentationTest {
         val finished = CountDownLatch(1)
         val readiness = AtomicReference<JSONObject?>(null)
         val failure = AtomicReference<String?>(null)
+        val rendererGone = AtomicBoolean(false)
         lateinit var web: WebView
         instrumentation.runOnMainSync {
             val loader = WebViewAssetLoader.Builder()
@@ -447,6 +458,8 @@ class DocxPreviewInstrumentationTest {
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
                         request?.url?.let(loader::shouldInterceptRequest)
+                    override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean =
+                        reportRendererGone(failure, finished, detail, rendererGone)
                 }
                 val density = resources.displayMetrics.density
                 val width = (412 * density).toInt()
@@ -479,7 +492,7 @@ class DocxPreviewInstrumentationTest {
                 assertTrue("412x915 WebView was visually blank", differentPixels > 50)
             }
         } catch (testFailure: Throwable) {
-            captureFailureScreenshot(context, web, "docx-412x915-failure.png")
+            if (!rendererGone.get()) captureFailureScreenshot(context, web, "docx-412x915-failure.png")
             throw testFailure
         } finally {
             destroyWebView(instrumentation, web)
@@ -513,6 +526,18 @@ class DocxPreviewInstrumentationTest {
             )
         }
         assertTrue("WebView did not commit visual state for $description", rendered.await(10, TimeUnit.SECONDS))
+    }
+
+    private fun reportRendererGone(
+        failure: AtomicReference<String?>,
+        completed: CountDownLatch,
+        detail: android.webkit.RenderProcessGoneDetail,
+        rendererGone: AtomicBoolean? = null
+    ): Boolean {
+        rendererGone?.set(true)
+        failure.set("RENDERER_UNAVAILABLE (didCrash=${detail.didCrash()})")
+        completed.countDown()
+        return true
     }
 
     private fun destroyWebView(instrumentation: android.app.Instrumentation, web: WebView) {
