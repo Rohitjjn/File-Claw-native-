@@ -293,3 +293,9 @@ hard-coded 500 ms splash wait (now 150 ms) and moving cache-directory I/O off th
 - Docs reorganised into `docs/`; stale pre-1.1.0 docs moved to `docs/legacy/`.
 
 ## [1.0.x]: see `docs/legacy/changelogs.md`
+
+## [Unreleased] 2026-11-23 — DOCX instrumentation CI repair
+
+- Fixed the DOCX recovery instrumentation test's unsupported Compose test assertion; retained checks that recovered text stays hidden until requested and appears after the action.
+- Improved CI diagnostics so Android-test Kotlin compilation failures are shown in the workflow summary and annotations.
+- **CI PASS:** run [45164606478](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45164606478) passed unit tests, lint, Detekt, app/instrumentation compilation, debug APK assembly, emulator DOCX tests, and JS checks. Debug APK is in artifact `docx-rehabilitation-0a66dacae512fae600f13609366250afed25a963` (35,890,591 bytes). Physical-device testing remains pending.
