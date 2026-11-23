@@ -488,9 +488,14 @@ class DocxPreviewInstrumentationTest {
 
     private fun signalAfterVisualState(web: WebView, latch: CountDownLatch) {
         val posted = web.post {
-            web.postVisualStateCallback(visualStateRequestIds.incrementAndGet()) {
-                latch.countDown()
-            }
+            web.postVisualStateCallback(
+                visualStateRequestIds.incrementAndGet(),
+                object : WebView.VisualStateCallback() {
+                    override fun onComplete(requestId: Long) {
+                        latch.countDown()
+                    }
+                }
+            )
         }
         if (!posted) latch.countDown()
     }
@@ -498,9 +503,14 @@ class DocxPreviewInstrumentationTest {
     private fun awaitVisualState(instrumentation: android.app.Instrumentation, web: WebView, description: String) {
         val rendered = CountDownLatch(1)
         instrumentation.runOnMainSync {
-            web.postVisualStateCallback(visualStateRequestIds.incrementAndGet()) {
-                rendered.countDown()
-            }
+            web.postVisualStateCallback(
+                visualStateRequestIds.incrementAndGet(),
+                object : WebView.VisualStateCallback() {
+                    override fun onComplete(requestId: Long) {
+                        rendered.countDown()
+                    }
+                }
+            )
         }
         assertTrue("WebView did not commit visual state for $description", rendered.await(10, TimeUnit.SECONDS))
     }

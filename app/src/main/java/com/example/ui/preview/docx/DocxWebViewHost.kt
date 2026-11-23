@@ -93,12 +93,17 @@ internal fun DocxWebViewHost(
                         if (id == generation && alive.get()) {
                             // DOM geometry is necessary but does not prove Chromium has committed
                             // the corresponding pixels. Hold Compose readiness until that frame.
-                            web.postVisualStateCallback(++visualStateRequestId) {
-                                if (alive.get() && id == generation) {
-                                    viewerReady = true
-                                    onVisualRender(id, pages, height, width, visiblePages)
+                            web.postVisualStateCallback(
+                                ++visualStateRequestId,
+                                object : WebView.VisualStateCallback() {
+                                    override fun onComplete(requestId: Long) {
+                                        if (alive.get() && id == generation) {
+                                            viewerReady = true
+                                            onVisualRender(id, pages, height, width, visiblePages)
+                                        }
+                                    }
                                 }
-                            }
+                            )
                         }
                     },
                     onPageChanged = onPageChanged,
