@@ -1,9 +1,12 @@
 package com.example.ui.preview.docx
 
 import android.graphics.Bitmap
+import android.app.Activity
+import android.content.Intent
 import android.graphics.Color
 import android.os.SystemClock
 import android.view.View
+import android.widget.FrameLayout
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -13,6 +16,7 @@ import android.webkit.WebViewClient
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.webkit.WebViewAssetLoader
+import com.example.MainActivity
 import org.json.JSONObject
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,7 +40,7 @@ class DocxPreviewInstrumentationTest {
 
     @Test fun defaultZoomSettlesAndRotationKeepsTheSameDocumentAndReadingPosition() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
+        val context = launchTestActivity(instrumentation)
         val fixture = fixtureDocx()
         val ready = CountDownLatch(1)
         val failures = AtomicReference<String?>(null)
@@ -93,8 +97,7 @@ class DocxPreviewInstrumentationTest {
                 val density = resources.displayMetrics.density
                 val width = (412 * density).toInt()
                 val height = (915 * density).toInt()
-                measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
-                layout(0, 0, width, height)
+                attachWebView(context, this, width, height)
                 loadUrl("https://appassets.androidplatform.net/assets/docx_viewer/index.html?generation=31&file=" +
                     android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
             }
@@ -180,13 +183,13 @@ class DocxPreviewInstrumentationTest {
             val finalZoomJson = JSONObject(org.json.JSONTokener(finalZoomValue.get()).nextValue().toString())
             assertTrue("Double tap should return 1.75x to the default 1.0x", kotlin.math.abs(finalZoomJson.optDouble("zoom") - 1.0) < .001)
         } finally {
-            destroyWebView(instrumentation, web)
+            destroyWebView(instrumentation, context, web)
         }
     }
 
     @Test fun printModeUsesTheSameOfflineRendererAndReadinessCallback() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
+        val context = launchTestActivity(instrumentation)
         val fixture = fixtureDocx()
         val ready = CountDownLatch(1)
         val failure = AtomicReference<String?>(null)
@@ -222,8 +225,7 @@ class DocxPreviewInstrumentationTest {
                 }
                 val width = (412 * resources.displayMetrics.density).toInt()
                 val height = (915 * resources.displayMetrics.density).toInt()
-                measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
-                layout(0, 0, width, height)
+                attachWebView(context, this, width, height)
                 loadUrl("https://appassets.androidplatform.net/assets/docx_viewer/index.html?print=1&generation=9&file=" +
                     android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
             }
@@ -242,13 +244,13 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Theme tokens or normal-flow zoom missing: ${themeResult.get()}",
                 themeResult.get()?.contains("#181715|#252320|true|") == true)
         } finally {
-            destroyWebView(instrumentation, web)
+            destroyWebView(instrumentation, context, web)
         }
     }
 
     @Test fun horizontallyOffscreenPagesNeverSignalReady() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
+        val context = launchTestActivity(instrumentation)
         val fixture = fixtureDocx()
         val ready = CountDownLatch(1)
         val failed = CountDownLatch(1)
@@ -283,8 +285,7 @@ class DocxPreviewInstrumentationTest {
                 }
                 val width = (360 * resources.displayMetrics.density).toInt()
                 val height = (800 * resources.displayMetrics.density).toInt()
-                measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
-                layout(0, 0, width, height)
+                attachWebView(context, this, width, height)
                 loadUrl("https://appassets.androidplatform.net/assets/docx_viewer/index.html?generation=12&file=" +
                     android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
             }
@@ -294,13 +295,13 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Offscreen page incorrectly reported ready", ready.count == 1L)
             assertTrue("Failure should identify visibility/layout", error.get()?.contains("LAYOUT_FAILED") == true)
         } finally {
-            destroyWebView(instrumentation, web)
+            destroyWebView(instrumentation, context, web)
         }
     }
 
     @Test fun bundledViewerRendersVisibleUnicodeTableAndCrossRunSearch() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
+        val context = launchTestActivity(instrumentation)
         val fixture = fixtureDocx()
         val ready = CountDownLatch(1)
         val searched = CountDownLatch(1)
@@ -348,8 +349,7 @@ class DocxPreviewInstrumentationTest {
                 val density = resources.displayMetrics.density
                 val width = (360 * density).toInt()
                 val height = (800 * density).toInt()
-                measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
-                layout(0, 0, width, height)
+                attachWebView(context, this, width, height)
                 loadUrl("https://appassets.androidplatform.net/assets/docx_viewer/index.html?generation=7&file=" +
                     android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
             }
@@ -415,13 +415,13 @@ class DocxPreviewInstrumentationTest {
             if (!rendererGone.get()) captureFailureScreenshot(context, web, "docx-360x800-failure.png")
             throw failure
         } finally {
-            destroyWebView(instrumentation, web)
+            destroyWebView(instrumentation, context, web)
         }
     }
 
     @Test fun viewerRendersVisiblePagesAndNonBlankPixelsAt412x915() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = instrumentation.targetContext
+        val context = launchTestActivity(instrumentation)
         val fixture = fixtureDocx()
         val finished = CountDownLatch(1)
         val readiness = AtomicReference<JSONObject?>(null)
@@ -464,8 +464,7 @@ class DocxPreviewInstrumentationTest {
                 val density = resources.displayMetrics.density
                 val width = (412 * density).toInt()
                 val height = (915 * density).toInt()
-                measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
-                layout(0, 0, width, height)
+                attachWebView(context, this, width, height)
                 loadUrl("https://appassets.androidplatform.net/assets/docx_viewer/index.html?generation=15&file=" +
                     android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
             }
@@ -495,8 +494,26 @@ class DocxPreviewInstrumentationTest {
             if (!rendererGone.get()) captureFailureScreenshot(context, web, "docx-412x915-failure.png")
             throw testFailure
         } finally {
-            destroyWebView(instrumentation, web)
+            destroyWebView(instrumentation, context, web)
         }
+    }
+
+    private fun launchTestActivity(instrumentation: android.app.Instrumentation): Activity {
+        val intent = Intent(instrumentation.targetContext, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        val activity = instrumentation.startActivitySync(intent)
+        instrumentation.runOnMainSync { activity.setContentView(FrameLayout(activity)) }
+        return activity
+    }
+
+    private fun attachWebView(activity: Activity, web: WebView, width: Int, height: Int) {
+        activity.addContentView(web, FrameLayout.LayoutParams(width, height))
+        web.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+        )
+        web.layout(0, 0, width, height)
     }
 
     private fun signalAfterVisualState(web: WebView, latch: CountDownLatch) {
@@ -540,12 +557,13 @@ class DocxPreviewInstrumentationTest {
         return true
     }
 
-    private fun destroyWebView(instrumentation: android.app.Instrumentation, web: WebView) {
+    private fun destroyWebView(instrumentation: android.app.Instrumentation, activity: Activity, web: WebView) {
         instrumentation.runOnMainSync {
             web.stopLoading()
             web.removeJavascriptInterface("DocxBridge")
             (web.parent as? ViewGroup)?.removeView(web)
             web.destroy()
+            activity.finish()
         }
     }
 
