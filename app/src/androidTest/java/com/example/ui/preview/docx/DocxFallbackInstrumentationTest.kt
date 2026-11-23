@@ -1,7 +1,6 @@
 package com.example.ui.preview.docx
 
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -51,7 +50,10 @@ class DocxFallbackInstrumentationTest {
         composeRule.waitUntil(30_000) {
             composeRule.onAllNodesWithText("Show recovered text").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("RECOVERABLE DOCX TEXT").assertDoesNotExist()
+        assertTrue(
+            "Recovered DOCX text must stay hidden until the user requests recovery",
+            composeRule.onAllNodesWithText("RECOVERABLE DOCX TEXT").fetchSemanticsNodes().isEmpty()
+        )
         composeRule.onNodeWithText("Show recovered text").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithText("RECOVERABLE DOCX TEXT").fetchSemanticsNodes().isNotEmpty()
