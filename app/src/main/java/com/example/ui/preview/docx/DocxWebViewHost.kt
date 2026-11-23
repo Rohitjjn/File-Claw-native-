@@ -37,7 +37,7 @@ internal fun DocxWebViewHost(
     onSearch: (Int, Int, Boolean) -> Unit,
     onZoom: (Float) -> Unit,
     onTap: () -> Unit,
-    onDoubleTap: () -> Unit,
+    onDoubleTap: (Float) -> Unit,
     onCreated: (WebView?) -> Unit,
     modifier: Modifier = Modifier
 ) {

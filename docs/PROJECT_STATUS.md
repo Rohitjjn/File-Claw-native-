@@ -2,6 +2,14 @@
 
 **Audit date:** 2026-11-21 (UTC)
 
+## Latest task — DOCX zoom stability, rotation, gestures, and tray (2026-11-21)
+
+The active branch is `arena/ea756912-file-claw-native` at the previously CI-verified DOCX rebuild. Source tracing found a plausible renderer feedback loop: `ResizeObserver` recalculated fit scale from `scroller.clientWidth` while CSS `zoom` changed overflow; on classic-scrollbar WebViews, vertical scrollbar appearance can change that measured width, feeding a new fit scale into resize handling. Reapplying the same user zoom also rewrote style and re-emitted callbacks. This mechanism is evidenced by the source path but was not reproduced on the owner’s device/file.
+
+The DOCX renderer now reserves a stable scrollbar gutter, skips same-value zoom operations, reports changed zoom/fit/effective scale only, and preserves a centered document anchor on viewport resize. Focus-mode single taps are delayed so a double tap can cancel the pending focus action and zoom instead. The DOCX tray is exactly **Page → Rotate → Search → Print → Edit**; Edit displays “Coming Soon”. The manifest already handles orientation/screen-size changes without Activity recreation; API 34 WebView instrumentation now resizes the same WebView and asserts that zoom, scroll and its rendered document survive.
+
+**Local verification:** Node search/readiness/zoom tests pass **12/12**; `node --check` for `viewer.js`, bundled DOCX JavaScript checks, manifest XML parsing, and `git diff --check` pass. Added JVM action-order coverage and API 34 instrumentation for default zoom 1.0, 0.5–5.0 limits, viewport resize/state preservation, and non-conflicting single/double tap behavior. Android tests, Kotlin compilation, lint/Detekt, emulator execution and APK build await the pushed exact SHA’s Actions run; local Gradle is blocked because Java/JDK is absent. No physical-device success or exact-owner-document fix is claimed.
+
 ## Latest task state — standalone DOCX rebuild (2026-11-21)
 
 Work is being integrated on `arena/ea756912-file-claw-native`, which advanced remotely while this implementation was prepared from base `2f6d3492de46b3d8f71515404d170af4e35c8459`. The dedicated `ui/preview/docx/` Compose screen, reducer/ViewModel/state, offline WebView host and generation-scoped bridge, streaming/validation loader, bounded ZIP cache, cross-run Unicode search, visual-layout readiness, zoom/page navigation, print integration, retry/text recovery, and file information UI are implemented. Legacy DOCX duplicate assets were removed; the shared editor JSZip required by PPTX remains. Existing PrintManager behavior is retained. Other preview implementations were moved to separate source files to preserve their routes while DOCX is isolated.

@@ -2,6 +2,7 @@ package com.example.ui.preview.docx
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.SystemClock
 import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -28,6 +29,143 @@ import java.util.zip.ZipOutputStream
 
 @RunWith(AndroidJUnit4::class)
 class DocxPreviewInstrumentationTest {
+    @Test fun defaultZoomSettlesAndRotationKeepsTheSameDocumentAndReadingPosition() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val fixture = fixtureDocx()
+        val ready = CountDownLatch(1)
+        val failures = AtomicReference<String?>(null)
+        val zoomReports = java.util.concurrent.CopyOnWriteArrayList<Float>()
+        val effectiveScaleReports = java.util.concurrent.CopyOnWriteArrayList<Pair<Long, Float>>()
+        val singleTaps = java.util.concurrent.atomic.AtomicInteger(0)
+        val doubleTaps = java.util.concurrent.atomic.AtomicInteger(0)
+        val finishedPages = java.util.concurrent.atomic.AtomicInteger(0)
+        lateinit var web: WebView
+        instrumentation.runOnMainSync {
+            val loader = WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+                .addPathHandler("/docx-src/", object : WebViewAssetLoader.PathHandler {
+                    override fun handle(path: String): WebResourceResponse? = if (path == "document.docx")
+                        WebResourceResponse("application/vnd.openxmlformats-officedocument.wordprocessingml.document", null,
+                            200, "OK", mapOf("Content-Length" to fixture.size.toString()), ByteArrayInputStream(fixture)) else null
+                }).build()
+            web = WebView(context).apply {
+                settings.javaScriptEnabled = true
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                settings.useWideViewPort = false
+                settings.loadWithOverviewMode = false
+                addJavascriptInterface(object {
+                    @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) { ready.countDown() }
+                    @JavascriptInterface fun onFailure(payload: String) { failures.set(payload); ready.countDown() }
+                    @JavascriptInterface fun onZoomChanged(payload: String) {
+                        val zoom = JSONObject(payload)
+                        zoomReports.add(zoom.optDouble("zoom", -1.0).toFloat())
+                        effectiveScaleReports.add(
+                            SystemClock.elapsedRealtime() to zoom.optDouble("effectiveScale", -1.0).toFloat()
+                        )
+                    }
+                    @JavascriptInterface fun onDocumentTap() { singleTaps.incrementAndGet() }
+                    @JavascriptInterface fun onDocumentDoubleTap(payload: String) { doubleTaps.incrementAndGet() }
+                }, "DocxBridge")
+                webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
+                        request?.url?.let(loader::shouldInterceptRequest)
+                    override fun onPageFinished(view: WebView?, url: String?) { finishedPages.incrementAndGet() }
+                }
+                val density = resources.displayMetrics.density
+                val width = (412 * density).toInt()
+                val height = (915 * density).toInt()
+                measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+                layout(0, 0, width, height)
+                loadUrl("https://appassets.androidplatform.net/assets/docx_viewer/index.html?generation=31&file=" +
+                    android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
+            }
+        }
+        try {
+            assertTrue("DOCX render timed out: ${failures.get()}", ready.await(45, TimeUnit.SECONDS))
+            assertTrue("DOCX renderer failed: ${failures.get()}", failures.get() == null)
+            Thread.sleep(800)
+            assertTrue("Opening the document must report the default user zoom of 1.0: ${zoomReports}",
+                zoomReports.isNotEmpty() && zoomReports.all { kotlin.math.abs(it - 1f) < .001f })
+            val recentScales = effectiveScaleReports
+                .filter { SystemClock.elapsedRealtime() - it.first < 500 }
+                .map { (it.second * 10000).toInt() }
+                .distinct()
+            assertTrue("Fit scale should settle instead of oscillating: $recentScales", recentScales.size <= 1)
+
+            val prepared = CountDownLatch(1)
+            val position = AtomicReference<String?>(null)
+            instrumentation.runOnMainSync {
+                web.evaluateJavascript("(function(){DocxViewer.setZoom(99);var high=DocxViewer.getState().zoom;DocxViewer.setZoom(.1);var low=DocxViewer.getState().zoom;DocxViewer.setZoom(1.75);var s=document.getElementById('scroller');var p=document.querySelectorAll('.docx,section.docx')[1];s.scrollTop+=p.getBoundingClientRect().top-s.getBoundingClientRect().top+80;return JSON.stringify({zoom:DocxViewer.getState().zoom,high:high,low:low,scroll:s.scrollTop})})()") {
+                    position.set(it); prepared.countDown()
+                }
+            }
+            assertTrue("Could not prepare the reader position", prepared.await(5, TimeUnit.SECONDS))
+            val before = JSONObject(org.json.JSONTokener(position.get()).nextValue().toString())
+            assertTrue("Zoom must clamp to 5.0 at the upper bound: ${before.optDouble("high")}", before.optDouble("high") == 5.0)
+            assertTrue("Zoom must clamp to 0.5 at the lower bound: ${before.optDouble("low")}", before.optDouble("low") == 0.5)
+            assertTrue("Test fixture must be scrolled into page two", before.optDouble("scroll") > 0.0)
+
+            instrumentation.runOnMainSync {
+                val density = web.resources.displayMetrics.density
+                val width = (915 * density).toInt()
+                val height = (412 * density).toInt()
+                web.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
+                web.layout(0, 0, width, height)
+            }
+            Thread.sleep(1200)
+            val afterLatch = CountDownLatch(1)
+            val afterValue = AtomicReference<String?>(null)
+            instrumentation.runOnMainSync {
+                web.evaluateJavascript("JSON.stringify({zoom:DocxViewer.getState().zoom,scroll:document.getElementById('scroller').scrollTop,loads:document.querySelectorAll('.docx,section.docx').length})") {
+                    afterValue.set(it); afterLatch.countDown()
+                }
+            }
+            assertTrue("Could not read document state after rotation-sized resize", afterLatch.await(5, TimeUnit.SECONDS))
+            val after = JSONObject(org.json.JSONTokener(afterValue.get()).nextValue().toString())
+            assertTrue("Zoom must survive a viewport rotation: ${after.optDouble("zoom")}",
+                kotlin.math.abs(after.optDouble("zoom") - 1.75) < .001)
+            assertTrue("Scroll position must remain in the same document rather than reset: ${after.optDouble("scroll")}",
+                after.optDouble("scroll") > 0.0)
+            assertTrue("Resize must not replace/reload the rendered document",
+                after.optInt("loads") >= 2 && finishedPages.get() == 1)
+
+            val singleClick = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                web.evaluateJavascript("document.getElementById('scroller').dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:20,clientY:20}))") {
+                    singleClick.countDown()
+                }
+            }
+            assertTrue("Single click dispatch timed out", singleClick.await(5, TimeUnit.SECONDS))
+            Thread.sleep(450)
+            assertTrue("Single tap should toggle focus once", singleTaps.get() == 1 && doubleTaps.get() == 0)
+
+            val doubleClick = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                web.evaluateJavascript("(function(){var e=document.getElementById('scroller');var a={bubbles:true,clientX:30,clientY:30};e.dispatchEvent(new MouseEvent('click',a));e.dispatchEvent(new MouseEvent('click',a));return true})()") {
+                    doubleClick.countDown()
+                }
+            }
+            assertTrue("Double-click dispatch timed out", doubleClick.await(5, TimeUnit.SECONDS))
+            Thread.sleep(100)
+            assertTrue("Double tap must zoom without producing two single-tap focus toggles",
+                singleTaps.get() == 1 && doubleTaps.get() == 1)
+            val finalZoom = CountDownLatch(1)
+            val finalZoomValue = AtomicReference<String?>(null)
+            instrumentation.runOnMainSync {
+                web.evaluateJavascript("JSON.stringify({zoom:DocxViewer.getState().zoom})") {
+                    finalZoomValue.set(it); finalZoom.countDown()
+                }
+            }
+            assertTrue("Final zoom query timed out", finalZoom.await(5, TimeUnit.SECONDS))
+            val finalZoomJson = JSONObject(org.json.JSONTokener(finalZoomValue.get()).nextValue().toString())
+            assertTrue("Double tap should return 1.75x to the default 1.0x", kotlin.math.abs(finalZoomJson.optDouble("zoom") - 1.0) < .001)
+        } finally {
+            instrumentation.runOnMainSync { web.stopLoading(); web.removeJavascriptInterface("DocxBridge"); web.destroy() }
+        }
+    }
+
     @Test fun printModeUsesTheSameOfflineRendererAndReadinessCallback() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

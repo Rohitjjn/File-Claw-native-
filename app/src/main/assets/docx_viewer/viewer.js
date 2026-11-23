@@ -14,14 +14,21 @@
     let matchIndex = -1;
     let searchObserver;
     let firstTouch = null;
-    let lastTap = 0;
+    let pendingSingleTap = null;
+    let pendingTapTimer = null;
+    let lastReportedZoom = null;
+    let lastReportedFitScale = null;
+    let lastReportedScale = null;
     let readySent = false;
     let activePage = 0;
 
     function send(method, payload) {
         try {
             const bridge = window.DocxBridge;
-            if (bridge && typeof bridge[method] === 'function') bridge[method](JSON.stringify(payload));
+            if (bridge && typeof bridge[method] === 'function') {
+                if (method === 'onDocumentTap') bridge[method]();
+                else bridge[method](JSON.stringify(payload));
+            }
         } catch (_) { /* A detached WebView cannot receive callbacks. */ }
     }
 
@@ -98,10 +105,25 @@
         reportPage();
     }
 
-    function updateScale() {
+    function captureAnchor(anchorX, anchorY) {
+        const scrollerRect = els.scroller.getBoundingClientRect();
+        const x = Number.isFinite(anchorX) ? anchorX - scrollerRect.left : els.scroller.clientWidth / 2;
+        const y = Number.isFinite(anchorY) ? anchorY - scrollerRect.top : els.scroller.clientHeight / 2;
+        const before = els.document.getBoundingClientRect();
+        const scale = Math.max(.01, fitScale * userZoom);
+        return {
+            x, y,
+            contentX: (x - (before.left - scrollerRect.left)) / scale,
+            contentY: (y - (before.top - scrollerRect.top)) / scale
+        };
+    }
+
+    function updateScale(anchor) {
         const page = els.document.querySelector('.docx, section.docx');
         if (!page || !page.offsetWidth) return;
         const naturalWidth = page.offsetWidth;
+        // clientWidth excludes classic scrollbars. The matching stable gutter in CSS
+        // prevents vertical overflow appearing/disappearing from changing the fit width.
         const availableWidth = Math.max(160, els.scroller.clientWidth - 16);
         fitScale = Math.min(1, Math.max(.05, availableWidth / naturalWidth));
         const scale = fitScale * userZoom;
@@ -109,26 +131,29 @@
         // transform + synthetic spacer workaround that desynchronized touch/scroll.
         els.document.style.width = naturalWidth + 'px';
         els.document.style.zoom = String(scale);
-        send('onZoomChanged', { zoom: userZoom, fitScale, effectiveScale: scale });
+        if (anchor) {
+            const scrollerRect = els.scroller.getBoundingClientRect();
+            const after = els.document.getBoundingClientRect();
+            const documentLeft = after.left - scrollerRect.left + els.scroller.scrollLeft;
+            const documentTop = after.top - scrollerRect.top + els.scroller.scrollTop;
+            els.scroller.scrollLeft = Math.max(0, documentLeft + anchor.contentX * scale - anchor.x);
+            els.scroller.scrollTop = Math.max(0, documentTop + anchor.contentY * scale - anchor.y);
+        }
+        if (lastReportedZoom !== userZoom || lastReportedFitScale !== fitScale || lastReportedScale !== scale) {
+            lastReportedZoom = userZoom;
+            lastReportedFitScale = fitScale;
+            lastReportedScale = scale;
+            send('onZoomChanged', { zoom: userZoom, fitScale, effectiveScale: scale });
+        }
     }
 
     function setZoom(next, anchorX, anchorY) {
-        const previous = fitScale * userZoom;
-        userZoom = Math.max(.5, Math.min(5, Number(next) || 1));
-        const scrollerRect = els.scroller.getBoundingClientRect();
-        const x = Number.isFinite(anchorX) ? anchorX - scrollerRect.left : els.scroller.clientWidth / 2;
-        const y = Number.isFinite(anchorY) ? anchorY - scrollerRect.top : els.scroller.clientHeight / 2;
-        const before = els.document.getBoundingClientRect();
-        const contentX = (x - (before.left - scrollerRect.left)) / Math.max(.01, previous);
-        const contentY = (y - (before.top - scrollerRect.top)) / Math.max(.01, previous);
-        updateScale();
-        const current = fitScale * userZoom;
-        const after = els.document.getBoundingClientRect();
-        const documentLeft = after.left - scrollerRect.left + els.scroller.scrollLeft;
-        const documentTop = after.top - scrollerRect.top + els.scroller.scrollTop;
-        els.scroller.scrollLeft = Math.max(0, documentLeft + contentX * current - x);
-        els.scroller.scrollTop = Math.max(0, documentTop + contentY * current - y);
-        send('onZoomChanged', { zoom: userZoom, fitScale, effectiveScale: current });
+        const value = Number(next);
+        const bounded = Math.max(.5, Math.min(5, Number.isFinite(value) ? value : 1));
+        if (bounded === userZoom) return;
+        const anchor = captureAnchor(anchorX, anchorY);
+        userZoom = bounded;
+        updateScale(anchor);
     }
 
     function clearHighlights() {
@@ -227,22 +252,26 @@
                 setZoom(firstTouch.zoom * distance / Math.max(1, firstTouch.distance), firstTouch.x, firstTouch.y);
             }
         }, { passive: true });
-        els.scroller.addEventListener('touchend', event => {
-            if (event.changedTouches.length === 1 && firstTouch && !('distance' in firstTouch)) {
-                const t = event.changedTouches[0];
-                if (Math.hypot(t.clientX - firstTouch.x, t.clientY - firstTouch.y) < 18) {
-                    const now = Date.now();
-                    if (now - lastTap < 320) {
-                        setZoom(userZoom > 1.4 ? 1 : 2, t.clientX, t.clientY);
-                        send('onDocumentDoubleTap', {});
-                    }
-                    lastTap = now;
-                }
-            }
-            firstTouch = null;
-        }, { passive: true });
+        els.scroller.addEventListener('touchend', () => { firstTouch = null; }, { passive: true });
         els.scroller.addEventListener('scroll', () => requestAnimationFrame(reportPage), { passive: true });
-        els.scroller.addEventListener('click', () => send('onDocumentTap', {}), { passive: true });
+        els.scroller.addEventListener('click', event => {
+            const now = Date.now();
+            if (pendingTapTimer && now - pendingSingleTap.time < 320) {
+                clearTimeout(pendingTapTimer);
+                pendingTapTimer = null;
+                pendingSingleTap = null;
+                setZoom(userZoom > 1.4 ? 1 : 2, event.clientX, event.clientY);
+                send('onDocumentDoubleTap', { zoom: userZoom });
+                return;
+            }
+            if (pendingTapTimer) clearTimeout(pendingTapTimer);
+            pendingSingleTap = { time: now };
+            pendingTapTimer = setTimeout(() => {
+                pendingTapTimer = null;
+                pendingSingleTap = null;
+                send('onDocumentTap', {});
+            }, 320);
+        }, { passive: true });
         els.scroller.addEventListener('wheel', event => {
             if (event.ctrlKey || event.metaKey) {
                 event.preventDefault();
@@ -383,7 +412,8 @@
         configureGestures();
         const onResize = () => {
             if (pageCount()) {
-                updateScale();
+                const anchor = captureAnchor();
+                updateScale(anchor);
                 if (readySent) rebuildHighlights();
                 else reportReady(renderId);
             }

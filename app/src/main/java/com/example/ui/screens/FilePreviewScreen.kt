@@ -1,8 +1,8 @@
 package com.example.ui.screens
 
-import com.example.ui.preview.docx.DocxPreviewInfoDialog
 import com.example.ui.preview.docx.DocxPreviewScreen
 import com.example.ui.preview.docx.DocxPrintController
+import com.example.ui.preview.docx.DocxTrayAction
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -55,8 +55,6 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.FormatLineSpacing
-import androidx.compose.material.icons.outlined.ZoomIn
-import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Palette
@@ -141,7 +139,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material3.Slider
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -395,7 +392,7 @@ fun FilePreviewScreen(
     var currentPdfPage by remember { mutableStateOf(1) }
     var totalPdfPages by remember { mutableStateOf(0) }
     var showPropertiesDialog by remember { mutableStateOf(false) }
-    var showDocxInfoDialog by remember(activeFile?.path) { mutableStateOf(false) }
+    var showDocxEditComingSoon by remember(activeFile?.path) { mutableStateOf(false) }
 
     // Loop 14: PDF view rotation in 90-degree steps (toolbar Rotate button). Pure
     // viewer state — the PDF.js document session is never reloaded, so password
@@ -414,7 +411,6 @@ fun FilePreviewScreen(
     var pendingLinkToOpen by remember { mutableStateOf<String?>(null) }
     var showJumpDialog by remember { mutableStateOf(false) }
     var showJumpToLineDialog by remember { mutableStateOf(false) }
-    var showDocxZoomDialog by remember { mutableStateOf(false) }
     var showOutlineBottomSheet by remember { mutableStateOf(false) }
     var showAppearanceBottomSheet by remember { mutableStateOf(false) }
     val docxZoomSeedContext = LocalContext.current
@@ -423,7 +419,6 @@ fun FilePreviewScreen(
             DocxZoomPolicy.fromPercent(ViewerAppearancePrefs.getDocxZoomPercent(docxZoomSeedContext))
         )
     }
-    var docxZoomInput by remember(activeFile?.path) { mutableStateOf(DocxZoomPolicy.defaultPercent().toString()) }
     var searchTriggerNext by remember { mutableIntStateOf(0) }
     var searchTriggerPrev by remember { mutableIntStateOf(0) }
 
@@ -1176,7 +1171,7 @@ fun FilePreviewScreen(
         bottomBar = {
             val isPdf = fileState is MainViewModel.FileContentState.PdfSuccess
             // Gate on the real state: legacy .doc files open in the hex viewer and must not
-            // show DOCX zoom controls.
+            // show the DOCX-specific reading tray.
             val isDocx = fileState is MainViewModel.FileContentState.DocxSuccess
             val isImage = fileState is MainViewModel.FileContentState.ImageSuccess
             val isText = fileState is MainViewModel.FileContentState.TextSuccess ||
@@ -1228,21 +1223,6 @@ fun FilePreviewScreen(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                             ) {
-                                if (isDocx) {
-                                    Surface(
-                                        shape = RoundedCornerShape(18.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                                        modifier = Modifier.clickable { showJumpDialog = true }
-                                    ) {
-                                        Text(
-                                            text = "≈$currentPdfPage / ${totalPdfPages.coerceAtLeast(1)}",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                        )
-                                    }
-                                }
                                 if (isPdf) {
                                     // Page indicator / Jump button
                                     Surface(
@@ -1335,138 +1315,72 @@ fun FilePreviewScreen(
                                         )
                                     }
                                 } else if (isDocx) {
-                                    // Loop 10: the zoom pipeline only exists in the WebView
-                                    // renderer; hide the dead zoom controls when the pure-Kotlin
-                                    // fallback renderer took over (its text preview has no zoom).
-                                    if (!isDocxRenderFallback) {
-                                    // DOCX Zoom Out Button
-                                    IconButton(
-                                        onClick = {
-                                            docxZoomFactor = (docxZoomFactor - 0.25f).coerceAtLeast(0.25f)
-                                        },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.ZoomOut,
-                                            contentDescription = "Zoom Out",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    TextButton(
-                                        onClick = { docxZoomFactor = com.example.core.format.DocxZoomPolicy.DEFAULT_ZOOM },
-                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-                                    ) { Text("Fit", fontSize = 12.sp) }
-
-                                    // Zoom percentage chip
-                                    Surface(
-                                        shape = RoundedCornerShape(16.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                        modifier = Modifier.clickable {
-                                            docxZoomInput = (docxZoomFactor * 100).toInt().toString()
-                                            showDocxZoomDialog = true
+                                    DocxTrayAction.entries.forEach { action ->
+                                        when (action) {
+                                            DocxTrayAction.PAGE -> IconButton(
+                                                onClick = { showJumpDialog = true },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.MenuBook,
+                                                    contentDescription = action.label,
+                                                    modifier = Modifier.size(18.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            DocxTrayAction.ROTATE -> IconButton(
+                                                onClick = {
+                                                    val activity = context.findHostActivity()
+                                                    if (activity != null) {
+                                                        activity.requestedOrientation =
+                                                            com.example.core.format.ScreenOrientationPolicy.toggleOrientation(
+                                                                activity.resources.configuration.orientation
+                                                            )
+                                                    }
+                                                },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Outlined.RotateRight,
+                                                    contentDescription = action.label,
+                                                    modifier = Modifier.size(18.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            DocxTrayAction.SEARCH -> IconButton(
+                                                onClick = { toggleInViewerSearch() },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Outlined.Search,
+                                                    contentDescription = action.label,
+                                                    modifier = Modifier.size(18.dp),
+                                                    tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            DocxTrayAction.PRINT -> IconButton(
+                                                onClick = { docxViewerState.print() },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Outlined.Print,
+                                                    contentDescription = action.label,
+                                                    modifier = Modifier.size(18.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            DocxTrayAction.EDIT -> IconButton(
+                                                onClick = { showDocxEditComingSoon = true },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Outlined.Edit,
+                                                    contentDescription = action.label,
+                                                    modifier = Modifier.size(18.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
                                         }
-                                    ) {
-                                        Text(
-                                            text = "${(docxZoomFactor * 100).toInt()}%",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                        )
-                                    }
-
-                                    // DOCX Zoom In Button
-                                    IconButton(
-                                        onClick = {
-                                            docxZoomFactor = (docxZoomFactor + 0.25f).coerceAtMost(5.0f)
-                                        },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.ZoomIn,
-                                            contentDescription = "Zoom In",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                    }
-
-                                    // Find in DOCX
-                                    IconButton(
-                                        onClick = { toggleInViewerSearch() },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Search,
-                                            contentDescription = "Find in DOCX",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    // DOCX Night Mode toggle
-                                    IconButton(
-                                        onClick = { docxNightModeOverride = !isDocxNightMode },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isDocxNightMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                            contentDescription = "Toggle night mode",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = if (isDocxNightMode) Color(0xFFFFB74D) else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    // Print or save as PDF through the existing DOCX PrintManager path.
-                                    IconButton(
-                                        onClick = { docxViewerState.print() },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Print,
-                                            contentDescription = "Print or export as PDF",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    IconButton(
-                                        onClick = { showDocxInfoDialog = true },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Info,
-                                            contentDescription = "Document information",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    IconButton(
-                                        onClick = { activeFile?.let { openDocxExternally(context, File(it.path)) } },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Language,
-                                            contentDescription = "Open DOCX externally",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    // Share DOCX
-                                    IconButton(
-                                        onClick = { activeFile?.let { shareFile(context, File(it.path), "docx") } },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Share,
-                                            contentDescription = "Share document",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface
-                                        )
                                     }
                                 } else if (isImage) {
                                     // Image counter
@@ -2182,9 +2096,7 @@ fun FilePreviewScreen(
                         onDocumentReady = { docxPreviewReady = true },
                         onSingleTap = { isBarsVisible = !isBarsVisible },
                         onZoomChanged = { factor -> docxZoomFactor = factor },
-                        onDoubleTap = {
-                            docxZoomFactor = com.example.core.format.DocxZoomPolicy.toggleDoubleTap(docxZoomFactor)
-                        },
+                        onDoubleTap = { factor -> docxZoomFactor = factor },
                         onRendererFallback = { isFallback -> isDocxRenderFallback = isFallback }
                     )
                 }
@@ -2244,11 +2156,14 @@ fun FilePreviewScreen(
         )
     }
 
-    if (showDocxInfoDialog && activeFile != null && fileState is MainViewModel.FileContentState.DocxSuccess) {
-        DocxPreviewInfoDialog(
-            fileEntity = activeFile,
-            estimatedPages = docxViewerState.pageCount,
-            onDismissRequest = { showDocxInfoDialog = false }
+    if (showDocxEditComingSoon && fileState is MainViewModel.FileContentState.DocxSuccess) {
+        AlertDialog(
+            onDismissRequest = { showDocxEditComingSoon = false },
+            title = { Text("Edit") },
+            text = { Text("Coming Soon") },
+            confirmButton = {
+                TextButton(onClick = { showDocxEditComingSoon = false }) { Text("OK") }
+            }
         )
     }
 
@@ -2353,56 +2268,6 @@ fun FilePreviewScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-            }
-        )
-    }
-
-    if (showDocxZoomDialog) {
-        AlertDialog(
-            onDismissRequest = { showDocxZoomDialog = false },
-            title = { Text("Document zoom") },
-            text = {
-                Column {
-                    Text("${(docxZoomFactor * 100).toInt()}%", style = MaterialTheme.typography.titleLarge)
-                    OutlinedTextField(
-                        value = docxZoomInput,
-                        onValueChange = { value -> docxZoomInput = value.filter { it.isDigit() }.take(3) },
-                        singleLine = true,
-                        label = { Text("Exact zoom (%)") },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Slider(
-                        value = docxZoomFactor,
-                        onValueChange = {
-                            docxZoomFactor = com.example.core.format.DocxZoomPolicy.coerce(it)
-                            docxZoomInput = (it * 100).toInt().toString()
-                        },
-                        // 0.05 stops so the 40% default is a reachable snap point.
-                        valueRange = 0.25f..5.0f,
-                        steps = 94
-                    )
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("25%", style = MaterialTheme.typography.labelSmall)
-                        Text("500%", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    docxZoomInput.toIntOrNull()?.let { percent ->
-                        docxZoomFactor = percent.coerceIn(25, 500) / 100f
-                    }
-                    showDocxZoomDialog = false
-                }) { Text("Done") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    docxZoomFactor = 1.0f
-                    docxZoomInput = "100"
-                }) { Text("Reset 100%") }
             }
         )
     }

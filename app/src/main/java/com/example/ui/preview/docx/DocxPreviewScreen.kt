@@ -79,7 +79,7 @@ fun DocxPreviewScreen(
     onDocumentReady: () -> Unit = {},
     onSingleTap: () -> Unit = {},
     onZoomChanged: (Float) -> Unit = {},
-    onDoubleTap: () -> Unit = {},
+    onDoubleTap: (Float) -> Unit = {},
     onRendererFallback: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
