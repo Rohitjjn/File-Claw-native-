@@ -208,13 +208,14 @@ class DocxPreviewInstrumentationTest {
             val evaluated = CountDownLatch(1)
             val dom = AtomicReference<String>()
             instrumentation.runOnMainSync {
-                web.evaluateJavascript("DocxViewer.search('styled phrase'); JSON.stringify({text:document.body.innerText,pages:document.querySelectorAll('.docx,section.docx').length,image:(function(){var i=document.querySelector('#scaled-document img');return !!i&&i.complete&&i.naturalWidth>0})(),visible:(function(){var r=document.querySelector('.docx,section.docx').getBoundingClientRect();return r.width>10&&r.height>10&&r.bottom>0&&r.top<innerHeight})(),list:!!document.querySelector('#scaled-document ul,#scaled-document ol'),color:(function(){var e=Array.from(document.querySelectorAll('#scaled-document *')).find(function(n){return n.children.length===0&&n.textContent==='colored marker'});return e?getComputedStyle(e).color:''})()})") { value -> dom.set(value); evaluated.countDown() }
+                web.evaluateJavascript("DocxViewer.search('styled phrase'); JSON.stringify({text:document.body.innerText,pages:document.querySelectorAll('.docx,section.docx').length,image:(function(){var i=document.querySelector('#scaled-document img');return !!i&&i.complete&&i.naturalWidth>0})(),visible:(function(){var r=document.querySelector('.docx,section.docx').getBoundingClientRect();return r.width>10&&r.height>10&&r.bottom>0&&r.top<innerHeight})(),list:(function(){var e=Array.from(document.querySelectorAll('#scaled-document *')).find(function(n){return n.children.length===0&&n.textContent==='fixture list item'});var p=e&&e.closest('p');return p?getComputedStyle(p).display:''})(),color:(function(){var e=Array.from(document.querySelectorAll('#scaled-document *')).find(function(n){return n.children.length===0&&n.textContent==='colored marker'});return e?getComputedStyle(e).color:''})()})") { value -> dom.set(value); evaluated.countDown() }
             }
             assertTrue("DOM evaluation timed out", evaluated.await(10, TimeUnit.SECONDS))
             val jsonText = JSONObject(org.json.JSONTokener(dom.get()).nextValue().toString())
             assertTrue("Rendered text absent", jsonText.optString("text").contains("हिंदी पाठ"))
             assertTrue("Table content absent", jsonText.optString("text").contains("visible table cell"))
-            assertTrue("Word list was not rendered as a list", jsonText.optBoolean("list"))
+            assertTrue("Word numbering was not rendered as a list item: ${jsonText.optString("list")}",
+                jsonText.optString("list") == "list-item")
             assertTrue("Page is not in visible viewport", jsonText.optBoolean("visible"))
             assertTrue("Explicit page break did not create multiple page nodes", jsonText.optInt("pages") >= 2)
             assertTrue("Related image did not load", jsonText.optBoolean("image"))
