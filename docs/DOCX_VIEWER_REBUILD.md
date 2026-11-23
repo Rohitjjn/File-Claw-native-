@@ -179,7 +179,7 @@ This change is being integrated on `arena/ea756912-file-claw-native`, based on `
 
 Other viewer code was moved into dedicated source files with its route preserved. Old duplicate DOCX editor/assets were removed; shared PPTX JSZip was retained.
 
-**Local verification to date:** Node search/readiness tests **8/8 PASS**; viewer/helper/bundle syntax checks pass; `git diff --check` passes; instrumentation helper package ID matches Gradle `applicationId`. JVM tests, Android/Kotlin compilation, lint/Detekt, emulator WebView instrumentation, APK assembly, and Actions artifact are still pending on the integrated SHA. No JDK is available locally. Wait for fresh Actions results before claiming Android verification. Physical-device behavior and the owner’s exact DOCX remain unverified; root cause/resolution are not asserted.
+**Verification:** Node search/readiness tests **8/8 PASS**; viewer/helper/bundle syntax checks pass; `git diff --check` passes; instrumentation helper package ID matches Gradle `applicationId`. Exact-SHA run [`45185818904`](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45185818904) on `8f0755d93b687e517213e2f081e02c0a872ff0d6` failed during JVM test compilation due to a missing `DocxPreviewPolicy` import in `DocxDocumentLoaderTest`; the import has been added. Emulator checks were skipped and no APK was produced. A fresh Actions run is pending. No JDK is available locally. Physical-device behavior and the owner’s exact DOCX remain unverified; root cause/resolution are not asserted.
 
 ## CI test repair and APK checkpoint (2026-11-23)
 
