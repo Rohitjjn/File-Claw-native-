@@ -77,13 +77,13 @@ internal fun WebView.animateDocxDoubleTapZoom(
     val density = resources.displayMetrics.density
     val tapX = event.x.toDouble()
     val tapY = event.y.toDouble()
-    evaluateJavascript(
-        "(function(){var s=document.getElementById('scroller');return JSON.stringify({scale:visualViewport?visualViewport.scale:1,left:s?s.scrollLeft:0,top:s?s.scrollTop:0});})()"
-    ) { result ->
-        if (!isActive()) return@evaluateJavascript
-        val metrics = runCatching {
-            JSONObject(JSONTokener(result).nextValue().toString())
-        }.getOrNull() ?: return@evaluateJavascript
+
+    fun parseMetrics(result: String?): JSONObject? = runCatching {
+        JSONObject(JSONTokener(result).nextValue().toString())
+    }.getOrNull()
+
+    fun startZoom(metrics: JSONObject) {
+        if (!isActive()) return
         val current = metrics.optDouble("scale", 1.0).toFloat().takeIf { it.isFinite() && it > 0f }
             ?: DocxZoomPolicy.DEFAULT_ZOOM
         val target = DocxZoomPolicy.doubleTapTarget(current)
@@ -91,6 +91,8 @@ internal fun WebView.animateDocxDoubleTapZoom(
         val anchorY = tapY / (density * current)
         val initialLeft = metrics.optDouble("left", 0.0)
         val initialTop = metrics.optDouble("top", 0.0)
+        val initialOffsetLeft = metrics.optDouble("offsetLeft", 0.0)
+        val initialOffsetTop = metrics.optDouble("offsetTop", 0.0)
         var previous = current
         var cancelled = false
         ValueAnimator.ofFloat(current, target).apply {
@@ -112,15 +114,34 @@ internal fun WebView.animateDocxDoubleTapZoom(
 
                 override fun onAnimationEnd(animation: Animator) {
                     if (cancelled || !isActive()) return
-                    val left = initialLeft + anchorX - tapX / (density * target)
-                    val top = initialTop + anchorY - tapY / (density * target)
-                    evaluateJavascript(
-                        "(function(){var s=document.getElementById('scroller');if(s){s.scrollLeft=$left;s.scrollTop=$top;}})()",
-                        null
-                    )
+                    val script = if (target > DocxZoomPolicy.DEFAULT_ZOOM + 0.01f) {
+                        "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;if(s&&v){s.scrollLeft=${initialLeft + initialOffsetLeft + anchorX - tapX / (density * target)}-v.offsetLeft;s.scrollTop=${initialTop + initialOffsetTop + anchorY - tapY / (density * target)}-v.offsetTop;}})()"
+                    } else {
+                        "(function(){var s=document.getElementById('scroller');if(s){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}})()"
+                    }
+                    evaluateJavascript(script, null)
                 }
             })
             start()
+        }
+    }
+
+    evaluateJavascript(
+        "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;return JSON.stringify({scale:v?v.scale:1,left:s?s.scrollLeft:0,top:s?s.scrollTop:0,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,anchorSpace:!!(s&&s.classList.contains('zoom-anchor-space'))});})()"
+    ) { result ->
+        if (!isActive()) return@evaluateJavascript
+        val metrics = parseMetrics(result) ?: return@evaluateJavascript
+        val current = metrics.optDouble("scale", 1.0).toFloat().takeIf { it.isFinite() && it > 0f }
+            ?: DocxZoomPolicy.DEFAULT_ZOOM
+        val target = DocxZoomPolicy.doubleTapTarget(current)
+        if (target > DocxZoomPolicy.DEFAULT_ZOOM + 0.01f && !metrics.optBoolean("anchorSpace")) {
+            evaluateJavascript(
+                "(function(){var s=document.getElementById('scroller');if(!s)return null;s.classList.add('zoom-anchor-space');void s.offsetWidth;var p=parseFloat(getComputedStyle(s).paddingLeft)||0;s.scrollLeft=Math.max(0,s.clientWidth/2-p);s.scrollTop=window.innerHeight/2;var v=window.visualViewport;return JSON.stringify({scale:v?v.scale:1,left:s.scrollLeft,top:s.scrollTop,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,anchorSpace:true});})()"
+            ) { prepared ->
+                if (isActive()) parseMetrics(prepared)?.let(::startZoom)
+            }
+        } else {
+            startZoom(metrics)
         }
     }
 }

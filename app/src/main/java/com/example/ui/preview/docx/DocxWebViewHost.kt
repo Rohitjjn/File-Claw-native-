@@ -137,9 +137,16 @@ internal fun DocxWebViewHost(
                         }
                     },
                     onScaleChanged = { scale ->
-                        if (alive.get()) onZoom(
-                            com.example.core.format.DocxZoomPolicy.fromWebViewScale(scale, web.resources.displayMetrics.density)
-                        )
+                        if (alive.get()) {
+                            val zoom = com.example.core.format.DocxZoomPolicy.fromWebViewScale(scale, web.resources.displayMetrics.density)
+                            if (zoom <= com.example.core.format.DocxZoomPolicy.DEFAULT_ZOOM + 0.01f) {
+                                web.evaluateJavascript(
+                                    "(function(){var s=document.getElementById('scroller');if(s&&s.classList.contains('zoom-anchor-space')){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}})()",
+                                    null
+                                )
+                            }
+                            onZoom(zoom)
+                        }
                     }
                 )
                 onCreated(this)
