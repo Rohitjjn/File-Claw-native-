@@ -43,7 +43,8 @@ test('Android regression fixture checks native zoom defaults, bounds and both ho
   assert.match(instrumentation, /far-left/);
   assert.match(instrumentation, /far-right/);
   assert.match(instrumentation, /repeat\(4\)[\s\S]*?dispatchPinch\(web, SystemClock\.uptimeMillis\(\)/);
-  assert.match(instrumentation, /zoom >= \.49f && zoom <= \.52f/);
-  assert.match(instrumentation, /zoom <= 5\.02f && zoom >= 4\.9f/);
+  assert.match(instrumentation, /minZoom >= \.49f && minZoom <= \.52f/);
+  assert.match(instrumentation, /maxZoom <= 5\.02f && maxZoom >= 4\.9f/);
+  assert.match(instrumentation, /readVisualViewportScale/);
   assert.match(instrumentation, /5\.0/);
 });

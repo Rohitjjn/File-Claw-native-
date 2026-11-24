@@ -105,27 +105,22 @@ class DocxPreviewInstrumentationTest {
                 }
                 awaitVisualState(instrumentation, web, "native zoom-in pinch")
             }
-            val density = web.resources.displayMetrics.density
-            instrumentation.runOnMainSync {
-                val zoom = web.scale / density
-                assertTrue("Native WebView scale is capped at 500%: $zoom", zoom <= 5.02f && zoom >= 4.9f)
-            }
+            val maxZoom = readVisualViewportScale(instrumentation, web)
+            assertTrue("Native page zoom is capped at 500%: $maxZoom (WebView scale ${web.scale})", maxZoom <= 5.02f && maxZoom >= 4.9f)
             repeat(4) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 160f * web.resources.displayMetrics.density, 40f * web.resources.displayMetrics.density)
                 }
                 awaitVisualState(instrumentation, web, "native zoom-out pinch")
             }
+            val minZoom = readVisualViewportScale(instrumentation, web)
+            assertTrue("Native page zoom is floored at 50%: $minZoom (WebView scale ${web.scale})", minZoom >= .49f && minZoom <= .52f)
             instrumentation.runOnMainSync {
-                val zoom = web.scale / density
-                assertTrue("Native WebView scale is floored at 50%: $zoom", zoom >= .49f && zoom <= .52f)
                 dispatchPinch(web, SystemClock.uptimeMillis(), 40f * density, 80f * density)
             }
             awaitVisualState(instrumentation, web, "native zoom recovery pinch")
-            instrumentation.runOnMainSync {
-                val zoom = web.scale / density
-                assertTrue("Native WebView zooms without custom CSS scaling: $zoom", kotlin.math.abs(zoom - 1f) < .1f)
-            }
+            val recoveredZoom = readVisualViewportScale(instrumentation, web)
+            assertTrue("Native WebView zooms without custom CSS scaling: $recoveredZoom", kotlin.math.abs(recoveredZoom - 1f) < .1f)
 
             val panRead = CountDownLatch(1)
             val panJson = AtomicReference<String?>(null)
@@ -172,6 +167,19 @@ class DocxPreviewInstrumentationTest {
             down.recycle()
             up.recycle()
         }
+    }
+
+    private fun readVisualViewportScale(instrumentation: android.app.Instrumentation, web: WebView): Float {
+        val result = AtomicReference<String?>(null)
+        val read = CountDownLatch(1)
+        instrumentation.runOnMainSync {
+            web.evaluateJavascript("window.visualViewport ? window.visualViewport.scale.toString() : '1'") {
+                result.set(it?.trim('"'))
+                read.countDown()
+            }
+        }
+        assertTrue("Could not read native visual viewport scale", read.await(5, TimeUnit.SECONDS))
+        return result.get()?.toFloatOrNull() ?: error("Invalid visual viewport scale: ${result.get()}")
     }
 
     private fun dispatchPinch(web: WebView, downTime: Long, startDistance: Float, endDistance: Float) {
