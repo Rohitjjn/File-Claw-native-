@@ -21,6 +21,9 @@ object DocxZoomPolicy {
 
     fun fromPercent(percent: Int): Float = coerce(percent / 100f)
 
+    /** Double-tap alternates between the fit-width baseline and a 200% reading step. */
+    fun doubleTapTarget(zoom: Float): Float = if (coerce(zoom) < 1.5f) 2.0f else DEFAULT_ZOOM
+
     fun toPercent(zoom: Float): Int = Math.round(coerce(zoom) * 100f)
 
     /** Default display zoom percent. */

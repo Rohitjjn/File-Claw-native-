@@ -159,7 +159,7 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          node --test tools/docx-tests/docx-search.test.cjs tools/docx-tests/docx-readiness.test.cjs tools/docx-tests/docx-zoom.test.cjs
+          node --test tools/docx-tests/*.test.cjs
           node --check app/src/main/assets/docx_viewer/search.js
           node --check app/src/main/assets/docx_viewer/render-readiness.js
           node --check app/src/main/assets/docx_viewer/viewer.js

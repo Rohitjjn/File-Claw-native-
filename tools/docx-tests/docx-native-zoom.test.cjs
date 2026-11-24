@@ -7,10 +7,12 @@ const root = path.resolve(__dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const host = read('app/src/main/java/com/example/ui/preview/docx/DocxWebViewHost.kt');
 const client = read('app/src/main/java/com/example/ui/preview/docx/DocxWebViewClient.kt');
+const launcher = read('app/src/main/java/com/example/ui/preview/docx/DocxExternalLinkLauncher.kt');
 const screen = read('app/src/main/java/com/example/ui/preview/docx/DocxPreviewScreen.kt');
 const html = read('app/src/main/assets/docx_viewer/index.html');
 const viewer = read('app/src/main/assets/docx_viewer/viewer.js');
 const instrumentation = read('app/src/androidTest/java/com/example/ui/preview/docx/DocxPreviewInstrumentationTest.kt');
+const loadingInstrumentation = read('app/src/androidTest/java/com/example/ui/preview/docx/DocxLoadingInstrumentationTest.kt');
 const gestures = read('app/src/main/java/com/example/ui/preview/docx/DocxWebViewGestures.kt');
 const surface = read('app/src/main/java/com/example/ui/preview/viewers/PreviewScreenSurface.kt');
 
@@ -22,14 +24,27 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(host, /loadWithOverviewMode\s*=\s*false/);
   assert.match(host, /modifier = modifier\.fillMaxSize\(\)\.clipToBounds\(\)/);
   assert.match(client, /override fun onScaleChanged\(/);
+  assert.match(client, /onExternalUrl\(uri\)/);
+  assert.match(client, /appassets\.androidplatform\.net/);
+  assert.match(launcher, /Intent\.ACTION_VIEW/);
+  assert.match(launcher, /setOf\("http", "https", "mailto", "tel"\)/);
+  assert.match(launcher, /ActivityNotFoundException/);
   assert.match(host, /fromWebViewScale\(page\.scale, page\.resources\.displayMetrics\.density\)/);
   assert.match(host, /fromWebViewScale\(scale, web\.resources\.displayMetrics\.density\)/);
-  assert.match(host, /installConfirmedSingleTapListener\(onTap\)/);
+  assert.match(host, /installDocxGestureListeners\(/);
+  assert.match(host, /launchDocxExternalLink\(context, uri\)/);
   assert.match(gestures, /onSingleTapConfirmed/);
-  assert.match(gestures, /false \/\/ Preserve pinch, double-tap zoom, and one-finger pan in Chromium/);
-  assert.doesNotMatch(gestures, /onDoubleTap|detectTransformGestures/);
+  assert.match(gestures, /onDoubleTap/);
+  assert.match(gestures, /zoomBy/);
+  assert.match(gestures, /scrollLeft/);
+  assert.match(gestures, /if \(event\.pointerCount > 1\)[\s\S]*?false/);
+  assert.match(gestures, /evaluateJavascript/);
+  assert.doesNotMatch(gestures, /detectTransformGestures/);
   assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, minimum-scale=0\.5, maximum-scale=5\.0, user-scalable=yes"/);
-  assert.match(html, /min-width:\s*200vw/);
+  assert.match(html, /min-width:\s*0/);
+  assert.match(html, /#scaled-document \.docx, #scaled-document section\.docx \{[^}]*max-width:\s*100%\s*!important/s);
+  assert.match(html, /#scaled-document \{[^}]*width:\s*100%/);
+  assert.match(html, /#scaled-document a \{[^}]*pointer-events:\s*auto/s);
   assert.match(html, /@media print\s*\{\s*html, body\s*\{[^}]*min-width:\s*0/s);
   assert.doesNotMatch(viewer, /touchmove|style\.zoom|transform\s*:\s*scale|function setZoom|function updateScale|ctrlKey/);
   assert.doesNotMatch(html, /\bzoom\s*:/);
@@ -38,8 +53,29 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(surface, /if \(!usesReaderGestures\)/);
 });
 
+test('DOCX loading UI is a white surface with only a black spinner and fixed label', () => {
+  assert.match(screen, /internal fun DocxLoadingOverlay\(\)/);
+  assert.match(screen, /color = Color\.White/);
+  assert.match(screen, /CircularProgressIndicator\([\s\S]*?color = Color\.Black/);
+  assert.match(screen, /Text\(\s*"Loading document"/);
+  assert.match(loadingInstrumentation, /loadingOverlayIsOnlyWhiteSpinnerAndLoadingLabel/);
+  assert.match(loadingInstrumentation, /Color\.White/);
+  assert.match(loadingInstrumentation, /assertCountEquals\(1\)/);
+  assert.doesNotMatch(screen, /MenuBook|Loading Word document|LinearProgressIndicator/);
+});
+
 test('Android regression fixture checks native zoom defaults, bounds and both horizontal edges', () => {
   assert.match(instrumentation, /nativeWebViewZoomSupportsHorizontalPanToBothEdges/);
+  assert.match(instrumentation, /Initial page zoom must be the 100% fit baseline/);
+  assert.match(instrumentation, /Opening the DOCX must not create horizontal overflow/);
+  assert.match(instrumentation, /balanced readable side margins/);
+  assert.match(instrumentation, /dispatchPan\(web/);
+  assert.match(instrumentation, /Double-tap must keep the document point under the tap while zooming in/);
+  assert.match(instrumentation, /Second double-tap must return to 100% fit width/);
+  assert.match(instrumentation, /Tapping a hyperlink must not toggle focus mode/);
+  assert.match(instrumentation, /DOCX HTTPS link must dispatch ACTION_VIEW/);
+  assert.match(instrumentation, /missingExternalAppIsReportedToThePreview/);
+  assert.match(instrumentation, /TargetMode="External"/);
   assert.match(instrumentation, /builtInZoomControls/);
   assert.match(instrumentation, /scrollLeft/);
   assert.match(instrumentation, /Number\.MAX_SAFE_INTEGER/);

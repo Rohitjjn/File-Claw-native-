@@ -1,12 +1,6 @@
 package com.example.ui.preview.docx
 
 import android.webkit.WebView
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,21 +10,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,11 +28,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.testTag
 import com.example.core.format.DocxExtractor
 import com.example.data.RecentFileEntity
 import com.example.ui.theme.ClaudeAlabaster
@@ -228,14 +218,8 @@ fun DocxPreviewScreen(
                 }
             }
 
-            AnimatedVisibility(
-                visible = viewModel.isLoading,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                DocxLoadingOverlay(
-                    state = previewState,
-                    largeFileWarning = preparedDocument?.largeFileWarning == true
-                )
+            if (viewModel.isLoading) {
+                DocxLoadingOverlay()
             }
 
             if (previewState.stage == DocxPreviewStage.READY && previewState.largeFileWarning &&
@@ -265,53 +249,30 @@ fun DocxPreviewScreen(
     }
 }
 
+internal const val DOCX_LOADING_SPINNER_TEST_TAG = "docx-loading-spinner"
+
 @Composable
-private fun DocxLoadingOverlay(state: DocxPreviewState, largeFileWarning: Boolean) {
-    val infiniteTransition = rememberInfiniteTransition(label = "docx-loading-icon")
-    val iconScale by infiniteTransition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.06f,
-        animationSpec = infiniteRepeatable(tween(800), repeatMode = RepeatMode.Reverse),
-        label = "docx-icon-pulse"
-    )
+internal fun DocxLoadingOverlay() {
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background.copy(alpha = 0.96f)
+        color = Color.White
     ) {
         Column(
             modifier = Modifier.fillMaxSize().padding(28.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            androidx.compose.material3.Icon(
-                imageVector = Icons.Filled.MenuBook,
-                contentDescription = "Loading Word document",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale }
+            CircularProgressIndicator(
+                modifier = Modifier.testTag(DOCX_LOADING_SPINNER_TEST_TAG),
+                color = Color.Black,
+                trackColor = Color.White
             )
-            CircularProgressIndicator(modifier = Modifier.padding(top = 20.dp))
-            val progress = if (state.totalBytes > 0L) {
-                "Loading document: ${(state.bytesLoaded * 100 / state.totalBytes).coerceIn(0, 100)}%"
-            } else when (state.stage) {
-                DocxPreviewStage.VALIDATING -> "Checking document package…"
-                DocxPreviewStage.RENDERING -> "Rendering pages…"
-                DocxPreviewStage.LAYOUT -> "Checking visible page layout…"
-                else -> "Preparing offline preview…"
-            }
-            Text(progress, modifier = Modifier.padding(top = 16.dp), style = MaterialTheme.typography.bodyMedium)
-            if (state.totalBytes > 0L) {
-                LinearProgressIndicator(
-                    progress = (state.bytesLoaded.toFloat() / state.totalBytes.toFloat()).coerceIn(0f, 1f),
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-            }
-            if (largeFileWarning || state.largeFileWarning) {
-                Text(
-                    "This large document is still within the 25 MiB preview limit. Please wait while it is checked.",
-                    modifier = Modifier.padding(top = 12.dp),
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
+            Text(
+                "Loading document",
+                modifier = Modifier.padding(top = 12.dp),
+                color = Color.Black,
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 }

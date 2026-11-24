@@ -19,6 +19,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.webkit.WebViewAssetLoader
 import com.example.MainActivity
 import org.json.JSONObject
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,6 +48,10 @@ class DocxPreviewInstrumentationTest {
         val failures = AtomicReference<String?>(null)
         val confirmedTaps = java.util.concurrent.atomic.AtomicInteger()
         val tapConfirmed = CountDownLatch(1)
+        val launchedIntent = AtomicReference<Intent?>(null)
+        val linkIntentDispatched = CountDownLatch(1)
+        val linkTapResolved = CountDownLatch(1)
+        val resolvedTapCount = java.util.concurrent.atomic.AtomicInteger()
         lateinit var web: WebView
         instrumentation.runOnMainSync {
             val loader = WebViewAssetLoader.Builder()
@@ -65,22 +70,33 @@ class DocxPreviewInstrumentationTest {
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
-                installConfirmedSingleTapListener {
-                    confirmedTaps.incrementAndGet()
-                    tapConfirmed.countDown()
-                }
+                installDocxGestureListeners(
+                    onSingleTapConfirmed = { event ->
+                        dispatchSingleTapIfNotLink(
+                            event,
+                            onTap = {
+                                confirmedTaps.incrementAndGet()
+                                tapConfirmed.countDown()
+                            },
+                            onResolved = {
+                                if (resolvedTapCount.incrementAndGet() >= 2) linkTapResolved.countDown()
+                            }
+                        )
+                    },
+                    onDoubleTap = { event -> animateDocxDoubleTapZoom(event) }
+                )
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         signalAfterVisualState(web, ready)
                     }
                     @JavascriptInterface fun onFailure(payload: String) { failures.set(payload); ready.countDown() }
                 }, "DocxBridge")
-                webViewClient = object : WebViewClient() {
-                    override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
-                        request?.url?.let(loader::shouldInterceptRequest)
-                    override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean =
-                        reportRendererGone(failures, ready, detail)
-                }
+                val launchContext = RecordingContext(activity, launchedIntent, linkIntentDispatched)
+                webViewClient = DocxWebViewClient(
+                    assets = loader,
+                    onFailure = { code -> failures.set(code); ready.countDown() },
+                    onExternalUrl = { uri -> launchDocxExternalLink(launchContext, uri) { } }
+                )
                 val density = resources.displayMetrics.density
                 attachWebView(activity, this, (412 * density).toInt(), (915 * density).toInt())
                 loadUrl("https://appassets.androidplatform.net/assets/docx_viewer/index.html?generation=31&file=" +
@@ -99,6 +115,66 @@ class DocxPreviewInstrumentationTest {
                 val density = web.resources.displayMetrics.density
                 assertTrue("Native WebView starts at exactly 100%: ${web.scale / density}", kotlin.math.abs(web.scale / density - 1f) < .02f)
             }
+            val initialScale = readVisualViewportScale(instrumentation, web)
+            assertTrue("Initial page zoom must be the 100% fit baseline: $initialScale", kotlin.math.abs(initialScale - 1f) < .02f)
+            val initialLayout = evaluateJson(instrumentation, web,
+                "(function(){var s=document.getElementById('scroller');var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');var r=p.getBoundingClientRect();return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,pageWidth:r.width,pageLeft:r.left,pageRight:r.right});})()")
+            assertTrue("DOCX page must fit within the viewport at 100%: $initialLayout",
+                initialLayout.optDouble("pageWidth") > 0 && initialLayout.optDouble("pageWidth") <= initialLayout.optDouble("clientWidth") + 1)
+            val leftMargin = initialLayout.optDouble("pageLeft")
+            val rightMargin = initialLayout.optDouble("clientWidth") - initialLayout.optDouble("pageRight")
+            assertTrue("Fit-to-width page must have balanced readable side margins: $initialLayout",
+                leftMargin >= 8 && rightMargin >= 8 && kotlin.math.abs(leftMargin - rightMargin) < 3)
+            assertTrue("Opening the DOCX must not create horizontal overflow: $initialLayout",
+                initialLayout.optDouble("scrollWidth") <= initialLayout.optDouble("clientWidth") + 1)
+            val tapPoint = AtomicReference<FloatArray>()
+            instrumentation.runOnMainSync {
+                tapPoint.set(floatArrayOf(web.width * .5f, web.height * .35f, web.resources.displayMetrics.density))
+            }
+            fun documentPointAtTap(): JSONObject {
+                val point = tapPoint.get()
+                val x = point[0].toDouble().toString()
+                val y = point[1].toDouble().toString()
+                val density = point[2].toDouble().toString()
+                return evaluateJson(instrumentation, web,
+                    "(function(){var s=document.getElementById('scroller');return JSON.stringify({x:s.scrollLeft+$x/($density*visualViewport.scale),y:s.scrollTop+$y/($density*visualViewport.scale)});})()")
+            }
+            val anchorBeforeZoom = documentPointAtTap()
+            instrumentation.runOnMainSync {
+                val now = SystemClock.uptimeMillis()
+                dispatchTap(web, now, tapPoint.get()[0], tapPoint.get()[1])
+                dispatchTap(web, now + 130, tapPoint.get()[0], tapPoint.get()[1])
+            }
+            awaitVisualViewportScale(instrumentation, web, 2f)
+            val anchorAt200Percent = documentPointAtTap()
+            assertTrue("Double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt200Percent",
+                kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) < 2.0 &&
+                    kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) < 2.0)
+            assertTrue("Double-tap must not trigger focus mode", confirmedTaps.get() == 0)
+            instrumentation.runOnMainSync {
+                val now = SystemClock.uptimeMillis()
+                dispatchTap(web, now, tapPoint.get()[0], tapPoint.get()[1])
+                dispatchTap(web, now + 130, tapPoint.get()[0], tapPoint.get()[1])
+            }
+            awaitVisualViewportScale(instrumentation, web, 1f)
+            assertTrue("Second double-tap must return to 100% fit width", kotlin.math.abs(readVisualViewportScale(instrumentation, web) - 1f) < .08f)
+
+            instrumentation.runOnMainSync { dispatchTap(web, SystemClock.uptimeMillis()) }
+            assertTrue("A confirmed single tap must reach focus mode", tapConfirmed.await(2, TimeUnit.SECONDS))
+            val anchor = evaluateJson(instrumentation, web,
+                "(function(){var a=document.querySelector('#scaled-document a[href^=\\\"https://\\\"]');if(!a)return JSON.stringify({found:false});var r=a.getBoundingClientRect();return JSON.stringify({found:true,x:r.left+r.width/2,y:r.top+r.height/2});})()")
+            assertTrue("DOCX fixture hyperlink must be visible", anchor.optBoolean("found"))
+            instrumentation.runOnMainSync {
+                val density = web.resources.displayMetrics.density
+                val scale = web.scale / density
+                dispatchTap(web, SystemClock.uptimeMillis(),
+                    (anchor.optDouble("x") * density * scale).toFloat(),
+                    (anchor.optDouble("y") * density * scale).toFloat())
+            }
+            assertTrue("DOCX HTTPS link must dispatch ACTION_VIEW", linkIntentDispatched.await(5, TimeUnit.SECONDS))
+            assertTrue("External intent must carry HTTPS ACTION_VIEW and the hyperlink URL",
+                launchedIntent.get()?.action == Intent.ACTION_VIEW && launchedIntent.get()?.dataString == "https://example.com/docx-test")
+            assertTrue("Tapping a hyperlink must not toggle focus mode", linkTapResolved.await(3, TimeUnit.SECONDS) && confirmedTaps.get() == 1)
             repeat(4) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
@@ -127,7 +203,7 @@ class DocxPreviewInstrumentationTest {
             val panRead = CountDownLatch(1)
             val panJson = AtomicReference<String?>(null)
             instrumentation.runOnMainSync {
-                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var top=s.scrollTop;s.scrollLeft=Number.MAX_SAFE_INTEGER;s.scrollTop=Number.MAX_SAFE_INTEGER;var right=s.scrollLeft;var bottom=s.scrollTop;s.scrollLeft=right+100;s.scrollTop=bottom+100;return JSON.stringify({left:left,right:right,maxX:right,top:top,bottom:bottom,maxY:bottom,afterRight:s.scrollLeft,afterBottom:s.scrollTop,zoom:visualViewport.scale,cssZoom:document.getElementById('scaled-document').style.zoom,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
+                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important;max-width:none!important;flex:0 0 1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var top=s.scrollTop;s.scrollLeft=Number.MAX_SAFE_INTEGER;s.scrollTop=Number.MAX_SAFE_INTEGER;var right=s.scrollLeft;var bottom=s.scrollTop;s.scrollLeft=right+100;s.scrollTop=bottom+100;return JSON.stringify({left:left,right:right,maxX:right,top:top,bottom:bottom,maxY:bottom,afterRight:s.scrollLeft,afterBottom:s.scrollTop,zoom:visualViewport.scale,cssZoom:document.getElementById('scaled-document').style.zoom,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
                     panJson.set(it); panRead.countDown()
                 }
             }
@@ -142,26 +218,49 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Viewer must not use custom CSS zoom: $pan", pan.optString("cssZoom").isEmpty())
             assertTrue("Viewer must not apply a CSS transform: $pan", pan.optString("transform") == "none")
 
+            val midpoint = evaluateJson(instrumentation, web,
+                "(function(){var s=document.getElementById('scroller');s.scrollLeft=s.scrollWidth/2;s.scrollTop=s.scrollHeight/2;return JSON.stringify({left:s.scrollLeft,top:s.scrollTop});})()")
             instrumentation.runOnMainSync {
-                val now = SystemClock.uptimeMillis()
-                dispatchTap(web, now)
+                dispatchPan(web, web.width * .7f, web.height * .6f, web.width * .3f, web.height * .3f)
             }
-            assertTrue("A confirmed single tap must reach focus mode", tapConfirmed.await(2, TimeUnit.SECONDS))
+            awaitVisualState(instrumentation, web, "native one-finger pan toward right and bottom")
+            val draggedTowardRightBottom = evaluateJson(instrumentation, web,
+                "(function(){var s=document.getElementById('scroller');return JSON.stringify({left:s.scrollLeft,top:s.scrollTop});})()")
+            assertTrue("One-finger drag must pan right and down from the midpoint: start=$midpoint end=$draggedTowardRightBottom",
+                draggedTowardRightBottom.optDouble("left") > midpoint.optDouble("left") + 1 &&
+                    draggedTowardRightBottom.optDouble("top") > midpoint.optDouble("top") + 1)
             instrumentation.runOnMainSync {
-                val now = SystemClock.uptimeMillis()
-                dispatchTap(web, now)
-                dispatchTap(web, now + 130)
+                dispatchPan(web, web.width * .3f, web.height * .3f, web.width * .7f, web.height * .6f)
             }
-            Thread.sleep(500)
-            assertTrue("A double tap must remain owned by native Chromium, not toggle focus", confirmedTaps.get() == 1)
+            awaitVisualState(instrumentation, web, "native one-finger pan toward left and top")
+            val draggedTowardLeftTop = evaluateJson(instrumentation, web,
+                "(function(){var s=document.getElementById('scroller');return JSON.stringify({left:s.scrollLeft,top:s.scrollTop});})()")
+            assertTrue("Reverse one-finger drag must pan left and up: start=$draggedTowardRightBottom end=$draggedTowardLeftTop",
+                draggedTowardLeftTop.optDouble("left") < draggedTowardRightBottom.optDouble("left") - 1 &&
+                    draggedTowardLeftTop.optDouble("top") < draggedTowardRightBottom.optDouble("top") - 1)
+
         } finally {
             destroyWebView(instrumentation, activity, web)
         }
     }
 
-    private fun dispatchTap(web: WebView, downTime: Long) {
-        val x = 100f
-        val y = 100f
+    @Test fun missingExternalAppIsReportedToThePreview() {
+        var unavailableReported = false
+        val context = object : android.content.ContextWrapper(InstrumentationRegistry.getInstrumentation().targetContext) {
+            override fun startActivity(intent: Intent) {
+                throw android.content.ActivityNotFoundException("No resolver in test")
+            }
+        }
+        val launched = launchDocxExternalLink(
+            context,
+            android.net.Uri.parse("https://example.com/unhandled"),
+            onUnavailable = { unavailableReported = true }
+        )
+        assertFalse("External link must report a missing handler instead of claiming launch", launched)
+        assertTrue("The UI fallback must be invoked when Android has no browser app", unavailableReported)
+    }
+
+    private fun dispatchTap(web: WebView, downTime: Long, x: Float = 100f, y: Float = 100f) {
         val down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0)
         val up = MotionEvent.obtain(downTime, downTime + 40, MotionEvent.ACTION_UP, x, y, 0)
         try {
@@ -171,6 +270,21 @@ class DocxPreviewInstrumentationTest {
             down.recycle()
             up.recycle()
         }
+    }
+
+    private fun dispatchPan(web: WebView, startX: Float, startY: Float, endX: Float, endY: Float) {
+        val downTime = SystemClock.uptimeMillis()
+        var eventTime = downTime
+        fun send(action: Int, fraction: Float) {
+            val x = startX + (endX - startX) * fraction
+            val y = startY + (endY - startY) * fraction
+            val event = MotionEvent.obtain(downTime, eventTime, action, x, y, 0)
+            try { web.dispatchTouchEvent(event) } finally { event.recycle() }
+            eventTime += 16
+        }
+        send(MotionEvent.ACTION_DOWN, 0f)
+        for (step in 1..8) send(MotionEvent.ACTION_MOVE, step / 8f)
+        send(MotionEvent.ACTION_UP, 1f)
     }
 
     private fun readVisualViewportScale(instrumentation: android.app.Instrumentation, web: WebView): Float {
@@ -184,6 +298,31 @@ class DocxPreviewInstrumentationTest {
         }
         assertTrue("Could not read native visual viewport scale", read.await(5, TimeUnit.SECONDS))
         return result.get()?.toFloatOrNull() ?: error("Invalid visual viewport scale: ${result.get()}")
+    }
+
+    private fun evaluateJson(instrumentation: android.app.Instrumentation, web: WebView, script: String): JSONObject {
+        val value = AtomicReference<String?>(null)
+        val completed = CountDownLatch(1)
+        instrumentation.runOnMainSync {
+            web.evaluateJavascript(script) { result -> value.set(result); completed.countDown() }
+        }
+        assertTrue("WebView JavaScript result timed out", completed.await(5, TimeUnit.SECONDS))
+        val decoded = org.json.JSONTokener(value.get()).nextValue().toString()
+        return JSONObject(decoded)
+    }
+
+    private fun awaitVisualViewportScale(
+        instrumentation: android.app.Instrumentation,
+        web: WebView,
+        expected: Float
+    ) {
+        val deadline = SystemClock.elapsedRealtime() + 4_000L
+        var actual = readVisualViewportScale(instrumentation, web)
+        while (kotlin.math.abs(actual - expected) >= .08f && SystemClock.elapsedRealtime() < deadline) {
+            Thread.sleep(50)
+            actual = readVisualViewportScale(instrumentation, web)
+        }
+        assertTrue("Expected native zoom $expected, observed $actual", kotlin.math.abs(actual - expected) < .08f)
     }
 
     private fun dispatchPinch(web: WebView, downTime: Long, startDistance: Float, endDistance: Float) {
@@ -546,6 +685,17 @@ class DocxPreviewInstrumentationTest {
         }
     }
 
+    private class RecordingContext(
+        base: android.content.Context,
+        private val launchedIntent: AtomicReference<Intent?>,
+        private val dispatched: CountDownLatch
+    ) : android.content.ContextWrapper(base) {
+        override fun startActivity(intent: Intent) {
+            launchedIntent.set(Intent(intent))
+            dispatched.countDown()
+        }
+    }
+
     private fun launchTestActivity(instrumentation: android.app.Instrumentation): Activity {
         val intent = Intent(instrumentation.targetContext, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -642,7 +792,7 @@ class DocxPreviewInstrumentationTest {
     private fun fixtureDocx(): ByteArray {
         val xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>
-            <w:p><w:r><w:t>styled </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>phrase</w:t></w:r></w:p>
+            <w:p><w:r><w:t>styled </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>phrase</w:t></w:r><w:hyperlink r:id="rIdLink"><w:r><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr><w:t>open test link</w:t></w:r></w:hyperlink></w:p>
             <w:p><w:r><w:t>हिंदी पाठ</w:t></w:r></w:p>
             <w:p><w:r><w:rPr><w:color w:val="B40000"/></w:rPr><w:t>colored marker</w:t></w:r></w:p>
             <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>fixture list item</w:t></w:r></w:p>
@@ -656,7 +806,7 @@ class DocxPreviewInstrumentationTest {
             fun entry(name: String, content: String) { zip.putNextEntry(ZipEntry(name)); zip.write(content.toByteArray(Charsets.UTF_8)); zip.closeEntry() }
             entry("[Content_Types].xml", """<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>""")
             entry("_rels/.rels", """<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>""")
-            entry("word/_rels/document.xml.rels", """<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/fixture.png"/><Relationship Id="rIdNum" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>""")
+            entry("word/_rels/document.xml.rels", """<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/fixture.png"/><Relationship Id="rIdNum" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rIdLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/docx-test" TargetMode="External"/></Relationships>""")
             entry("word/numbering.xml", """<?xml version="1.0"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="singleLevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>""")
             entry("word/document.xml", xml)
             zip.putNextEntry(ZipEntry("word/media/fixture.png"))

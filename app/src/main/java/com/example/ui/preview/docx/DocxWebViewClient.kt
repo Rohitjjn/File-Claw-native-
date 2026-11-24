@@ -1,5 +1,6 @@
 package com.example.ui.preview.docx
 
+import android.net.Uri
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -10,6 +11,7 @@ import androidx.webkit.WebViewAssetLoader
 internal class DocxWebViewClient(
     private val assets: WebViewAssetLoader,
     private val onFailure: (String) -> Unit,
+    private val onExternalUrl: (Uri) -> Unit = {},
     private val onPageFinished: (WebView) -> Unit = {},
     private val onScaleChanged: (Float) -> Unit = {}
 ) : WebViewClient() {
@@ -23,10 +25,22 @@ internal class DocxWebViewClient(
         )
     }
 
-    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-        val uri = request?.url ?: return true
-        return !(uri.scheme == "https" && uri.host == "appassets.androidplatform.net" &&
-            (uri.path?.startsWith("/assets/docx_viewer/") == true || uri.path?.startsWith("/docx-src/") == true))
+    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean =
+        request?.url?.let(::shouldOverrideUri) ?: true
+
+    @Suppress("DEPRECATION")
+    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean =
+        url?.let { Uri.parse(it) }?.let(::shouldOverrideUri) ?: true
+
+    private fun shouldOverrideUri(uri: Uri): Boolean {
+        if (uri.scheme == "https" && uri.host == "appassets.androidplatform.net" &&
+            (uri.path?.startsWith("/assets/docx_viewer/") == true || uri.path?.startsWith("/docx-src/") == true)
+        ) return false
+        if (isSupportedDocxExternalUri(uri)) {
+            onExternalUrl(uri)
+            return true
+        }
+        return true
     }
 
     override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: android.webkit.WebResourceError?) {

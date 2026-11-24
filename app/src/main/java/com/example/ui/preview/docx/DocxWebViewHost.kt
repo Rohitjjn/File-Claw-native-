@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -86,7 +87,13 @@ internal fun DocxWebViewHost(
                     useWideViewPort = true
                     loadWithOverviewMode = false
                 }
-                installConfirmedSingleTapListener(onTap)
+                installDocxGestureListeners(
+                    isActive = alive::get,
+                    onSingleTapConfirmed = { event ->
+                        dispatchSingleTapIfNotLink(event, onTap, isActive = alive::get)
+                    },
+                    onDoubleTap = { event -> animateDocxDoubleTapZoom(event, alive::get) }
+                )
                 var visualStateRequestId = 0L
                 val bridge = DocxJsBridge(
                     isCurrent = { alive.get() },
@@ -116,6 +123,11 @@ internal fun DocxWebViewHost(
                 webViewClient = DocxWebViewClient(
                     assets = loader,
                     onFailure = { code -> if (alive.get()) onFailure(generation, code) },
+                    onExternalUrl = { uri ->
+                        launchDocxExternalLink(context, uri) {
+                            Toast.makeText(context.applicationContext, "No app can open this link.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onPageFinished = { page ->
                         if (alive.get() && page === web) {
                             page.evaluateJavascript(

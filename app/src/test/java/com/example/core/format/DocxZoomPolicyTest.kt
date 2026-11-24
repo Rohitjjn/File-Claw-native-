@@ -28,6 +28,15 @@ class DocxZoomPolicyTest {
     }
 
     @Test
+    fun `double tap toggles between fit-width and 200 percent steps`() {
+        assertEquals(2f, DocxZoomPolicy.doubleTapTarget(1f))
+        assertEquals(1f, DocxZoomPolicy.doubleTapTarget(1.5f))
+        assertEquals(1f, DocxZoomPolicy.doubleTapTarget(2f))
+        assertEquals(1f, DocxZoomPolicy.doubleTapTarget(5f))
+        assertEquals(2f, DocxZoomPolicy.doubleTapTarget(0.5f))
+    }
+
+    @Test
     fun `percent conversions round trip`() {
         assertEquals(1.00f, DocxZoomPolicy.fromPercent(100))
         assertEquals(125, DocxZoomPolicy.toPercent(1.25f))
