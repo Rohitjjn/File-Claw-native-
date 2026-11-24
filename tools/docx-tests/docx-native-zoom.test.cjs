@@ -29,6 +29,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(gestures, /false \/\/ Preserve pinch, double-tap zoom, and one-finger pan in Chromium/);
   assert.doesNotMatch(gestures, /onDoubleTap|detectTransformGestures/);
   assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, minimum-scale=0\.5, maximum-scale=5\.0, user-scalable=yes"/);
+  assert.match(html, /min-width:\s*200vw/);
   assert.doesNotMatch(viewer, /touchmove|style\.zoom|transform\s*:\s*scale|function setZoom|function updateScale|ctrlKey/);
   assert.doesNotMatch(html, /\bzoom\s*:/);
   assert.doesNotMatch(screen, /detectTransformGestures|pointerInput/);
