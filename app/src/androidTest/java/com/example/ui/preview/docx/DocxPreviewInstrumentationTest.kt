@@ -91,7 +91,7 @@ class DocxPreviewInstrumentationTest {
             assertTrue("DOCX render timed out: ${failures.get()}", ready.await(45, TimeUnit.SECONDS))
             assertTrue("DOCX renderer failed: ${failures.get()}", failures.get() == null)
             instrumentation.runOnMainSync {
-                assertTrue("Native zoom must be enabled", web.settings.supportZoom)
+                assertTrue("Native zoom must be enabled", web.settings.supportZoom())
                 assertTrue("Native pinch controls must be enabled", web.settings.builtInZoomControls)
                 assertTrue("Native zoom buttons must stay hidden", !web.settings.displayZoomControls)
                 assertTrue("Wide viewport support must be enabled", web.settings.useWideViewPort)
