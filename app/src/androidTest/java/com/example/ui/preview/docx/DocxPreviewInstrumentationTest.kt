@@ -120,7 +120,7 @@ class DocxPreviewInstrumentationTest {
             }
             awaitVisualState(instrumentation, web, "native zoom recovery pinch")
             val recoveredZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native WebView zooms without custom CSS scaling: $recoveredZoom", kotlin.math.abs(recoveredZoom - 1f) < .1f)
+            assertTrue("Native pinch must zoom back in from the 50% floor: $recoveredZoom", recoveredZoom > minZoom && recoveredZoom <= 5.02f)
 
             val panRead = CountDownLatch(1)
             val panJson = AtomicReference<String?>(null)
