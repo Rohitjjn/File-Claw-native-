@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes">
     <meta name="color-scheme" content="light dark">
     <title>DOCX viewer</title>
     <style>
@@ -31,7 +31,7 @@
             #scroller { position: static; overflow: visible; height: auto; padding: 0; }
             #status { display: none !important; }
             #stage { display: block; min-height: 0; }
-            #scaled-document { position: static; zoom: 1 !important; width: auto !important; }
+            #scaled-document { position: static; width: auto !important; }
             #scaled-document .docx, #scaled-document section.docx { box-shadow: none !important; border: 0 !important; border-radius: 0 !important; break-after: page; page-break-after: always; }
             #scaled-document .docx:last-child, #scaled-document section.docx:last-child { break-after: auto; page-break-after: auto; }
         }

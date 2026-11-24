@@ -5,20 +5,12 @@
     const MAX_MATCHES = 500;
     const els = {};
     let renderId = 0;
-    let userZoom = 1;
-    let fitScale = 1;
     let matches = [];
     let currentSearchQuery = '';
     let totalMatches = 0;
     let matchesTruncated = false;
     let matchIndex = -1;
     let searchObserver;
-    let firstTouch = null;
-    let pendingSingleTap = null;
-    let pendingTapTimer = null;
-    let lastReportedZoom = null;
-    let lastReportedFitScale = null;
-    let lastReportedScale = null;
     let readySent = false;
     let activePage = 0;
 
@@ -26,8 +18,7 @@
         try {
             const bridge = window.DocxBridge;
             if (bridge && typeof bridge[method] === 'function') {
-                if (method === 'onDocumentTap') bridge[method]();
-                else bridge[method](JSON.stringify(payload));
+                bridge[method](JSON.stringify(payload));
             }
         } catch (_) { /* A detached WebView cannot receive callbacks. */ }
     }
@@ -105,57 +96,6 @@
         reportPage();
     }
 
-    function captureAnchor(anchorX, anchorY) {
-        const scrollerRect = els.scroller.getBoundingClientRect();
-        const x = Number.isFinite(anchorX) ? anchorX - scrollerRect.left : els.scroller.clientWidth / 2;
-        const y = Number.isFinite(anchorY) ? anchorY - scrollerRect.top : els.scroller.clientHeight / 2;
-        const before = els.document.getBoundingClientRect();
-        const scale = Math.max(.01, fitScale * userZoom);
-        return {
-            x, y,
-            contentX: (x - (before.left - scrollerRect.left)) / scale,
-            contentY: (y - (before.top - scrollerRect.top)) / scale
-        };
-    }
-
-    function updateScale(anchor) {
-        const page = els.document.querySelector('.docx, section.docx');
-        if (!page || !page.offsetWidth) return;
-        const naturalWidth = page.offsetWidth;
-        // clientWidth excludes classic scrollbars. The matching stable gutter in CSS
-        // prevents vertical overflow appearing/disappearing from changing the fit width.
-        const availableWidth = Math.max(160, els.scroller.clientWidth - 16);
-        fitScale = Math.min(1, Math.max(.05, availableWidth / naturalWidth));
-        const scale = fitScale * userZoom;
-        // CSS zoom participates in normal layout and scroll sizing. This avoids the
-        // transform + synthetic spacer workaround that desynchronized touch/scroll.
-        els.document.style.width = naturalWidth + 'px';
-        els.document.style.zoom = String(scale);
-        if (anchor) {
-            const scrollerRect = els.scroller.getBoundingClientRect();
-            const after = els.document.getBoundingClientRect();
-            const documentLeft = after.left - scrollerRect.left + els.scroller.scrollLeft;
-            const documentTop = after.top - scrollerRect.top + els.scroller.scrollTop;
-            els.scroller.scrollLeft = Math.max(0, documentLeft + anchor.contentX * scale - anchor.x);
-            els.scroller.scrollTop = Math.max(0, documentTop + anchor.contentY * scale - anchor.y);
-        }
-        if (lastReportedZoom !== userZoom || lastReportedFitScale !== fitScale || lastReportedScale !== scale) {
-            lastReportedZoom = userZoom;
-            lastReportedFitScale = fitScale;
-            lastReportedScale = scale;
-            send('onZoomChanged', { zoom: userZoom, fitScale, effectiveScale: scale });
-        }
-    }
-
-    function setZoom(next, anchorX, anchorY) {
-        const value = Number(next);
-        const bounded = Math.max(.5, Math.min(5, Number.isFinite(value) ? value : 1));
-        if (bounded === userZoom) return;
-        const anchor = captureAnchor(anchorX, anchorY);
-        userZoom = bounded;
-        updateScale(anchor);
-    }
-
     function clearHighlights() {
         for (const mark of els.document.querySelectorAll('mark.docx-highlight')) {
             const parent = mark.parentNode;
@@ -228,10 +168,9 @@
         group.forEach(mark => mark.classList.add('docx-highlight-active'));
         const mark = group[0];
         if (scroll && mark) {
-            const scale = fitScale * userZoom;
             const rect = mark.getBoundingClientRect();
             els.scroller.scrollTo({ top: Math.max(0, els.scroller.scrollTop + rect.top - 80), behavior: 'smooth' });
-            if (rect.width * rect.height <= 0 || !scale) mark.scrollIntoView({ block: 'center' });
+            if (rect.width * rect.height <= 0) mark.scrollIntoView({ block: 'center' });
         }
         send('onSearchResults', { total: totalMatches, current: matchIndex + 1, truncated: matchesTruncated });
     }
@@ -240,44 +179,8 @@
         if (currentSearchQuery) search(currentSearchQuery);
     }
 
-    function configureGestures() {
-        els.scroller.addEventListener('touchstart', event => {
-            if (event.touches.length >= 2) {
-                firstTouch = { distance: Math.hypot(event.touches[0].clientX - event.touches[1].clientX, event.touches[0].clientY - event.touches[1].clientY), zoom: userZoom, x: (event.touches[0].clientX + event.touches[1].clientX) / 2, y: (event.touches[0].clientY + event.touches[1].clientY) / 2 };
-            } else if (event.touches.length === 1) firstTouch = { x: event.touches[0].clientX, y: event.touches[0].clientY };
-        }, { passive: true });
-        els.scroller.addEventListener('touchmove', event => {
-            if (event.touches.length === 2 && firstTouch && 'distance' in firstTouch) {
-                const distance = Math.hypot(event.touches[0].clientX - event.touches[1].clientX, event.touches[0].clientY - event.touches[1].clientY);
-                setZoom(firstTouch.zoom * distance / Math.max(1, firstTouch.distance), firstTouch.x, firstTouch.y);
-            }
-        }, { passive: true });
-        els.scroller.addEventListener('touchend', () => { firstTouch = null; }, { passive: true });
+    function configureScrollReporting() {
         els.scroller.addEventListener('scroll', () => requestAnimationFrame(reportPage), { passive: true });
-        els.scroller.addEventListener('click', event => {
-            const now = Date.now();
-            if (pendingTapTimer && now - pendingSingleTap.time < 320) {
-                clearTimeout(pendingTapTimer);
-                pendingTapTimer = null;
-                pendingSingleTap = null;
-                setZoom(userZoom > 1.4 ? 1 : 2, event.clientX, event.clientY);
-                send('onDocumentDoubleTap', { zoom: userZoom });
-                return;
-            }
-            if (pendingTapTimer) clearTimeout(pendingTapTimer);
-            pendingSingleTap = { time: now };
-            pendingTapTimer = setTimeout(() => {
-                pendingTapTimer = null;
-                pendingSingleTap = null;
-                send('onDocumentTap', {});
-            }, 320);
-        }, { passive: true });
-        els.scroller.addEventListener('wheel', event => {
-            if (event.ctrlKey || event.metaKey) {
-                event.preventDefault();
-                setZoom(userZoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1), event.clientX, event.clientY);
-            }
-        }, { passive: false });
     }
 
     async function readDocumentStream(response, generation) {
@@ -356,12 +259,10 @@
         if (generation !== renderId) return;
         status('Laying out pages…');
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        updateScale();
         if (!pageCount()) throw new Error('EMPTY_DOCUMENT_WITHOUT_PAGES');
         const deadline = Date.now() + 3500;
         const verify = () => {
             if (generation !== renderId || readySent) return;
-            updateScale();
             if (visibleContent()) reportReady(generation);
             else if (Date.now() < deadline) requestAnimationFrame(verify);
             else throwFailure('LAYOUT_FAILED_NOT_VISIBLE');
@@ -384,7 +285,6 @@
     }
 
     window.DocxViewer = {
-        setZoom(value) { setZoom(value); },
         search(query) { search(query); },
         next() { if (matches.length) activateMatch(matchIndex + 1, true); },
         previous() { if (matches.length) activateMatch(matchIndex - 1, true); },
@@ -401,7 +301,7 @@
                 if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) root.style.setProperty(name, value);
             }
         },
-        getState() { return { ready: readySent, pages: pageCount(), zoom: userZoom }; }
+        getState() { return { ready: readySent, pages: pageCount(), zoom: window.visualViewport ? window.visualViewport.scale : 1 }; }
     };
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -409,11 +309,9 @@
         els.stage = document.getElementById('stage');
         els.document = document.getElementById('scaled-document');
         els.status = document.getElementById('status');
-        configureGestures();
+        configureScrollReporting();
         const onResize = () => {
             if (pageCount()) {
-                const anchor = captureAnchor();
-                updateScale(anchor);
                 if (readySent) rebuildHighlights();
                 else reportReady(renderId);
             }

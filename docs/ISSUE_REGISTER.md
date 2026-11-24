@@ -18,6 +18,13 @@ Run [45222517558](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/452
 
 Severity definitions: **Critical** = immediate data/security risk; **High** = substantial security, crash, data loss, or core workflow impact; **Medium** = important functional/compatibility limitation; **Low** = contained polish/debt. Initial priorities were audit triage recommendations; owner-authorized DOCX implementation is now in progress/completed as tracked below. No other format is authorized.
 
+## DOCX native zoom and overflow menu follow-up (2026-11-21; working tree)
+
+| Audit ID | Evidence / requested behavior | Working-tree change and regression coverage | Verification / remaining limit |
+|---|---|---|---|
+| AUD-DOCX-018 | DOCX pinch/double-tap scaling was implemented in JavaScript/CSS with custom gesture logic, while native WebView zoom was disabled; bounds and full-edge pan were not secured by native-zoom coverage. | Remove DOCX custom JS/CSS scaling and Compose pinch plumbing; enable built-in WebView zoom, hide zoom buttons, declare 0.5–5.0 viewport bounds, report native scale, and keep initial scale at 1.0. Single taps are observed without consuming WebView touch events. Add unit/JS contracts and API 34 instrumentation checks for zoom bounds, both horizontal edges, vertical pan, CSS-scaling absence, and tap distinction. | Local Node suite 22/22, viewer JS syntax, and `git diff --check` pass. Android compilation/instrumentation have not run for this working tree; await exact-SHA CI. Physical devices and owner files remain unverified. |
+| AUD-UI-003 | Preview overflow popup required one unified implementation and a specified compact white rounded appearance without Dark Mode. | Style the shared popup with clipped 16dp corners, white surface, 8dp shadow, black icons, label-medium 13sp text, and no Dark Mode item; source contract checks assert one popup implementation. Keep the screen coordinator within 500 lines. | Source/Node contract checks pass; Android compilation/UI rendering have not yet run. Shared chrome affects all preview routes; no other viewer implementation was changed. |
+
 ## Latest DOCX zoom and tray investigation (2026-11-21)
 
 | Audit ID | Evidence-based diagnosis / scope | Remediation and regression coverage | Verification / limitation |

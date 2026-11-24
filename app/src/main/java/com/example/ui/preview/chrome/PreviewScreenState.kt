@@ -3,7 +3,6 @@ package com.example.ui.preview.chrome
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,7 +30,6 @@ class PreviewScreenState {
     var showJumpToLineDialog by mutableStateOf(false)
     var showOutlineBottomSheet by mutableStateOf(false)
     var showAppearanceBottomSheet by mutableStateOf(false)
-    var docxZoomFactor by mutableFloatStateOf(1f)
     var searchTriggerNext by mutableIntStateOf(0)
     var searchTriggerPrev by mutableIntStateOf(0)
     var editTextValue by mutableStateOf(TextFieldValue(""))
@@ -63,7 +61,6 @@ class PreviewScreenState {
         isBarsVisible = true
         showDocxEditComingSoon = false
         pdfViewRotation = 0
-        docxZoomFactor = 1f
         searchTriggerNext = 0
         searchTriggerPrev = 0
         currentMatchIndex = 0

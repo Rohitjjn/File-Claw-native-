@@ -12,10 +12,7 @@ internal class DocxJsBridge(
     private val onPageChanged: (page: Int, pages: Int) -> Unit,
     private val onProgress: (generation: Long, loadedBytes: Long, totalBytes: Long) -> Unit,
     private val onFailure: (generation: Long, code: String) -> Unit,
-    private val onSearch: (total: Int, current: Int, truncated: Boolean) -> Unit,
-    private val onZoom: (Float) -> Unit,
-    private val onTap: () -> Unit,
-    private val onDoubleTap: (Float) -> Unit
+    private val onSearch: (total: Int, current: Int, truncated: Boolean) -> Unit
 ) {
     private val main = Handler(Looper.getMainLooper())
     private fun post(action: () -> Unit) = main.post { if (isCurrent()) action() }
@@ -55,14 +52,4 @@ internal class DocxJsBridge(
         onSearch(json.optInt("total"), json.optInt("current"), json.optBoolean("truncated"))
     }
 
-    @JavascriptInterface fun onZoomChanged(payload: String) = post {
-        val json = runCatching { JSONObject(payload) }.getOrNull() ?: return@post
-        onZoom(DocxZoomAndGesture.coerce(json.optDouble("zoom", 1.0).toFloat()))
-    }
-
-    @JavascriptInterface fun onDocumentTap() = post(onTap)
-    @JavascriptInterface fun onDocumentDoubleTap(payload: String) = post {
-        val json = runCatching { JSONObject(payload) }.getOrNull() ?: return@post
-        onDoubleTap(DocxZoomAndGesture.coerce(json.optDouble("zoom", 1.0).toFloat()))
-    }
 }

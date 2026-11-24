@@ -238,8 +238,7 @@ internal fun PreviewScreenSurface(
                     pageJumpToken = screenState.pageJumpToken,
                     currentPdfPage = screenState.currentPdfPage,
                     totalPdfPages = screenState.totalPdfPages,
-                    docxViewerState = docxViewerState,
-                    docxZoomFactor = screenState.docxZoomFactor
+                    docxViewerState = docxViewerState
                 ),
                 actions = PreviewContentActions(
                     onBack = handleBack,
@@ -289,7 +288,6 @@ internal fun PreviewScreenSurface(
                     },
                     onDocxWebViewCreated = { screenState.docxPreviewWebView = it },
                     onDocxReady = { screenState.docxPreviewReady = true },
-                    onDocxZoomChanged = { factor -> screenState.docxZoomFactor = factor },
                     onDocxRendererFallback = { fallback -> screenState.isDocxRenderFallback = fallback },
                     closePresentation = { viewModel.closeCurrentFile() }
                 ),

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.SystemClock
 import android.view.View
+import android.view.MotionEvent
 import android.widget.FrameLayout
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
@@ -38,66 +39,50 @@ import java.util.zip.ZipOutputStream
 class DocxPreviewInstrumentationTest {
     private val visualStateRequestIds = AtomicLong()
 
-    @Test fun defaultZoomSettlesAndRotationKeepsTheSameDocumentAndReadingPosition() {
+    @Test fun nativeWebViewZoomSupportsHorizontalPanToBothEdges() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val context = launchTestActivity(instrumentation)
+        val activity = launchTestActivity(instrumentation)
         val fixture = fixtureDocx()
         val ready = CountDownLatch(1)
         val failures = AtomicReference<String?>(null)
-        val zoomReports = java.util.concurrent.CopyOnWriteArrayList<Float>()
-        val effectiveScaleReports = java.util.concurrent.CopyOnWriteArrayList<Pair<Long, Float>>()
-        val singleTaps = java.util.concurrent.atomic.AtomicInteger(0)
-        val doubleTaps = java.util.concurrent.atomic.AtomicInteger(0)
-        val singleTapDelivered = CountDownLatch(1)
-        val doubleTapDelivered = CountDownLatch(1)
-        val finishedPages = java.util.concurrent.atomic.AtomicInteger(0)
+        val confirmedTaps = java.util.concurrent.atomic.AtomicInteger()
+        val tapConfirmed = CountDownLatch(1)
         lateinit var web: WebView
         instrumentation.runOnMainSync {
             val loader = WebViewAssetLoader.Builder()
-                .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+                .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(activity))
                 .addPathHandler("/docx-src/", object : WebViewAssetLoader.PathHandler {
                     override fun handle(path: String): WebResourceResponse? = if (path == "document.docx")
                         WebResourceResponse("application/vnd.openxmlformats-officedocument.wordprocessingml.document", null,
                             200, "OK", mapOf("Content-Length" to fixture.size.toString()), ByteArrayInputStream(fixture)) else null
                 }).build()
-            web = WebView(context).apply {
+            web = WebView(activity).apply {
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
-                settings.useWideViewPort = false
+                settings.setSupportZoom(true)
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
+                installConfirmedSingleTapListener {
+                    confirmedTaps.incrementAndGet()
+                    tapConfirmed.countDown()
+                }
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         signalAfterVisualState(web, ready)
                     }
                     @JavascriptInterface fun onFailure(payload: String) { failures.set(payload); ready.countDown() }
-                    @JavascriptInterface fun onZoomChanged(payload: String) {
-                        val zoom = JSONObject(payload)
-                        zoomReports.add(zoom.optDouble("zoom", -1.0).toFloat())
-                        effectiveScaleReports.add(
-                            SystemClock.elapsedRealtime() to zoom.optDouble("effectiveScale", -1.0).toFloat()
-                        )
-                    }
-                    @JavascriptInterface fun onDocumentTap() {
-                        singleTaps.incrementAndGet()
-                        singleTapDelivered.countDown()
-                    }
-                    @JavascriptInterface fun onDocumentDoubleTap(payload: String) {
-                        doubleTaps.incrementAndGet()
-                        doubleTapDelivered.countDown()
-                    }
                 }, "DocxBridge")
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
                         request?.url?.let(loader::shouldInterceptRequest)
                     override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean =
                         reportRendererGone(failures, ready, detail)
-                    override fun onPageFinished(view: WebView?, url: String?) { finishedPages.incrementAndGet() }
                 }
                 val density = resources.displayMetrics.density
-                val width = (412 * density).toInt()
-                val height = (915 * density).toInt()
-                attachWebView(context, this, width, height)
+                attachWebView(activity, this, (412 * density).toInt(), (915 * density).toInt())
                 loadUrl("https://appassets.androidplatform.net/assets/docx_viewer/index.html?generation=31&file=" +
                     android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
             }
@@ -105,85 +90,65 @@ class DocxPreviewInstrumentationTest {
         try {
             assertTrue("DOCX render timed out: ${failures.get()}", ready.await(45, TimeUnit.SECONDS))
             assertTrue("DOCX renderer failed: ${failures.get()}", failures.get() == null)
-            assertTrue("Opening the document must report the default user zoom of 1.0: ${zoomReports}",
-                zoomReports.isNotEmpty() && zoomReports.all { kotlin.math.abs(it - 1f) < .001f })
-            val reportedScales = effectiveScaleReports.map { (it.second * 10000).toInt() }.distinct()
-            assertTrue("Fit scale should settle instead of oscillating: $reportedScales", reportedScales.size <= 1)
+            instrumentation.runOnMainSync {
+                assertTrue("Native zoom must be enabled", web.settings.supportZoom)
+                assertTrue("Native pinch controls must be enabled", web.settings.builtInZoomControls)
+                assertTrue("Native zoom buttons must stay hidden", !web.settings.displayZoomControls)
+                assertTrue("Wide viewport support must be enabled", web.settings.useWideViewPort)
+                assertTrue("Overview mode must not override 100% initial zoom", !web.settings.loadWithOverviewMode)
+                assertTrue("Native WebView starts at exactly 100%: ${web.scale}", kotlin.math.abs(web.scale - 1f) < .02f)
+                web.zoomBy(100f)
+                assertTrue("Native WebView scale is capped at 500%: ${web.scale}", web.scale <= 5.02f && web.scale >= 4.9f)
+                web.zoomBy(.01f)
+                assertTrue("Native WebView scale is floored at 50%: ${web.scale}", web.scale >= .49f && web.scale <= .52f)
+                web.zoomBy(4f)
+                assertTrue("Native WebView zooms without custom CSS scaling: ${web.scale}", kotlin.math.abs(web.scale - 2f) < .05f)
+            }
 
-            val prepared = CountDownLatch(1)
-            val position = AtomicReference<String?>(null)
+            val panRead = CountDownLatch(1)
+            val panJson = AtomicReference<String?>(null)
             instrumentation.runOnMainSync {
-                web.evaluateJavascript("(function(){DocxViewer.setZoom(99);var high=DocxViewer.getState().zoom;DocxViewer.setZoom(.1);var low=DocxViewer.getState().zoom;DocxViewer.setZoom(1.75);var s=document.getElementById('scroller');var p=document.querySelectorAll('.docx,section.docx')[1];s.scrollTop+=p.getBoundingClientRect().top-s.getBoundingClientRect().top+80;return JSON.stringify({zoom:DocxViewer.getState().zoom,high:high,low:low,scroll:s.scrollTop})})()") {
-                    position.set(it); prepared.countDown()
+                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var maxX=Math.max(0,s.scrollWidth-s.clientWidth);var maxY=Math.max(0,s.scrollHeight-s.clientHeight);s.scrollLeft=maxX;s.scrollTop=maxY;return JSON.stringify({left:left,right:s.scrollLeft,maxX:maxX,top:0,bottom:s.scrollTop,maxY:maxY,zoom:visualViewport.scale,cssZoom:document.getElementById('scaled-document').style.zoom,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
+                    panJson.set(it); panRead.countDown()
                 }
             }
-            assertTrue("Could not prepare the reader position", prepared.await(5, TimeUnit.SECONDS))
-            val before = JSONObject(org.json.JSONTokener(position.get()).nextValue().toString())
-            assertTrue("Zoom must clamp to 5.0 at the upper bound: ${before.optDouble("high")}", before.optDouble("high") == 5.0)
-            assertTrue("Zoom must clamp to 0.5 at the lower bound: ${before.optDouble("low")}", before.optDouble("low") == 0.5)
-            assertTrue("Test fixture must be scrolled into page two", before.optDouble("scroll") > 0.0)
+            assertTrue("Could not read native pan boundaries", panRead.await(5, TimeUnit.SECONDS))
+            val pan = JSONObject(org.json.JSONTokener(panJson.get()).nextValue().toString())
+            assertTrue("Fixture must provide horizontal overflow at native zoom", pan.optDouble("maxX") > 0)
+            assertTrue("Native pan must reach the far-left edge: $pan", pan.optDouble("left") == 0.0)
+            assertTrue("Native pan must reach the far-right edge: $pan", pan.optDouble("right") >= pan.optDouble("maxX") - 1)
+            assertTrue("Native pan must work downward as well as upward: $pan", pan.optDouble("maxY") > 0 && pan.optDouble("bottom") >= pan.optDouble("maxY") - 1)
+            assertTrue("Viewer must not use custom CSS zoom: $pan", pan.optString("cssZoom").isEmpty())
+            assertTrue("Viewer must not apply a CSS transform: $pan", pan.optString("transform") == "none")
 
             instrumentation.runOnMainSync {
-                val density = web.resources.displayMetrics.density
-                val width = (915 * density).toInt()
-                val height = (412 * density).toInt()
-                web.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY))
-                web.layout(0, 0, width, height)
+                val now = SystemClock.uptimeMillis()
+                dispatchTap(web, now)
             }
-            val resizeLayout = CountDownLatch(1)
+            assertTrue("A confirmed single tap must reach focus mode", tapConfirmed.await(2, TimeUnit.SECONDS))
             instrumentation.runOnMainSync {
-                web.evaluateJavascript("document.documentElement.getBoundingClientRect().width") { resizeLayout.countDown() }
+                val now = SystemClock.uptimeMillis()
+                dispatchTap(web, now)
+                dispatchTap(web, now + 130)
             }
-            assertTrue("Resize layout did not reach the DOM", resizeLayout.await(5, TimeUnit.SECONDS))
-            awaitVisualState(instrumentation, web, "rotation-sized resize")
-            val afterLatch = CountDownLatch(1)
-            val afterValue = AtomicReference<String?>(null)
-            instrumentation.runOnMainSync {
-                web.evaluateJavascript("JSON.stringify({zoom:DocxViewer.getState().zoom,scroll:document.getElementById('scroller').scrollTop,loads:document.querySelectorAll('.docx,section.docx').length})") {
-                    afterValue.set(it); afterLatch.countDown()
-                }
-            }
-            assertTrue("Could not read document state after rotation-sized resize", afterLatch.await(5, TimeUnit.SECONDS))
-            val after = JSONObject(org.json.JSONTokener(afterValue.get()).nextValue().toString())
-            assertTrue("Zoom must survive a viewport rotation: ${after.optDouble("zoom")}",
-                kotlin.math.abs(after.optDouble("zoom") - 1.75) < .001)
-            assertTrue("Scroll position must remain in the same document rather than reset: ${after.optDouble("scroll")}",
-                after.optDouble("scroll") > 0.0)
-            assertTrue("Resize must not replace/reload the rendered document",
-                after.optInt("loads") >= 2 && finishedPages.get() == 1)
-
-            val singleClick = CountDownLatch(1)
-            instrumentation.runOnMainSync {
-                web.evaluateJavascript("document.getElementById('scroller').dispatchEvent(new MouseEvent('click',{bubbles:true,clientX:20,clientY:20}))") {
-                    singleClick.countDown()
-                }
-            }
-            assertTrue("Single click dispatch timed out", singleClick.await(5, TimeUnit.SECONDS))
-            assertTrue("Single tap should toggle focus once", singleTapDelivered.await(5, TimeUnit.SECONDS))
-            assertTrue("Single tap should not be treated as a double tap", singleTaps.get() == 1 && doubleTaps.get() == 0)
-
-            val doubleClick = CountDownLatch(1)
-            instrumentation.runOnMainSync {
-                web.evaluateJavascript("(function(){var e=document.getElementById('scroller');var a={bubbles:true,clientX:30,clientY:30};e.dispatchEvent(new MouseEvent('click',a));e.dispatchEvent(new MouseEvent('click',a));return true})()") {
-                    doubleClick.countDown()
-                }
-            }
-            assertTrue("Double-click dispatch timed out", doubleClick.await(5, TimeUnit.SECONDS))
-            assertTrue("Double tap callback timed out", doubleTapDelivered.await(5, TimeUnit.SECONDS))
-            assertTrue("Double tap must zoom without producing two single-tap focus toggles",
-                singleTaps.get() == 1 && doubleTaps.get() == 1)
-            val finalZoom = CountDownLatch(1)
-            val finalZoomValue = AtomicReference<String?>(null)
-            instrumentation.runOnMainSync {
-                web.evaluateJavascript("JSON.stringify({zoom:DocxViewer.getState().zoom})") {
-                    finalZoomValue.set(it); finalZoom.countDown()
-                }
-            }
-            assertTrue("Final zoom query timed out", finalZoom.await(5, TimeUnit.SECONDS))
-            val finalZoomJson = JSONObject(org.json.JSONTokener(finalZoomValue.get()).nextValue().toString())
-            assertTrue("Double tap should return 1.75x to the default 1.0x", kotlin.math.abs(finalZoomJson.optDouble("zoom") - 1.0) < .001)
+            Thread.sleep(500)
+            assertTrue("A double tap must remain owned by native Chromium, not toggle focus", confirmedTaps.get() == 1)
         } finally {
-            destroyWebView(instrumentation, context, web)
+            destroyWebView(instrumentation, activity, web)
+        }
+    }
+
+    private fun dispatchTap(web: WebView, downTime: Long) {
+        val x = 100f
+        val y = 100f
+        val down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0)
+        val up = MotionEvent.obtain(downTime, downTime + 40, MotionEvent.ACTION_UP, x, y, 0)
+        try {
+            web.dispatchTouchEvent(down)
+            web.dispatchTouchEvent(up)
+        } finally {
+            down.recycle()
+            up.recycle()
         }
     }
 
@@ -206,7 +171,10 @@ class DocxPreviewInstrumentationTest {
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
-                settings.useWideViewPort = false
+                settings.setSupportZoom(true)
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
@@ -268,7 +236,10 @@ class DocxPreviewInstrumentationTest {
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
-                settings.useWideViewPort = false
+                settings.setSupportZoom(true)
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) { ready.countDown() }
@@ -322,7 +293,10 @@ class DocxPreviewInstrumentationTest {
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
-                settings.useWideViewPort = false
+                settings.setSupportZoom(true)
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
                 setBackgroundColor(Color.rgb(250, 249, 245))
                 addJavascriptInterface(object {
@@ -335,16 +309,12 @@ class DocxPreviewInstrumentationTest {
                         val data = JSONObject(payload)
                         if (data.optInt("total") > 0) { matchCount.set(data.optInt("total")); searched.countDown() }
                     }
-                    @JavascriptInterface fun onZoomChanged(payload: String) { }
                 }, "DocxBridge")
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
                         request?.url?.let(loader::shouldInterceptRequest)
                     override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean =
                         reportRendererGone(failure, ready, detail, rendererGone)
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        view?.evaluateJavascript("DocxViewer.setZoom(1)", null)
-                    }
                 }
                 val density = resources.displayMetrics.density
                 val width = (360 * density).toInt()
@@ -442,7 +412,10 @@ class DocxPreviewInstrumentationTest {
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
-                settings.useWideViewPort = false
+                settings.setSupportZoom(true)
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
                 setBackgroundColor(Color.rgb(250, 249, 245))
                 addJavascriptInterface(object {

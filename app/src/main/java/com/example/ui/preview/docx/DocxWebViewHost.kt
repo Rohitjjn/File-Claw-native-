@@ -4,12 +4,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.fillMaxSize
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import java.io.File
@@ -25,7 +27,6 @@ internal fun DocxWebViewHost(
     pagePaper: String,
     ink: String,
     edge: String,
-    zoom: Float,
     searchQuery: String,
     next: Int,
     previous: Int,
@@ -37,7 +38,6 @@ internal fun DocxWebViewHost(
     onSearch: (Int, Int, Boolean) -> Unit,
     onZoom: (Float) -> Unit,
     onTap: () -> Unit,
-    onDoubleTap: (Float) -> Unit,
     onCreated: (WebView?) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -46,7 +46,7 @@ internal fun DocxWebViewHost(
     var lastPage by remember(generation) { mutableStateOf<Int?>(null) }
     val alive = remember(generation) { java.util.concurrent.atomic.AtomicBoolean(true) }
     AndroidView(
-        modifier = modifier,
+        modifier = modifier.fillMaxSize().clipToBounds(),
         factory = { context ->
             lateinit var web: WebView
             alive.set(true)
@@ -80,12 +80,13 @@ internal fun DocxWebViewHost(
                     allowFileAccessFromFileURLs = false
                     @Suppress("DEPRECATION")
                     allowUniversalAccessFromFileURLs = false
-                    builtInZoomControls = false
+                    setSupportZoom(true)
+                    builtInZoomControls = true
                     displayZoomControls = false
-                    setSupportZoom(false)
-                    useWideViewPort = false
+                    useWideViewPort = true
                     loadWithOverviewMode = false
                 }
+                installConfirmedSingleTapListener(onTap)
                 var visualStateRequestId = 0L
                 val bridge = DocxJsBridge(
                     isCurrent = { alive.get() },
@@ -109,20 +110,21 @@ internal fun DocxWebViewHost(
                     onPageChanged = onPageChanged,
                     onProgress = { id, loaded, total -> if (id == generation) onProgress(id, loaded, total) },
                     onFailure = { id, code -> if (id == generation) onFailure(id, code) },
-                    onSearch = onSearch,
-                    onZoom = onZoom,
-                    onTap = onTap,
-                    onDoubleTap = onDoubleTap
+                    onSearch = onSearch
                 )
                 addJavascriptInterface(bridge, "DocxBridge")
                 webViewClient = DocxWebViewClient(
                     assets = loader,
                     onFailure = { code -> if (alive.get()) onFailure(generation, code) },
                     onPageFinished = { page ->
-                        if (alive.get() && page === web) page.evaluateJavascript(
-                            "DocxViewer.setZoom(${DocxZoomAndGesture.coerce(zoom)});DocxViewer.setTheme($dark,${org.json.JSONObject.quote(paper)},${org.json.JSONObject.quote(pagePaper)},${org.json.JSONObject.quote(ink)},${org.json.JSONObject.quote(edge)});", null
-                        )
-                    }
+                        if (alive.get() && page === web) {
+                            page.evaluateJavascript(
+                                "DocxViewer.setTheme($dark,${org.json.JSONObject.quote(paper)},${org.json.JSONObject.quote(pagePaper)},${org.json.JSONObject.quote(ink)},${org.json.JSONObject.quote(edge)});", null
+                            )
+                            onZoom(com.example.core.format.DocxZoomPolicy.coerce(page.scale))
+                        }
+                    },
+                    onScaleChanged = { scale -> if (alive.get()) onZoom(com.example.core.format.DocxZoomPolicy.coerce(scale)) }
                 )
                 onCreated(this)
                 val url = "https://appassets.androidplatform.net/assets/docx_viewer/index.html?file=" +
@@ -138,7 +140,6 @@ internal fun DocxWebViewHost(
                 val plan = DocxSearchController.plan(searchCursor, searchQuery, next, previous)
                 searchCursor = plan.cursor
                 val actions = buildString {
-                    append("DocxViewer.setZoom(${DocxZoomAndGesture.coerce(zoom)});")
                     append("DocxViewer.setTheme($dark,${org.json.JSONObject.quote(paper)},${org.json.JSONObject.quote(pagePaper)},${org.json.JSONObject.quote(ink)},${org.json.JSONObject.quote(edge)});")
                     if (scrollToPage != null && scrollToPage != lastPage) {
                         append("DocxViewer.goToPage($scrollToPage);")

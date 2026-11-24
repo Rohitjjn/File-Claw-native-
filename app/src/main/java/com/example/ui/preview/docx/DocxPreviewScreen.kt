@@ -74,12 +74,9 @@ fun DocxPreviewScreen(
     searchTriggerNext: Int = 0,
     searchTriggerPrev: Int = 0,
     onSearchResultCount: (Int, Int, Boolean) -> Unit = { _, _, _ -> },
-    zoomFactor: Float = 1f,
     onWebViewCreated: (WebView?) -> Unit = {},
     onDocumentReady: () -> Unit = {},
     onSingleTap: () -> Unit = {},
-    onZoomChanged: (Float) -> Unit = {},
-    onDoubleTap: (Float) -> Unit = {},
     onRendererFallback: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -160,7 +157,6 @@ fun DocxPreviewScreen(
                     pagePaper = pagePaper.toCssHex(),
                     ink = ink.toCssHex(),
                     edge = edge.toCssHex(),
-                    zoom = zoomFactor,
                     searchQuery = searchQuery,
                     next = searchTriggerNext,
                     previous = searchTriggerPrev,
@@ -186,12 +182,8 @@ fun DocxPreviewScreen(
                         viewerState.setSearchResults(total, current)
                         onSearchResultCount(total, current, truncated)
                     },
-                    onZoom = { factor ->
-                        viewerState.updateZoom(factor)
-                        onZoomChanged(factor)
-                    },
+                    onZoom = viewerState::updateZoom,
                     onTap = onSingleTap,
-                    onDoubleTap = onDoubleTap,
                     onCreated = onWebViewCreated,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -268,7 +260,6 @@ fun DocxPreviewScreen(
     }
 
     LaunchedEffect(searchQuery) { viewerState.setSearch(searchQuery) }
-    LaunchedEffect(zoomFactor) { viewerState.updateZoom(zoomFactor) }
     LaunchedEffect(scrollToPage, previewState.stage) {
         if (scrollToPage != null && previewState.stage == DocxPreviewStage.READY) onScrollProgressHandled()
     }

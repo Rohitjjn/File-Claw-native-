@@ -2,8 +2,6 @@ package com.example.ui.screens
 
 import com.example.ui.preview.docx.DocxPrintController
 import com.example.ui.preview.chrome.ViewerFindBarHeader
-import com.example.ui.preview.chrome.PreviewOverflowMenu
-import com.example.ui.preview.chrome.PreviewOverflowMenuActions
 import com.example.ui.preview.chrome.PreviewHeader
 import com.example.ui.preview.chrome.PreviewHeaderState
 import com.example.ui.preview.chrome.PreviewHeaderActions
@@ -37,7 +35,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.FullscreenExit

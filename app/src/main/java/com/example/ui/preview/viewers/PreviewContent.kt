@@ -52,7 +52,6 @@ data class PreviewContentState(
     val currentPdfPage: Int,
     val totalPdfPages: Int,
     val docxViewerState: DocxViewerState,
-    val docxZoomFactor: Float
 )
 
 /** Explicit effects requested by a route; the renderer never reaches into the coordinator. */
@@ -75,7 +74,6 @@ data class PreviewContentActions(
     val onDocxSearchResultCount: (Int, Int, Boolean) -> Unit,
     val onDocxWebViewCreated: (WebView?) -> Unit,
     val onDocxReady: () -> Unit,
-    val onDocxZoomChanged: (Float) -> Unit,
     val onDocxRendererFallback: (Boolean) -> Unit,
     val closePresentation: () -> Unit
 )
@@ -330,12 +328,9 @@ fun PreviewContent(state: PreviewContentState, actions: PreviewContentActions, m
                                 searchTriggerNext = state.searchTriggerNext,
                                 searchTriggerPrev = state.searchTriggerPrev,
                                 onSearchResultCount = actions.onDocxSearchResultCount,
-                                zoomFactor = state.docxZoomFactor,
                                 onWebViewCreated = actions.onDocxWebViewCreated,
                                 onDocumentReady = actions.onDocxReady,
                                 onSingleTap = actions.toggleBars,
-                                onZoomChanged = actions.onDocxZoomChanged,
-                                onDoubleTap = actions.onDocxZoomChanged,
                                 onRendererFallback = actions.onDocxRendererFallback
                             )
                         }

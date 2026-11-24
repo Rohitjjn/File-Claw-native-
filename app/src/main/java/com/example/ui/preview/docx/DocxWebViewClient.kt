@@ -10,7 +10,8 @@ import androidx.webkit.WebViewAssetLoader
 internal class DocxWebViewClient(
     private val assets: WebViewAssetLoader,
     private val onFailure: (String) -> Unit,
-    private val onPageFinished: (WebView) -> Unit = {}
+    private val onPageFinished: (WebView) -> Unit = {},
+    private val onScaleChanged: (Float) -> Unit = {}
 ) : WebViewClient() {
     override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
         val uri = request?.url ?: return null
@@ -39,5 +40,10 @@ internal class DocxWebViewClient(
 
     override fun onPageFinished(view: WebView?, url: String?) {
         view?.let(onPageFinished)
+    }
+
+    override fun onScaleChanged(view: WebView, oldScale: Float, newScale: Float) {
+        super.onScaleChanged(view, oldScale, newScale)
+        onScaleChanged(newScale)
     }
 }
