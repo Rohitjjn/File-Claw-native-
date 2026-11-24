@@ -98,12 +98,33 @@ class DocxPreviewInstrumentationTest {
                 assertTrue("Overview mode must not override 100% initial zoom", !web.settings.loadWithOverviewMode)
                 val density = web.resources.displayMetrics.density
                 assertTrue("Native WebView starts at exactly 100%: ${web.scale / density}", kotlin.math.abs(web.scale / density - 1f) < .02f)
-                web.zoomBy(100f)
-                assertTrue("Native WebView scale is capped at 500%: ${web.scale / density}", web.scale / density <= 5.02f && web.scale / density >= 4.9f)
-                web.zoomBy(.02f)
-                assertTrue("Native WebView scale is floored at 50%: ${web.scale / density}", web.scale / density >= .49f && web.scale / density <= .52f)
-                web.zoomBy(4f)
-                assertTrue("Native WebView zooms without custom CSS scaling: ${web.scale / density}", kotlin.math.abs(web.scale / density - 2f) < .05f)
+            }
+            repeat(2) {
+                instrumentation.runOnMainSync {
+                    dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
+                }
+                awaitVisualState(instrumentation, web, "native zoom-in pinch")
+            }
+            val density = web.resources.displayMetrics.density
+            instrumentation.runOnMainSync {
+                val zoom = web.scale / density
+                assertTrue("Native WebView scale is capped at 500%: $zoom", zoom <= 5.02f && zoom >= 4.9f)
+            }
+            repeat(2) {
+                instrumentation.runOnMainSync {
+                    dispatchPinch(web, SystemClock.uptimeMillis(), 160f * web.resources.displayMetrics.density, 40f * web.resources.displayMetrics.density)
+                }
+                awaitVisualState(instrumentation, web, "native zoom-out pinch")
+            }
+            instrumentation.runOnMainSync {
+                val zoom = web.scale / density
+                assertTrue("Native WebView scale is floored at 50%: $zoom", zoom >= .49f && zoom <= .52f)
+                dispatchPinch(web, SystemClock.uptimeMillis(), 40f * density, 80f * density)
+            }
+            awaitVisualState(instrumentation, web, "native zoom recovery pinch")
+            instrumentation.runOnMainSync {
+                val zoom = web.scale / density
+                assertTrue("Native WebView zooms without custom CSS scaling: $zoom", kotlin.math.abs(zoom - 1f) < .1f)
             }
 
             val panRead = CountDownLatch(1)
@@ -151,6 +172,47 @@ class DocxPreviewInstrumentationTest {
             down.recycle()
             up.recycle()
         }
+    }
+
+    private fun dispatchPinch(web: WebView, downTime: Long, startDistance: Float, endDistance: Float) {
+        val centerX = web.width / 2f
+        val centerY = web.height * .4f
+        val properties = Array(2) { index ->
+            MotionEvent.PointerProperties().apply { id = index; toolType = MotionEvent.TOOL_TYPE_FINGER }
+        }
+        var eventTime = downTime
+        fun coords(distance: Float): Array<MotionEvent.PointerCoords> = Array(2) { index ->
+            MotionEvent.PointerCoords().apply {
+                x = centerX + if (index == 0) -distance / 2f else distance / 2f
+                y = centerY
+                pressure = 1f
+                size = 1f
+            }
+        }
+        fun dispatch(action: Int, count: Int, pointers: Array<MotionEvent.PointerProperties>, points: Array<MotionEvent.PointerCoords>) {
+            val event = MotionEvent.obtain(
+                downTime, eventTime, action, count, pointers, points,
+                0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, 0
+            )
+            try { web.dispatchTouchEvent(event) } finally { event.recycle() }
+            eventTime += 16
+        }
+        val first = properties[0]
+        dispatch(MotionEvent.ACTION_DOWN, 1, arrayOf(first), arrayOf(coords(startDistance)[0]))
+        dispatch(
+            MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            2, properties, coords(startDistance)
+        )
+        for (step in 1..6) {
+            val fraction = step / 6f
+            val distance = startDistance + (endDistance - startDistance) * fraction
+            dispatch(MotionEvent.ACTION_MOVE, 2, properties, coords(distance))
+        }
+        dispatch(
+            MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            2, properties, coords(endDistance)
+        )
+        dispatch(MotionEvent.ACTION_UP, 1, arrayOf(first), arrayOf(coords(endDistance)[0]))
     }
 
     @Test fun printModeUsesTheSameOfflineRendererAndReadinessCallback() {
