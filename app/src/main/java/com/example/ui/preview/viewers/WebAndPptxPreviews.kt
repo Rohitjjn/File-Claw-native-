@@ -87,6 +87,7 @@ import com.example.core.io.TextWindowReader
 import com.example.core.text.TextFileSearchEngine
 import com.example.core.text.TextFileSearchMatch
 import com.example.data.RecentFileEntity
+import com.example.ui.screens.escapeHtml
 import com.example.services.FileManager
 import com.example.ui.component.ClaudeAppBar
 import com.example.ui.component.ClaudeCard

@@ -17,6 +17,7 @@ import com.example.data.RecentFileEntity
 import com.example.data.SettingEntity
 import com.example.services.FileManager
 import com.example.ui.component.ViewerSyntaxTheme
+import com.example.ui.component.formatFileSize
 import com.example.ui.preview.docx.DocxPreviewScreen
 import com.example.ui.preview.docx.DocxViewerState
 import com.example.viewmodel.MainViewModel

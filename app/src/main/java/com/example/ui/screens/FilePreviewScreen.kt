@@ -348,6 +348,7 @@ fun FilePreviewScreen(
         viewModel = viewModel, fileState = fileState, settings = settings, expandedZipPaths = expandedZipPaths,
         activeFile = activeFile, screenState = screenState, isDarkTheme = isDarkTheme,
         isHtmlFile = isHtmlFile, isWebRenderActive = isWebRenderActive, htmlScriptsEnabled = htmlScriptsEnabled,
+        onEnableHtmlScripts = { htmlScriptsEnabled = true },
         isEditMode = isEditMode, hasUnsavedEdits = hasUnsavedEdits, isSearchInViewerOpen = isSearchInDocumentOpen,
         inViewerSearchQuery = inViewerSearchQuery, onSearchQueryChange = { inViewerSearchQuery = it },
         isLargeTextSearchable = isLargeTextSearchable,

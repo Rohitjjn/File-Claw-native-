@@ -57,6 +57,7 @@ internal fun PreviewScreenSurface(
     isHtmlFile: Boolean,
     isWebRenderActive: Boolean,
     htmlScriptsEnabled: Boolean,
+    onEnableHtmlScripts: () -> Unit,
     isEditMode: Boolean,
     hasUnsavedEdits: Boolean,
     isSearchInViewerOpen: Boolean,
@@ -250,7 +251,7 @@ internal fun PreviewScreenSurface(
                         }
                         screenState.editTextValue = newValue
                     },
-                    enableHtmlScripts = { htmlScriptsEnabled = true },
+                    enableHtmlScripts = onEnableHtmlScripts,
                     toggleBars = { screenState.isBarsVisible = !screenState.isBarsVisible },
                     onLargeTextSearchResultCount = { count, index, truncated ->
                         if (!isLargeTextSearchable) {

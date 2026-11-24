@@ -1310,7 +1310,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 path = file.absolutePath,
                 name = file.name,
                 size = file.length(),
-                extension = file.extension.lowercase()
+                extension = file.extension.lowercase(),
+                lastOpened = System.currentTimeMillis()
             )
         )
         viewModelScope.launch(Dispatchers.IO) {
