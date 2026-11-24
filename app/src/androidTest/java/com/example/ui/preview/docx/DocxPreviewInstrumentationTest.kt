@@ -99,7 +99,7 @@ class DocxPreviewInstrumentationTest {
                 val density = web.resources.displayMetrics.density
                 assertTrue("Native WebView starts at exactly 100%: ${web.scale / density}", kotlin.math.abs(web.scale / density - 1f) < .02f)
             }
-            repeat(2) {
+            repeat(4) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
                 }
@@ -110,7 +110,7 @@ class DocxPreviewInstrumentationTest {
                 val zoom = web.scale / density
                 assertTrue("Native WebView scale is capped at 500%: $zoom", zoom <= 5.02f && zoom >= 4.9f)
             }
-            repeat(2) {
+            repeat(4) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 160f * web.resources.displayMetrics.density, 40f * web.resources.displayMetrics.density)
                 }
