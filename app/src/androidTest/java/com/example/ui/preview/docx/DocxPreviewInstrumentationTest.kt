@@ -115,12 +115,14 @@ class DocxPreviewInstrumentationTest {
             }
             val minZoom = readVisualViewportScale(instrumentation, web)
             assertTrue("Native page zoom is floored at 50%: $minZoom", minZoom >= .49f && minZoom <= .52f)
-            instrumentation.runOnMainSync {
-                dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 80f * web.resources.displayMetrics.density)
+            repeat(4) {
+                instrumentation.runOnMainSync {
+                    dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
+                }
+                awaitVisualState(instrumentation, web, "native zoom recovery pinch")
             }
-            awaitVisualState(instrumentation, web, "native zoom recovery pinch")
             val recoveredZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native pinch must zoom back in from the 50% floor: $recoveredZoom", recoveredZoom > minZoom && recoveredZoom <= 5.02f)
+            assertTrue("Native pinch must recover to 100% from the 50% floor: $recoveredZoom", recoveredZoom >= .9f && recoveredZoom <= 5.02f)
 
             val panRead = CountDownLatch(1)
             val panJson = AtomicReference<String?>(null)
