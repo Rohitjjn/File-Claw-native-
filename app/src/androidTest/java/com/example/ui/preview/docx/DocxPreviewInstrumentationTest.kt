@@ -127,7 +127,7 @@ class DocxPreviewInstrumentationTest {
             val panRead = CountDownLatch(1)
             val panJson = AtomicReference<String?>(null)
             instrumentation.runOnMainSync {
-                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var maxX=Math.max(0,s.scrollWidth-s.clientWidth);var maxY=Math.max(0,s.scrollHeight-s.clientHeight);s.scrollLeft=maxX;s.scrollTop=maxY;return JSON.stringify({left:left,right:s.scrollLeft,maxX:maxX,top:0,bottom:s.scrollTop,maxY:maxY,zoom:visualViewport.scale,cssZoom:document.getElementById('scaled-document').style.zoom,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
+                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var top=s.scrollTop;s.scrollLeft=Number.MAX_SAFE_INTEGER;s.scrollTop=Number.MAX_SAFE_INTEGER;var right=s.scrollLeft;var bottom=s.scrollTop;s.scrollLeft=right+100;s.scrollTop=bottom+100;return JSON.stringify({left:left,right:right,maxX:right,top:top,bottom:bottom,maxY:bottom,afterRight:s.scrollLeft,afterBottom:s.scrollTop,zoom:visualViewport.scale,cssZoom:document.getElementById('scaled-document').style.zoom,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
                     panJson.set(it); panRead.countDown()
                 }
             }
@@ -136,7 +136,9 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Fixture must provide horizontal overflow at native zoom", pan.optDouble("maxX") > 0)
             assertTrue("Native pan must reach the far-left edge: $pan", pan.optDouble("left") == 0.0)
             assertTrue("Native pan must reach the far-right edge: $pan", pan.optDouble("right") >= pan.optDouble("maxX") - 1)
+            assertTrue("Native pan must stop at the far-right limit: $pan", pan.optDouble("afterRight") <= pan.optDouble("right") + 1)
             assertTrue("Native pan must work downward as well as upward: $pan", pan.optDouble("maxY") > 0 && pan.optDouble("bottom") >= pan.optDouble("maxY") - 1)
+            assertTrue("Native pan must stop at the bottom limit: $pan", pan.optDouble("afterBottom") <= pan.optDouble("bottom") + 1)
             assertTrue("Viewer must not use custom CSS zoom: $pan", pan.optString("cssZoom").isEmpty())
             assertTrue("Viewer must not apply a CSS transform: $pan", pan.optString("transform") == "none")
 

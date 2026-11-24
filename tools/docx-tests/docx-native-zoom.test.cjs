@@ -42,6 +42,8 @@ test('Android regression fixture checks native zoom defaults, bounds and both ho
   assert.match(instrumentation, /nativeWebViewZoomSupportsHorizontalPanToBothEdges/);
   assert.match(instrumentation, /builtInZoomControls/);
   assert.match(instrumentation, /scrollLeft/);
+  assert.match(instrumentation, /Number\.MAX_SAFE_INTEGER/);
+  assert.match(instrumentation, /afterRight/);
   assert.match(instrumentation, /far-left/);
   assert.match(instrumentation, /far-right/);
   assert.match(instrumentation, /repeat\(4\)[\s\S]*?dispatchPinch\(web, SystemClock\.uptimeMillis\(\)/);
