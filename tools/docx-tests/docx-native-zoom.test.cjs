@@ -30,6 +30,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.doesNotMatch(gestures, /onDoubleTap|detectTransformGestures/);
   assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, minimum-scale=0\.5, maximum-scale=5\.0, user-scalable=yes"/);
   assert.match(html, /min-width:\s*200vw/);
+  assert.match(html, /@media print\s*\{\s*html, body\s*\{[^}]*min-width:\s*0/s);
   assert.doesNotMatch(viewer, /touchmove|style\.zoom|transform\s*:\s*scale|function setZoom|function updateScale|ctrlKey/);
   assert.doesNotMatch(html, /\bzoom\s*:/);
   assert.doesNotMatch(screen, /detectTransformGestures|pointerInput/);
@@ -44,6 +45,7 @@ test('Android regression fixture checks native zoom defaults, bounds and both ho
   assert.match(instrumentation, /far-left/);
   assert.match(instrumentation, /far-right/);
   assert.match(instrumentation, /repeat\(4\)[\s\S]*?dispatchPinch\(web, SystemClock\.uptimeMillis\(\)/);
+  assert.match(instrumentation, /repeat\(6\)[\s\S]*?dispatchPinch\(web, SystemClock\.uptimeMillis\(\), 160f/);
   assert.match(instrumentation, /minZoom >= \.49f && minZoom <= \.52f/);
   assert.match(instrumentation, /maxZoom <= 5\.02f && maxZoom >= 4\.9f/);
   assert.match(instrumentation, /readVisualViewportScale/);

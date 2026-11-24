@@ -107,7 +107,7 @@ class DocxPreviewInstrumentationTest {
             }
             val maxZoom = readVisualViewportScale(instrumentation, web)
             assertTrue("Native page zoom is capped at 500%: $maxZoom", maxZoom <= 5.02f && maxZoom >= 4.9f)
-            repeat(4) {
+            repeat(6) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 160f * web.resources.displayMetrics.density, 40f * web.resources.displayMetrics.density)
                 }
