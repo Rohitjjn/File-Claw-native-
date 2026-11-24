@@ -60,7 +60,7 @@ test('DOCX loading UI is a white surface with only a black spinner and fixed lab
   assert.match(screen, /Text\(\s*"Loading document"/);
   assert.match(loadingInstrumentation, /loadingOverlayIsOnlyWhiteSpinnerAndLoadingLabel/);
   assert.match(loadingInstrumentation, /Color\.White/);
-  assert.match(loadingInstrumentation, /assertCountEquals\(1\)/);
+  assert.match(loadingInstrumentation, /fetchSemanticsNodes\(\)\.size/);
   assert.doesNotMatch(screen, /MenuBook|Loading Word document|LinearProgressIndicator/);
 });
 
