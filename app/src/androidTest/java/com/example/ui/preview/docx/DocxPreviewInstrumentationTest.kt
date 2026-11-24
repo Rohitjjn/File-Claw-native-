@@ -116,7 +116,7 @@ class DocxPreviewInstrumentationTest {
             val minZoom = readVisualViewportScale(instrumentation, web)
             assertTrue("Native page zoom is floored at 50%: $minZoom (WebView scale ${web.scale})", minZoom >= .49f && minZoom <= .52f)
             instrumentation.runOnMainSync {
-                dispatchPinch(web, SystemClock.uptimeMillis(), 40f * density, 80f * density)
+                dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 80f * web.resources.displayMetrics.density)
             }
             awaitVisualState(instrumentation, web, "native zoom recovery pinch")
             val recoveredZoom = readVisualViewportScale(instrumentation, web)
