@@ -88,6 +88,8 @@ import com.example.core.io.TextLoader
 import com.example.core.io.TextWindowReader
 import com.example.core.text.TextFileSearchEngine
 import com.example.core.text.TextFileSearchMatch
+import com.example.ui.screens.DocumentPreviewScript
+import com.example.ui.screens.InViewerSearchCommandPolicy
 import com.example.data.RecentFileEntity
 import com.example.services.FileManager
 import com.example.ui.component.ClaudeAppBar

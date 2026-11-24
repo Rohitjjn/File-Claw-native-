@@ -20,6 +20,7 @@ import com.example.ui.component.ViewerSyntaxTheme
 import com.example.ui.preview.docx.DocxPreviewScreen
 import com.example.ui.preview.docx.DocxViewerState
 import com.example.viewmodel.MainViewModel
+import com.example.ui.screens.InlineEditWorkspace
 
 /** Immutable inputs for the file-state renderer; ephemeral mutations return through callbacks. */
 data class PreviewContentState(
@@ -319,6 +320,7 @@ fun PreviewContent(state: PreviewContentState, actions: PreviewContentActions, m
                             DocxPreviewScreen(
                                 fileEntity = routedState.file,
                                 viewerState = state.docxViewerState,
+                                isNightMode = state.isDarkTheme,
                                 modifier = Modifier.fillMaxSize(),
                                 onPageChanged = actions.onPdfPageChanged,
                                 scrollToPage = state.scrollToPage,

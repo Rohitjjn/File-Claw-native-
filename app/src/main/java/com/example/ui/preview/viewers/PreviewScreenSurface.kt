@@ -20,6 +20,8 @@ import com.example.ui.preview.chrome.*
 import com.example.ui.preview.docx.DocxViewerState
 import com.example.ui.preview.editing.TextUndoStack
 import com.example.ui.preview.chrome.PreviewScreenState
+import com.example.ui.screens.openPdfInBrowser
+import androidx.compose.ui.platform.testTag
 import com.example.ui.screens.findHostActivity
 import com.example.ui.screens.applyTabIndent
 import com.example.ui.screens.applyMarkdownWrap
@@ -30,13 +32,13 @@ import com.example.ui.component.ViewerAppearancePrefs
 import com.example.ui.preview.viewers.PdfSearchSnapshot
 import com.example.ui.screens.InViewerSearchNavigation
 import com.example.ui.preview.viewers.PreviewLargeTextSearchEffects
-import com.example.ui.preview.viewers.PreviewFocusPill
+import com.example.ui.preview.chrome.PreviewFocusPill
 import com.example.ui.preview.viewers.PreviewContent
 import com.example.ui.preview.viewers.PreviewContentState
 import com.example.ui.preview.viewers.PreviewContentActions
-import com.example.ui.preview.viewers.PreviewTrayAction
-import com.example.ui.preview.viewers.PreviewTrayKind
-import com.example.ui.preview.viewers.PreviewTrayState
+import com.example.ui.preview.chrome.PreviewTrayAction
+import com.example.ui.preview.chrome.PreviewTrayKind
+import com.example.ui.preview.chrome.PreviewTrayState
 import com.example.utils.FilePrintHelper
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +61,7 @@ internal fun PreviewScreenSurface(
     hasUnsavedEdits: Boolean,
     isSearchInViewerOpen: Boolean,
     inViewerSearchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
     isLargeTextSearchable: Boolean,
     isFullTextLoading: Boolean,
     docxViewerState: DocxViewerState,
@@ -82,7 +85,7 @@ internal fun PreviewScreenSurface(
                 state = PreviewHeaderState(
                     visible = screenState.isBarsVisible,
                     title = fileState.fileOrNull?.name ?: "Preview",
-                    searchOpen = isSearchInDocumentOpen,
+                    searchOpen = isSearchInViewerOpen,
                     query = inViewerSearchQuery,
                     isPdfSearch = fileState is MainViewModel.FileContentState.PdfSuccess,
                     isLargeTextSearchable = isLargeTextSearchable,
@@ -107,7 +110,7 @@ internal fun PreviewScreenSurface(
                     onNavigation = handleBack,
                     onDiscardEdits = { if (hasUnsavedEdits) screenState.showDiscardEditsDialog = true else viewModel.exitEditMode() },
                     onQueryChange = { value ->
-                        inViewerSearchQuery = value
+                        onSearchQueryChange(value)
                         screenState.currentMatchIndex = 0
                         screenState.totalMatchesCount = 0
                         screenState.searchResultsTruncated = false
@@ -122,7 +125,7 @@ internal fun PreviewScreenSurface(
                     },
                     onCloseSearch = { closeInViewerSearch() },
                     onClearSearch = {
-                        inViewerSearchQuery = ""
+                        onSearchQueryChange("")
                         screenState.currentMatchIndex = 0
                         screenState.totalMatchesCount = 0
                         screenState.searchResultsTruncated = false
@@ -316,7 +319,7 @@ internal fun PreviewScreenSurface(
                     state = PreviewTrayState(
                         kind = trayKind,
                         isEditMode = isEditMode,
-                        isSearchOpen = isSearchInDocumentOpen,
+                        isSearchOpen = isSearchInViewerOpen,
                         currentPage = screenState.currentPdfPage,
                         pageCount = screenState.totalPdfPages,
                         hasUnsavedEdits = hasUnsavedEdits,

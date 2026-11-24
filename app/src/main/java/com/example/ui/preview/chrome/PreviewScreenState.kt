@@ -12,7 +12,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import com.example.ui.component.ViewerSyntaxTheme
 import com.example.ui.preview.docx.DocxViewerState
 import com.example.ui.preview.viewers.PdfSearchSnapshot
-import com.example.ui.preview.viewers.TextFileSearchMatch
+import com.example.core.text.TextFileSearchMatch
 import com.example.ui.preview.viewers.ViewerScrollRequest
 
 /** Mutable UI-only state owned by FilePreviewScreen and shared with its extracted siblings. */
