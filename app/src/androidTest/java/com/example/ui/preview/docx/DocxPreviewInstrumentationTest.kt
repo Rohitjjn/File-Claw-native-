@@ -106,7 +106,7 @@ class DocxPreviewInstrumentationTest {
                 awaitVisualState(instrumentation, web, "native zoom-in pinch")
             }
             val maxZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native page zoom is capped at 500%: $maxZoom (WebView scale ${web.scale})", maxZoom <= 5.02f && maxZoom >= 4.9f)
+            assertTrue("Native page zoom is capped at 500%: $maxZoom", maxZoom <= 5.02f && maxZoom >= 4.9f)
             repeat(4) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 160f * web.resources.displayMetrics.density, 40f * web.resources.displayMetrics.density)
@@ -114,7 +114,7 @@ class DocxPreviewInstrumentationTest {
                 awaitVisualState(instrumentation, web, "native zoom-out pinch")
             }
             val minZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native page zoom is floored at 50%: $minZoom (WebView scale ${web.scale})", minZoom >= .49f && minZoom <= .52f)
+            assertTrue("Native page zoom is floored at 50%: $minZoom", minZoom >= .49f && minZoom <= .52f)
             instrumentation.runOnMainSync {
                 dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 80f * web.resources.displayMetrics.density)
             }
