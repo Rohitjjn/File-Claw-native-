@@ -184,22 +184,26 @@ class DocxPreviewInstrumentationTest {
             assertTrue("DOCX HTTPS link must dispatch ACTION_VIEW", linkIntentDispatched.await(5, TimeUnit.SECONDS))
             assertTrue("External intent must carry HTTPS ACTION_VIEW and the hyperlink URL",
                 launchedIntent.get()?.action == Intent.ACTION_VIEW && launchedIntent.get()?.dataString == "https://example.com/docx-test")
+            val zoomInProgress = mutableListOf<Float>()
             repeat(4) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
                 }
                 awaitVisualState(instrumentation, web, "native zoom-in pinch")
+                zoomInProgress += readVisualViewportScale(instrumentation, web)
             }
             val maxZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native page zoom is capped at 500%: $maxZoom", maxZoom <= 5.02f && maxZoom >= 4.9f)
+            assertTrue("Native page zoom is capped at 500%: $maxZoom after $zoomInProgress", maxZoom <= 5.02f && maxZoom >= 4.9f)
+            val zoomOutProgress = mutableListOf<Float>()
             repeat(6) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 160f * web.resources.displayMetrics.density, 40f * web.resources.displayMetrics.density)
                 }
                 awaitVisualState(instrumentation, web, "native zoom-out pinch")
+                zoomOutProgress += readVisualViewportScale(instrumentation, web)
             }
             val minZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native page zoom is floored at 50%: $minZoom", minZoom >= .49f && minZoom <= .52f)
+            assertTrue("Native page zoom is floored at 50%: $minZoom after $zoomOutProgress", minZoom >= .49f && minZoom <= .52f)
             repeat(4) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
