@@ -100,7 +100,7 @@ class DocxPreviewInstrumentationTest {
                 assertTrue("Native WebView starts at exactly 100%: ${web.scale / density}", kotlin.math.abs(web.scale / density - 1f) < .02f)
                 web.zoomBy(100f)
                 assertTrue("Native WebView scale is capped at 500%: ${web.scale / density}", web.scale / density <= 5.02f && web.scale / density >= 4.9f)
-                web.zoomBy(.01f)
+                web.zoomBy(.02f)
                 assertTrue("Native WebView scale is floored at 50%: ${web.scale / density}", web.scale / density >= .49f && web.scale / density <= .52f)
                 web.zoomBy(4f)
                 assertTrue("Native WebView zooms without custom CSS scaling: ${web.scale / density}", kotlin.math.abs(web.scale / density - 2f) < .05f)
