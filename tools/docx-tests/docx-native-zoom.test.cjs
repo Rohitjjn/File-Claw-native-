@@ -22,6 +22,8 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(host, /loadWithOverviewMode\s*=\s*false/);
   assert.match(host, /modifier = modifier\.fillMaxSize\(\)\.clipToBounds\(\)/);
   assert.match(client, /override fun onScaleChanged\(/);
+  assert.match(host, /fromWebViewScale\(page\.scale, page\.resources\.displayMetrics\.density\)/);
+  assert.match(host, /fromWebViewScale\(scale, web\.resources\.displayMetrics\.density\)/);
   assert.match(host, /installConfirmedSingleTapListener\(onTap\)/);
   assert.match(gestures, /onSingleTapConfirmed/);
   assert.match(gestures, /false \/\/ Preserve pinch, double-tap zoom, and one-finger pan in Chromium/);
@@ -41,6 +43,6 @@ test('Android regression fixture checks native zoom defaults, bounds and both ho
   assert.match(instrumentation, /far-left/);
   assert.match(instrumentation, /far-right/);
   assert.match(instrumentation, /web\.zoomBy\(\.01f\)/);
-  assert.match(instrumentation, /web\.scale >= \.49f && web\.scale <= \.52f/);
+  assert.match(instrumentation, /web\.scale \/ density >= \.49f && web\.scale \/ density <= \.52f/);
   assert.match(instrumentation, /5\.0/);
 });

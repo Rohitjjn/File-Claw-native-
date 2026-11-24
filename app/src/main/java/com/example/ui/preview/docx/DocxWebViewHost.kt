@@ -121,10 +121,14 @@ internal fun DocxWebViewHost(
                             page.evaluateJavascript(
                                 "DocxViewer.setTheme($dark,${org.json.JSONObject.quote(paper)},${org.json.JSONObject.quote(pagePaper)},${org.json.JSONObject.quote(ink)},${org.json.JSONObject.quote(edge)});", null
                             )
-                            onZoom(com.example.core.format.DocxZoomPolicy.coerce(page.scale))
+                            onZoom(com.example.core.format.DocxZoomPolicy.fromWebViewScale(page.scale, page.resources.displayMetrics.density))
                         }
                     },
-                    onScaleChanged = { scale -> if (alive.get()) onZoom(com.example.core.format.DocxZoomPolicy.coerce(scale)) }
+                    onScaleChanged = { scale ->
+                        if (alive.get()) onZoom(
+                            com.example.core.format.DocxZoomPolicy.fromWebViewScale(scale, web.resources.displayMetrics.density)
+                        )
+                    }
                 )
                 onCreated(this)
                 val url = "https://appassets.androidplatform.net/assets/docx_viewer/index.html?file=" +

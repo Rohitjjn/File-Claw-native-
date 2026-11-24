@@ -15,6 +15,10 @@ object DocxZoomPolicy {
     fun coerce(zoom: Float): Float =
         if (zoom.isFinite()) zoom.coerceIn(MIN_ZOOM, MAX_ZOOM) else DEFAULT_ZOOM
 
+    /** WebView scale includes the device-density baseline; convert to user zoom. */
+    fun fromWebViewScale(scale: Float, density: Float): Float =
+        if (scale.isFinite() && density.isFinite() && density > 0f) coerce(scale / density) else DEFAULT_ZOOM
+
     fun fromPercent(percent: Int): Float = coerce(percent / 100f)
 
     fun toPercent(zoom: Float): Int = Math.round(coerce(zoom) * 100f)

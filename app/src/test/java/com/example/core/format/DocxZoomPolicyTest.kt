@@ -20,6 +20,14 @@ class DocxZoomPolicyTest {
     }
 
     @Test
+    fun `WebView scale converts density baseline into user zoom`() {
+        assertEquals(1f, DocxZoomPolicy.fromWebViewScale(2.625f, 2.625f), 0.001f)
+        assertEquals(5f, DocxZoomPolicy.fromWebViewScale(13.125f, 2.625f), 0.001f)
+        assertEquals(0.5f, DocxZoomPolicy.fromWebViewScale(1.3125f, 2.625f), 0.001f)
+        assertEquals(1f, DocxZoomPolicy.fromWebViewScale(2f, 0f), 0.001f)
+    }
+
+    @Test
     fun `percent conversions round trip`() {
         assertEquals(1.00f, DocxZoomPolicy.fromPercent(100))
         assertEquals(125, DocxZoomPolicy.toPercent(1.25f))

@@ -96,13 +96,14 @@ class DocxPreviewInstrumentationTest {
                 assertTrue("Native zoom buttons must stay hidden", !web.settings.displayZoomControls)
                 assertTrue("Wide viewport support must be enabled", web.settings.useWideViewPort)
                 assertTrue("Overview mode must not override 100% initial zoom", !web.settings.loadWithOverviewMode)
-                assertTrue("Native WebView starts at exactly 100%: ${web.scale}", kotlin.math.abs(web.scale - 1f) < .02f)
+                val density = web.resources.displayMetrics.density
+                assertTrue("Native WebView starts at exactly 100%: ${web.scale / density}", kotlin.math.abs(web.scale / density - 1f) < .02f)
                 web.zoomBy(100f)
-                assertTrue("Native WebView scale is capped at 500%: ${web.scale}", web.scale <= 5.02f && web.scale >= 4.9f)
+                assertTrue("Native WebView scale is capped at 500%: ${web.scale / density}", web.scale / density <= 5.02f && web.scale / density >= 4.9f)
                 web.zoomBy(.01f)
-                assertTrue("Native WebView scale is floored at 50%: ${web.scale}", web.scale >= .49f && web.scale <= .52f)
+                assertTrue("Native WebView scale is floored at 50%: ${web.scale / density}", web.scale / density >= .49f && web.scale / density <= .52f)
                 web.zoomBy(4f)
-                assertTrue("Native WebView zooms without custom CSS scaling: ${web.scale}", kotlin.math.abs(web.scale - 2f) < .05f)
+                assertTrue("Native WebView zooms without custom CSS scaling: ${web.scale / density}", kotlin.math.abs(web.scale / density - 2f) < .05f)
             }
 
             val panRead = CountDownLatch(1)
