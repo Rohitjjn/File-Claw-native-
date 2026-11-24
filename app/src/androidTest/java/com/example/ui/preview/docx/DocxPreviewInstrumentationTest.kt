@@ -146,7 +146,15 @@ class DocxPreviewInstrumentationTest {
                 dispatchTap(web, now + 130, tapPoint.get()[0], tapPoint.get()[1])
             }
             awaitVisualViewportScale(instrumentation, web, 2f)
-            val anchorAt200Percent = documentPointAtTap()
+            var anchorAt200Percent = documentPointAtTap()
+            val anchorDeadline = SystemClock.elapsedRealtime() + 2_000L
+            while ((kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) >= 2.0 ||
+                    kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) >= 2.0) &&
+                SystemClock.elapsedRealtime() < anchorDeadline
+            ) {
+                Thread.sleep(50)
+                anchorAt200Percent = documentPointAtTap()
+            }
             assertTrue("Double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt200Percent",
                 kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) < 2.0 &&
                     kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) < 2.0)

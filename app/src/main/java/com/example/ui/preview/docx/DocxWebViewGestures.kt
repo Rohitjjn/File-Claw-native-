@@ -115,7 +115,9 @@ internal fun WebView.animateDocxDoubleTapZoom(
                 override fun onAnimationEnd(animation: Animator) {
                     if (cancelled || !isActive()) return
                     val script = if (target > DocxZoomPolicy.DEFAULT_ZOOM + 0.01f) {
-                        "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;if(s&&v){s.scrollLeft=${initialLeft + initialOffsetLeft + anchorX - tapX / (density * target)}-v.offsetLeft;s.scrollTop=${initialTop + initialOffsetTop + anchorY - tapY / (density * target)}-v.offsetTop;}})()"
+                        val targetLeft = initialLeft + initialOffsetLeft + anchorX - tapX / (density * target)
+                        val targetTop = initialTop + initialOffsetTop + anchorY - tapY / (density * target)
+                        "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var stable=0;var attempts=0;function apply(){if(!s||!v)return;if(Math.abs(v.scale-$target)>0.04||stable<2){stable=Math.abs(v.scale-$target)<=0.04?stable+1:0;if(attempts++<40){requestAnimationFrame(apply);return;}}s.scrollLeft=$targetLeft-v.offsetLeft;s.scrollTop=$targetTop-v.offsetTop;}requestAnimationFrame(apply);})()"
                     } else {
                         "(function(){var s=document.getElementById('scroller');if(s){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}})()"
                     }
