@@ -137,7 +137,7 @@ class DocxPreviewInstrumentationTest {
                 val y = point[1].toDouble().toString()
                 val density = point[2].toDouble().toString()
                 return evaluateJson(instrumentation, web,
-                    "(function(){var s=document.getElementById('scroller');return JSON.stringify({x:s.scrollLeft+$x/($density*visualViewport.scale),y:s.scrollTop+$y/($density*visualViewport.scale)});})()")
+                    "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;return JSON.stringify({x:s.scrollLeft+v.offsetLeft+$x/($density*v.scale),y:s.scrollTop+v.offsetTop+$y/($density*v.scale),offsetLeft:v.offsetLeft,offsetTop:v.offsetTop,scale:v.scale});})()")
             }
             val anchorBeforeZoom = documentPointAtTap()
             instrumentation.runOnMainSync {
