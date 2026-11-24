@@ -170,8 +170,8 @@ class DocxPreviewInstrumentationTest {
             instrumentation.runOnMainSync { dispatchTap(web, SystemClock.uptimeMillis()) }
             assertTrue("A confirmed single tap must reach focus mode", tapConfirmed.await(2, TimeUnit.SECONDS))
             val anchor = evaluateJson(instrumentation, web,
-                "(function(){var a=document.querySelector('#scaled-document a[href^=\\\"https://\\\"]');if(!a)return JSON.stringify({found:false});var r=a.getBoundingClientRect();return JSON.stringify({found:true,x:r.left+r.width/2,y:r.top+r.height/2});})()")
-            assertTrue("DOCX fixture hyperlink must be visible", anchor.optBoolean("found"))
+                "(function(){var a=document.querySelector('#scaled-document a[href^=\\\"https://\\\"]');if(!a)return JSON.stringify({found:false});a.scrollIntoView({block:'center',inline:'center'});var r=a.getBoundingClientRect();var x=r.left+r.width/2,y=r.top+r.height/2,n=document.elementFromPoint(x,y);var s=document.getElementById('scroller');return JSON.stringify({found:true,x:x,y:y,width:innerWidth,height:innerHeight,hit:!!(n&&n.closest&&n.closest('a[href]')),scrollTop:s.scrollTop,scale:visualViewport.scale});})()")
+            assertTrue("DOCX fixture hyperlink must be visible at a real hit-test point: $anchor", anchor.optBoolean("found") && anchor.optBoolean("hit"))
             instrumentation.runOnMainSync {
                 val density = web.resources.displayMetrics.density
                 val scale = web.scale / density
@@ -179,10 +179,11 @@ class DocxPreviewInstrumentationTest {
                     (anchor.optDouble("x") * density * scale).toFloat(),
                     (anchor.optDouble("y") * density * scale).toFloat())
             }
+            assertTrue("Hyperlink tap must resolve without toggling focus: confirmed=${confirmedTaps.get()} resolved=${resolvedTapCount.get()} anchor=$anchor",
+                linkTapResolved.await(3, TimeUnit.SECONDS) && confirmedTaps.get() == 1)
             assertTrue("DOCX HTTPS link must dispatch ACTION_VIEW", linkIntentDispatched.await(5, TimeUnit.SECONDS))
             assertTrue("External intent must carry HTTPS ACTION_VIEW and the hyperlink URL",
                 launchedIntent.get()?.action == Intent.ACTION_VIEW && launchedIntent.get()?.dataString == "https://example.com/docx-test")
-            assertTrue("Tapping a hyperlink must not toggle focus mode", linkTapResolved.await(3, TimeUnit.SECONDS) && confirmedTaps.get() == 1)
             repeat(4) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
