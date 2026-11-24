@@ -1,3 +1,7 @@
+## Preview coordinator extraction follow-up (2026-11-21)
+
+`FilePreviewScreen.kt` delegates its screen surface (top bar, content routes, floating tray, dialog host, and their interactions) to `ui/preview/viewers/PreviewScreenSurface.kt`; its coordinator is 360 lines, within the 500-line budget. Shared state, bounded text operations, and edit-history stack live in `ui/preview/chrome/PreviewScreenState.kt`, `ui/preview/operations/PreviewTextOperations.kt`, and `ui/preview/editing/TextUndoStack.kt`. Local DOCX/preview Node tests pass 24/24 and `git diff --check` passes. Android Gradle assembly could not start because Java/`JAVA_HOME` is unavailable locally; compilation and APK remain unverified pending CI.
+
 ## Latest DOCX visual-frame/readiness investigation (2026-11-21)
 
 The active branch is `arena/ea756912-file-claw-native`. The reported failure is **not yet root-caused**. Actions run [45206520707](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45206520707) failed on SHA `53a7a36b854a62a9e2dcd1cfea02d1c88d85677e`: the 412×915 visual-pixel assertion observed a blank WebView, and the Unicode/table/search test ended in an instrumentation process crash. Build/unit/lint/JS verification and artifact upload passed, but the run is not a green delivery. Its APK artifact must not be represented as passing. Earlier run [45205000092](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45205000092) passed on older SHA `9f2704387d7da92ca17bbe7f1c884381c241cff3`; it is not evidence for this failure or the current changes.

@@ -31,3 +31,17 @@ test('DOCX tray action model exposes exactly the requested stable sequence', () 
   const labels = [...tray.matchAll(/^\s+[A-Z]+\("([^"]+)"\),?$/gm)].map(match => match[1]);
   assert.deepEqual(labels, ['Page', 'Rotate', 'Search', 'Print', 'Edit']);
 });
+
+test('every new DOCX opens at exactly 100 percent regardless of a saved preference', () => {
+  const screen = fs.readFileSync(path.join(root, 'app/src/main/java/com/example/ui/preview/chrome/PreviewScreenState.kt'), 'utf8');
+  assert.match(viewer, /let userZoom = 1;/);
+  assert.match(screen, /docxZoomFactor\s+by\s+mutableFloatStateOf\(1f\)/);
+  assert.match(screen, /docxZoomFactor = 1f/);
+  assert.doesNotMatch(screen, /getDocxZoomPercent|setDocxZoomPercent/);
+});
+
+test('overwide DOCX content aligns to the leading edge while fitted content can center', () => {
+  assert.match(html, /#stage\s*\{[^}]*justify-content:\s*flex-start\s*;/s);
+  assert.match(html, /#scaled-document\s*\{[^}]*margin-inline:\s*auto\s*;/s);
+  assert.match(viewer, /Math\.max\(\.5, Math\.min\(5,/);
+});

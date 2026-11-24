@@ -308,7 +308,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Current open file states
     sealed class FileContentState {
         object Idle : FileContentState()
-        object Loading : FileContentState()
+        data class Loading(val file: RecentFileEntity? = null) : FileContentState()
 
         /**
          * [truncated] and [readOnlyReason] are flags, never text inside [content]: the editor refuses to
@@ -361,6 +361,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         /** The file this state is showing, whichever viewer it belongs to. */
         val fileOrNull: RecentFileEntity?
             get() = when (this) {
+                is Loading -> file
                 is TextSuccess -> file
                 is CsvSuccess -> file
                 is ZipSuccess -> file
@@ -520,11 +521,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openFile(fileEntity: RecentFileEntity, archivePassword: String = "") {
-        _currentFileState.value = FileContentState.Loading
+        val loading = FileContentState.Loading(fileEntity)
+        _currentFileState.value = loading
         _loadingFilePath.value = fileEntity.path
 
-        viewModelScope.launch {
-            _navigationEvent.send(NavigationEvent.NavigateToPreview(FileContentState.Loading))
+        // Emit from the caller before scheduling persistence/detection so opening the
+        // destination never waits for recent-file database work.
+        viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            _navigationEvent.send(NavigationEvent.NavigateToPreview(loading))
         }
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -727,7 +731,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openZipEntry(parentZipEntity: RecentFileEntity, node: FileManager.ZipNode, password: String = "") {
-        _currentFileState.value = FileContentState.Loading
+        _currentFileState.value = FileContentState.Loading(parentZipEntity)
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val context = getApplication<Application>()
@@ -775,7 +779,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openParentZip(parentPath: String) {
-        _currentFileState.value = FileContentState.Loading
+        _currentFileState.value = FileContentState.Loading()
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val parentEntity = repository.getRecentFileByPath(parentPath)
@@ -1301,7 +1305,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun importAndOpenFile(file: File) {
-        _currentFileState.value = FileContentState.Loading
+        _currentFileState.value = FileContentState.Loading(
+            RecentFileEntity(
+                path = file.absolutePath,
+                name = file.name,
+                size = file.length(),
+                extension = file.extension.lowercase()
+            )
+        )
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val extension = file.name.substringAfterLast('.', "").lowercase()

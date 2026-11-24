@@ -1,3 +1,7 @@
+## Preview coordinator extraction follow-up (2026-11-21)
+
+`FilePreviewScreen.kt` delegates its screen surface (top bar, content routes, floating tray, dialog host, and their interactions) to `ui/preview/viewers/PreviewScreenSurface.kt`; its coordinator is 360 lines, within the 500-line budget. Shared state, bounded text operations, and edit-history stack live in `ui/preview/chrome/PreviewScreenState.kt`, `ui/preview/operations/PreviewTextOperations.kt`, and `ui/preview/editing/TextUndoStack.kt`. Local DOCX/preview Node tests pass 24/24 and `git diff --check` passes. Android Gradle assembly could not start because Java/`JAVA_HOME` is unavailable locally; compilation and APK remain unverified pending CI.
+
 ## Latest DOCX visual-frame/readiness investigation (2026-11-21)
 
 | Audit ID | Evidence-based finding / hypothesis | Remediation / status |
