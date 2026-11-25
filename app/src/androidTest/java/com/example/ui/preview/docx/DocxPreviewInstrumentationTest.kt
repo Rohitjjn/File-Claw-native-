@@ -108,6 +108,7 @@ class DocxPreviewInstrumentationTest {
         try {
             assertTrue("DOCX render timed out: ${failures.get()}", ready.await(45, TimeUnit.SECONDS))
             assertTrue("DOCX renderer failed: ${failures.get()}", failures.get() == null)
+            val fitScale = evaluateJson(instrumentation, web, "JSON.stringify(DocxViewer.getState())").optDouble("fitScale").toFloat()
             instrumentation.runOnMainSync {
                 assertTrue("Native zoom must be enabled", web.settings.supportZoom())
                 assertTrue("Native pinch controls must be enabled", web.settings.builtInZoomControls)
@@ -115,20 +116,22 @@ class DocxPreviewInstrumentationTest {
                 assertTrue("Wide viewport support must be enabled", web.settings.useWideViewPort)
                 assertTrue("Overview mode must be enabled for fit-to-width rendering", web.settings.loadWithOverviewMode)
                 val density = web.resources.displayMetrics.density
-                assertTrue("Native WebView starts at exactly 100%: ${web.scale / density}", kotlin.math.abs(web.scale / density - 1f) < .02f)
+                assertTrue("Native WebView scale must equal measured fit baseline: ${web.scale / density}, fit=$fitScale",
+                    kotlin.math.abs(web.scale / density - fitScale) < .03f)
             }
             val initialScale = readVisualViewportScale(instrumentation, web)
-            assertTrue("Initial page zoom must be the 100% fit baseline: $initialScale", kotlin.math.abs(initialScale - 1f) < .02f)
+            assertTrue("Initial page zoom must equal the measured fit baseline: $initialScale fit=$fitScale",
+                kotlin.math.abs(initialScale - fitScale) < .03f)
             val initialLayout = evaluateJson(instrumentation, web,
-                "(function(){var s=document.getElementById('scroller');var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');var r=p.getBoundingClientRect();return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,pageWidth:r.width,pageHeight:r.height,pageLeft:r.left,pageRight:r.right,pageScrollWidth:p.scrollWidth,pageClientWidth:p.clientWidth});})()")
-            assertTrue("DOCX page must fit within the viewport at 100%: $initialLayout",
-                initialLayout.optDouble("pageWidth") > 0 && initialLayout.optDouble("pageWidth") <= initialLayout.optDouble("clientWidth") + 1)
+                "(function(){var s=document.getElementById('scroller'),p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p.getBoundingClientRect(),v=visualViewport,z=v.scale;return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,visualViewportWidth:v.width,pageWidth:r.width*z,pageHeight:r.height*z,pageLeft:(r.left-v.offsetLeft)*z,pageRight:(r.right-v.offsetLeft)*z,viewportWidth:v.width*z,pageScrollWidth:p.scrollWidth,pageClientWidth:p.clientWidth,fitScale:DocxViewer.getState().fitScale});})()")
+            assertTrue("DOCX page must fit within the viewport at fit baseline: $initialLayout",
+                initialLayout.optDouble("pageWidth") > 0 && initialLayout.optDouble("pageRight") <= initialLayout.optDouble("viewportWidth"))
             val leftMargin = initialLayout.optDouble("pageLeft")
-            val rightMargin = initialLayout.optDouble("clientWidth") - initialLayout.optDouble("pageRight")
-            assertTrue("Fit-to-width page must have balanced readable side margins: $initialLayout",
-                leftMargin >= 8 && rightMargin >= 8 && kotlin.math.abs(leftMargin - rightMargin) < 3)
-            assertTrue("Opening the DOCX must not create horizontal overflow: $initialLayout",
-                initialLayout.optDouble("scrollWidth") <= initialLayout.optDouble("clientWidth") + 1)
+            val rightMargin = initialLayout.optDouble("viewportWidth") - initialLayout.optDouble("pageRight")
+            assertTrue("Fit-to-width page must have balanced 12px margins: $initialLayout",
+                kotlin.math.abs(leftMargin - 12) <= 2 && kotlin.math.abs(rightMargin - 12) <= 2)
+            assertTrue("Opening the DOCX must not clip the page horizontally: $initialLayout",
+                initialLayout.optDouble("scrollWidth") <= initialLayout.optDouble("visualViewportWidth") + 1)
             val tapPoint = AtomicReference<FloatArray>()
             instrumentation.runOnMainSync {
                 tapPoint.set(floatArrayOf(web.width * .5f, web.height * .35f, web.resources.displayMetrics.density))
@@ -147,7 +150,7 @@ class DocxPreviewInstrumentationTest {
                 dispatchTap(web, now, tapPoint.get()[0], tapPoint.get()[1])
                 dispatchTap(web, now + 130, tapPoint.get()[0], tapPoint.get()[1])
             }
-            awaitVisualViewportScale(instrumentation, web, 2f)
+            awaitVisualViewportScale(instrumentation, web, fitScale * 2f)
             var anchorAt200Percent = documentPointAtTap()
             val anchorDeadline = SystemClock.elapsedRealtime() + 2_000L
             while ((kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) >= 2.0 ||
@@ -166,8 +169,8 @@ class DocxPreviewInstrumentationTest {
                 dispatchTap(web, now, tapPoint.get()[0], tapPoint.get()[1])
                 dispatchTap(web, now + 130, tapPoint.get()[0], tapPoint.get()[1])
             }
-            awaitVisualViewportScale(instrumentation, web, 1f)
-            assertTrue("Second double-tap must return to 100% fit width", kotlin.math.abs(readVisualViewportScale(instrumentation, web) - 1f) < .08f)
+            awaitVisualViewportScale(instrumentation, web, fitScale)
+            assertTrue("Second double-tap must return to 100% fit width", kotlin.math.abs(readVisualViewportScale(instrumentation, web) - fitScale) < .03f)
 
             instrumentation.runOnMainSync { dispatchTap(web, SystemClock.uptimeMillis()) }
             assertTrue("A confirmed single tap must reach focus mode", tapConfirmed.await(2, TimeUnit.SECONDS))
@@ -195,7 +198,8 @@ class DocxPreviewInstrumentationTest {
                 zoomInProgress += readVisualViewportScale(instrumentation, web)
             }
             val maxZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native page zoom is capped at 500%: $maxZoom after $zoomInProgress", maxZoom <= 5.02f && maxZoom >= 4.9f)
+            assertTrue("Native page zoom is capped at 500% of fit: $maxZoom after $zoomInProgress fit=$fitScale",
+                maxZoom <= fitScale * 5.02f && maxZoom >= fitScale * 4.9f)
             val zoomOutProgress = mutableListOf<Float>()
             repeat(6) {
                 instrumentation.runOnMainSync {
@@ -205,7 +209,8 @@ class DocxPreviewInstrumentationTest {
                 zoomOutProgress += readVisualViewportScale(instrumentation, web)
             }
             val minZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native page zoom is floored at 50%: $minZoom after $zoomOutProgress", minZoom >= .49f && minZoom <= .52f)
+            assertTrue("Native page zoom is floored at 50% of fit: $minZoom after $zoomOutProgress fit=$fitScale",
+                minZoom >= fitScale * .49f && minZoom <= fitScale * .52f)
             repeat(4) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
@@ -213,7 +218,8 @@ class DocxPreviewInstrumentationTest {
                 awaitVisualState(instrumentation, web, "native zoom recovery pinch")
             }
             val recoveredZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native pinch must recover to 100% from the 50% floor: $recoveredZoom", recoveredZoom >= .9f && recoveredZoom <= 5.02f)
+            assertTrue("Native pinch must recover toward fit from the 50% floor: $recoveredZoom fit=$fitScale",
+                recoveredZoom >= fitScale * .9f && recoveredZoom <= fitScale * 5.02f)
 
             val panRead = CountDownLatch(1)
             val panJson = AtomicReference<String?>(null)
@@ -317,15 +323,15 @@ class DocxPreviewInstrumentationTest {
             val layout = evaluateJson(
                 instrumentation,
                 web,
-                "(function(){var s=document.getElementById('scroller');var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');var r=p.getBoundingClientRect();return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,pageCardWidth:r.width,pageCardHeight:r.height,pageCardLeft:r.left,pageCardRight:r.right,pageClientWidth:p.clientWidth,pageScrollWidth:p.scrollWidth,viewportWidth:document.documentElement.clientWidth,scale:visualViewport.scale,paper:getComputedStyle(document.documentElement).getPropertyValue('--paper').trim(),pagePaper:getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim(),shadow:getComputedStyle(p).boxShadow});})()"
+                "(function(){var s=document.getElementById('scroller'),p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p.getBoundingClientRect(),v=visualViewport,z=v.scale;return JSON.stringify({clientWidth:s.clientWidth*z,scrollWidth:s.scrollWidth*z,visualViewportWidth:v.width*z,pageCardWidth:r.width*z,pageCardHeight:r.height*z,pageCardLeft:(r.left-v.offsetLeft)*z,pageCardRight:(r.right-v.offsetLeft)*z,pageClientWidth:p.clientWidth,pageScrollWidth:p.scrollWidth,viewportWidth:v.width*z,scale:z,fitScale:DocxViewer.getState().fitScale,paper:getComputedStyle(document.documentElement).getPropertyValue('--paper').trim(),pagePaper:getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim(),shadow:getComputedStyle(p).boxShadow});})()"
             )
             val pageLeft = layout.optDouble("pageCardLeft")
             val pageRight = layout.optDouble("pageCardRight")
             val viewportWidth = layout.optDouble("viewportWidth")
             val leftMargin = pageLeft
             val rightMargin = viewportWidth - pageRight
-            assertTrue("${widthDp}x${heightDp} must start at fit-to-width baseline: $layout",
-                kotlin.math.abs(layout.optDouble("scale") - 1.0) < .02)
+            assertTrue("${widthDp}x${heightDp} must start at measured fit-to-width baseline: $layout",
+                kotlin.math.abs(layout.optDouble("scale") - layout.optDouble("fitScale")) < .03)
             assertTrue("Light canvas must be light grey: $layout", layout.optString("paper") == "#f0f0f0")
             assertTrue("Document cards must be white: $layout", layout.optString("pagePaper") == "#ffffff")
             assertTrue("${widthDp}x${heightDp} page card must have positive dimensions: $layout",
@@ -341,8 +347,8 @@ class DocxPreviewInstrumentationTest {
                 layout.optString("shadow") != "none")
             assertTrue("${widthDp}x${heightDp} page card must have 12px outer margins: $layout",
                 kotlin.math.abs(leftMargin - 12.0) <= 2 && kotlin.math.abs(rightMargin - 12.0) <= 2)
-            assertTrue("${widthDp}x${heightDp} must not create horizontal overflow: $layout",
-                layout.optDouble("scrollWidth") <= layout.optDouble("clientWidth") + 1)
+            assertTrue("${widthDp}x${heightDp} page content must remain in the visible visual viewport: $layout",
+                layout.optDouble("scrollWidth") <= layout.optDouble("visualViewportWidth") + 1)
         } finally {
             destroyWebView(instrumentation, activity, web)
         }

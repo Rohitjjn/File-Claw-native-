@@ -13,6 +13,9 @@
     let searchObserver;
     let readySent = false;
     let activePage = 0;
+    let fitScale = 1;
+    let fitLayoutViewportWidth = 0;
+    let printMode = false;
 
     function send(method, payload) {
         try {
@@ -91,7 +94,8 @@
             pageCount: metrics.pageCount,
             contentHeight: Math.ceil(metrics.contentHeight),
             contentWidth: Math.ceil(metrics.contentWidth),
-            visiblePageCount: metrics.visiblePageCount
+            visiblePageCount: metrics.visiblePageCount,
+            fitScale
         });
         reportPage();
     }
@@ -179,8 +183,42 @@
         if (currentSearchQuery) search(currentSearchQuery);
     }
 
-    function configureScrollReporting() {
-        els.scroller.addEventListener('scroll', () => requestAnimationFrame(reportPage), { passive: true });
+    function layoutViewportWidth() {
+        return Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
+    }
+
+    function applyViewportScale(targetScale, fit) {
+        fitScale = fit.fitScale;
+        fitLayoutViewportWidth = layoutViewportWidth();
+        els.scroller.style.paddingLeft = `${fit.cssMargin}px`;
+        els.scroller.style.paddingRight = `${fit.cssMargin}px`;
+        els.viewport.content = `width=device-width, initial-scale=${targetScale}, minimum-scale=${fit.minScale}, maximum-scale=${fit.maxScale}, user-scalable=yes`;
+    }
+
+    function applyInitialFit() {
+        if (printMode) return 1;
+        const page = els.document.querySelector('.docx, section.docx');
+        const fit = page && window.DocxViewportFit.calculate(
+            layoutViewportWidth(),
+            page.offsetWidth,
+            12
+        );
+        if (!fit) throw new Error('FIT_TO_WIDTH_UNAVAILABLE');
+        applyViewportScale(fit.fitScale, fit);
+        return fit.fitScale;
+    }
+
+    function refitAfterViewportResize() {
+        if (!readySent || printMode) return;
+        const viewportWidth = layoutViewportWidth();
+        if (Math.abs(viewportWidth - fitLayoutViewportWidth) < 1) return;
+        const page = els.document.querySelector('.docx, section.docx');
+        const fit = page && window.DocxViewportFit.calculate(viewportWidth, page.offsetWidth, 12);
+        if (!fit) return;
+        const currentScale = window.visualViewport ? window.visualViewport.scale : fitScale;
+        const relativeZoom = currentScale / fitScale;
+        const targetScale = Math.min(fit.maxScale, Math.max(fit.minScale, fit.fitScale * relativeZoom));
+        applyViewportScale(targetScale, fit);
     }
 
     async function readDocumentStream(response, generation) {
@@ -260,12 +298,22 @@
         status('Laying out pages…');
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         if (!pageCount()) throw new Error('EMPTY_DOCUMENT_WITHOUT_PAGES');
+        const targetScale = applyInitialFit();
         const deadline = Date.now() + 3500;
+        let stableFitFrames = 0;
         const verify = () => {
             if (generation !== renderId || readySent) return;
-            if (visibleContent()) reportReady(generation);
+            const currentScale = window.visualViewport ? window.visualViewport.scale : 1;
+            if (!printMode && Math.abs(currentScale - targetScale) > 0.03) {
+                stableFitFrames = 0;
+            } else {
+                stableFitFrames++;
+            }
+            if (stableFitFrames >= 2 && visibleContent()) reportReady(generation);
             else if (Date.now() < deadline) requestAnimationFrame(verify);
-            else throwFailure('LAYOUT_FAILED_NOT_VISIBLE');
+            else throwFailure(!printMode && Math.abs(currentScale - targetScale) > 0.03
+                ? 'LAYOUT_FAILED_FIT_TO_WIDTH'
+                : 'LAYOUT_FAILED_NOT_VISIBLE');
         };
         requestAnimationFrame(verify);
     }
@@ -277,6 +325,7 @@
 
     function runFromUrl() {
         const params = new URLSearchParams(location.search);
+        printMode = params.get('print') === '1';
         if (params.get('dark') === '1') document.documentElement.classList.add('dark');
         const path = params.get('file');
         const generation = Number(params.get('generation') || 1);
@@ -301,7 +350,7 @@
                 if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) root.style.setProperty(name, value);
             }
         },
-        getState() { return { ready: readySent, pages: pageCount(), zoom: window.visualViewport ? window.visualViewport.scale : 1 }; }
+        getState() { return { ready: readySent, pages: pageCount(), zoom: window.visualViewport ? window.visualViewport.scale : 1, fitScale }; }
     };
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -309,7 +358,9 @@
         els.stage = document.getElementById('stage');
         els.document = document.getElementById('scaled-document');
         els.status = document.getElementById('status');
+        els.viewport = document.getElementById('docx-viewport');
         configureScrollReporting();
+        window.addEventListener('resize', refitAfterViewportResize);
         const onResize = () => {
             if (pageCount()) {
                 if (readySent) rebuildHighlights();

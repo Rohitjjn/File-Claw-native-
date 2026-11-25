@@ -28,6 +28,14 @@ class DocxZoomPolicyTest {
     }
 
     @Test
+    fun `WebView scale normalizes to the measured fit-width baseline`() {
+        assertEquals(1f, DocxZoomPolicy.fromWebViewScale(1.11f, 2.625f, 0.423f), 0.01f)
+        assertEquals(2f, DocxZoomPolicy.fromWebViewScale(2.22f, 2.625f, 0.423f), 0.02f)
+        assertEquals(0.5f, DocxZoomPolicy.fromWebViewScale(0.555f, 2.625f, 0.423f), 0.01f)
+        assertEquals(1f, DocxZoomPolicy.fromWebViewScale(2.625f, 2.625f, 0f), 0.001f)
+    }
+
+    @Test
     fun `double tap toggles between fit-width and 200 percent steps`() {
         assertEquals(2f, DocxZoomPolicy.doubleTapTarget(1f))
         assertEquals(1f, DocxZoomPolicy.doubleTapTarget(1.5f))

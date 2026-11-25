@@ -162,6 +162,7 @@ jobs:
           node --test tools/docx-tests/*.test.cjs
           node --check app/src/main/assets/docx_viewer/search.js
           node --check app/src/main/assets/docx_viewer/render-readiness.js
+          node --check app/src/main/assets/docx_viewer/viewport-fit.js
           node --check app/src/main/assets/docx_viewer/viewer.js
           node --check app/src/main/assets/docx_viewer/docx-preview.min.js
           node --check app/src/main/assets/docx_viewer/jszip.min.js

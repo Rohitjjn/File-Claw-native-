@@ -8,7 +8,7 @@ import org.json.JSONObject
 /** Small, JSON-only bridge. It never exposes document bytes or filesystem APIs to JavaScript. */
 internal class DocxJsBridge(
     private val isCurrent: () -> Boolean,
-    private val onVisualRender: (generation: Long, pages: Int, contentHeightPx: Int, contentWidthPx: Int, visiblePages: Int) -> Unit,
+    private val onVisualRender: (generation: Long, pages: Int, contentHeightPx: Int, contentWidthPx: Int, visiblePages: Int, fitScale: Float) -> Unit,
     private val onPageChanged: (page: Int, pages: Int) -> Unit,
     private val onProgress: (generation: Long, loadedBytes: Long, totalBytes: Long) -> Unit,
     private val onFailure: (generation: Long, code: String) -> Unit,
@@ -24,7 +24,8 @@ internal class DocxJsBridge(
             json.optInt("pageCount", 0),
             json.optInt("contentHeight", 0),
             json.optInt("contentWidth", 0),
-            json.optInt("visiblePageCount", 0)
+            json.optInt("visiblePageCount", 0),
+            json.optDouble("fitScale", 1.0).toFloat()
         )
     }
 

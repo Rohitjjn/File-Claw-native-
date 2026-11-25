@@ -1,8 +1,9 @@
 package com.example.ui.preview.docx
 
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.fillMaxSize
 import android.view.ViewGroup
@@ -45,6 +46,7 @@ internal fun DocxWebViewHost(
     var searchCursor by remember(generation) { mutableStateOf(DocxSearchController.Cursor()) }
     var viewerReady by remember(generation) { mutableStateOf(false) }
     var lastPage by remember(generation) { mutableStateOf<Int?>(null) }
+    var fitScale by remember(generation) { mutableFloatStateOf(1f) }
     val alive = remember(generation) { java.util.concurrent.atomic.AtomicBoolean(true) }
     AndroidView(
         modifier = modifier.fillMaxSize().clipToBounds(),
@@ -99,8 +101,9 @@ internal fun DocxWebViewHost(
                 var visualStateRequestId = 0L
                 val bridge = DocxJsBridge(
                     isCurrent = { alive.get() },
-                    onVisualRender = { id, pages, height, width, visiblePages ->
+                    onVisualRender = { id, pages, height, width, visiblePages, renderedFitScale ->
                         if (id == generation && alive.get()) {
+                            fitScale = renderedFitScale.coerceAtLeast(0.01f)
                             // DOM geometry is necessary but does not prove Chromium has committed
                             // the corresponding pixels. Hold Compose readiness until that frame.
                             web.postVisualStateCallback(
@@ -109,6 +112,9 @@ internal fun DocxWebViewHost(
                                     override fun onComplete(requestId: Long) {
                                         if (alive.get() && id == generation) {
                                             viewerReady = true
+                                            onZoom(com.example.core.format.DocxZoomPolicy.fromWebViewScale(
+                                                web.scale, web.resources.displayMetrics.density, renderedFitScale
+                                            ))
                                             onVisualRender(id, pages, height, width, visiblePages)
                                         }
                                     }
@@ -135,16 +141,16 @@ internal fun DocxWebViewHost(
                             page.evaluateJavascript(
                                 "DocxViewer.setTheme($dark,${org.json.JSONObject.quote(paper)},${org.json.JSONObject.quote(pagePaper)},${org.json.JSONObject.quote(ink)},${org.json.JSONObject.quote(edge)});", null
                             )
-                            onZoom(com.example.core.format.DocxZoomPolicy.fromWebViewScale(page.scale, page.resources.displayMetrics.density))
+                            onZoom(com.example.core.format.DocxZoomPolicy.fromWebViewScale(page.scale, page.resources.displayMetrics.density, fitScale))
                         }
                     },
                     onScaleChanged = { scale ->
                         if (alive.get()) {
-                            val zoom = com.example.core.format.DocxZoomPolicy.fromWebViewScale(scale, web.resources.displayMetrics.density)
+                            val zoom = com.example.core.format.DocxZoomPolicy.fromWebViewScale(scale, web.resources.displayMetrics.density, fitScale)
                             if (kotlin.math.abs(zoom - com.example.core.format.DocxZoomPolicy.DEFAULT_ZOOM) < 0.01f) {
                                 web.postDelayed({
                                     if (alive.get()) web.evaluateJavascript(
-                                        "(function(){var s=document.getElementById('scroller');if(s&&s.classList.contains('zoom-anchor-space')&&window.visualViewport&&Math.abs(window.visualViewport.scale-1)<0.01){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}})()",
+                                        "(function(){var s=document.getElementById('scroller'),v=window.visualViewport,fit=window.DocxViewer.getState().fitScale;if(s&&v&&s.classList.contains('zoom-anchor-space')&&Math.abs(v.scale-fit)<0.01){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}})()",
                                         null
                                     )
                                 }, 300L)

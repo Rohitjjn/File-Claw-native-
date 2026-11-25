@@ -97,7 +97,11 @@ internal fun WebView.animateDocxDoubleTapZoom(
         if (!isActive()) return
         val current = metrics.optDouble("scale", 1.0).toFloat().takeIf { it.isFinite() && it > 0f }
             ?: DocxZoomPolicy.DEFAULT_ZOOM
-        val target = DocxZoomPolicy.doubleTapTarget(current)
+        val fitScale = metrics.optDouble("fitScale", 1.0).toFloat().takeIf { it.isFinite() && it > 0f }
+            ?: DocxZoomPolicy.DEFAULT_ZOOM
+        val currentZoom = current / fitScale
+        val targetZoom = DocxZoomPolicy.doubleTapTarget(currentZoom)
+        val target = fitScale * targetZoom
         val factor = target / current
         if (!factor.isFinite() || factor <= 0f || kotlin.math.abs(target - current) < 0.01f) return
 
@@ -184,12 +188,12 @@ internal fun WebView.animateDocxDoubleTapZoom(
                             points
                         )
                         dispatch(MotionEvent.ACTION_UP, 1, points)
-                        val script = if (target > DocxZoomPolicy.DEFAULT_ZOOM + 0.01f) {
+                        val script = if (targetZoom > DocxZoomPolicy.DEFAULT_ZOOM + 0.01f) {
                             val scaleX = tapX / (density * target)
                             val scaleY = tapY / (density * target)
                             "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var stable=0;var attempts=0;function apply(){if(!s||!v)return;var settled=Math.abs(v.scale-$target)<=0.04;if(!settled){stable=0;if(attempts++<40){requestAnimationFrame(apply);return;}return;}if(stable++<2){requestAnimationFrame(apply);return;}s.scrollLeft=$anchorX-$scaleX-v.offsetLeft;s.scrollTop=$anchorY-$scaleY-v.offsetTop;}requestAnimationFrame(apply);})()"
                         } else {
-                            "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var attempts=0;function restore(){if(!s||!v)return;if(Math.abs(v.scale-1)>0.04&&attempts++<90){requestAnimationFrame(restore);return;}if(Math.abs(v.scale-1)<=0.04){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}}requestAnimationFrame(restore);})()"
+                            "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var fit=window.DocxViewer.getState().fitScale;var attempts=0;function restore(){if(!s||!v)return;if(Math.abs(v.scale-fit)>0.04&&attempts++<90){requestAnimationFrame(restore);return;}if(Math.abs(v.scale-fit)<=0.04){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}}requestAnimationFrame(restore);})()"
                         }
                         evaluateJavascript(script, null)
                     }
@@ -200,14 +204,16 @@ internal fun WebView.animateDocxDoubleTapZoom(
     }
 
     evaluateJavascript(
-        "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;return JSON.stringify({scale:v?v.scale:1,left:s?s.scrollLeft:0,top:s?s.scrollTop:0,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,anchorSpace:!!(s&&s.classList.contains('zoom-anchor-space'))});})()"
+        "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var state=window.DocxViewer.getState();return JSON.stringify({scale:v?v.scale:1,fitScale:state.fitScale,left:s?s.scrollLeft:0,top:s?s.scrollTop:0,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,anchorSpace:!!(s&&s.classList.contains('zoom-anchor-space'))});})()"
     ) { result ->
         if (!isActive()) return@evaluateJavascript
         val metrics = parseMetrics(result) ?: return@evaluateJavascript
         val current = metrics.optDouble("scale", 1.0).toFloat().takeIf { it.isFinite() && it > 0f }
             ?: DocxZoomPolicy.DEFAULT_ZOOM
-        val target = DocxZoomPolicy.doubleTapTarget(current)
-        if (target > DocxZoomPolicy.DEFAULT_ZOOM + 0.01f && !metrics.optBoolean("anchorSpace")) {
+        val fitScale = metrics.optDouble("fitScale", 1.0).toFloat().takeIf { it.isFinite() && it > 0f }
+            ?: DocxZoomPolicy.DEFAULT_ZOOM
+        val targetZoom = DocxZoomPolicy.doubleTapTarget(current / fitScale)
+        if (targetZoom > DocxZoomPolicy.DEFAULT_ZOOM + 0.01f && !metrics.optBoolean("anchorSpace")) {
             evaluateJavascript(
                 "(function(){var s=document.getElementById('scroller');if(!s)return null;s.classList.add('zoom-anchor-space');void s.offsetWidth;var p=parseFloat(getComputedStyle(s).paddingLeft)||0;s.scrollLeft=Math.max(0,s.clientWidth/2-p);s.scrollTop=window.innerHeight/2;var v=window.visualViewport;return JSON.stringify({scale:v?v.scale:1,left:s.scrollLeft,top:s.scrollTop,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,anchorSpace:true});})()"
             ) { prepared ->

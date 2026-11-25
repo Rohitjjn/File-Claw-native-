@@ -11,6 +11,7 @@ const launcher = read('app/src/main/java/com/example/ui/preview/docx/DocxExterna
 const screen = read('app/src/main/java/com/example/ui/preview/docx/DocxPreviewScreen.kt');
 const html = read('app/src/main/assets/docx_viewer/index.html');
 const viewer = read('app/src/main/assets/docx_viewer/viewer.js');
+const viewportFit = read('app/src/main/assets/docx_viewer/viewport-fit.js');
 const instrumentation = read('app/src/androidTest/java/com/example/ui/preview/docx/DocxPreviewInstrumentationTest.kt');
 const loadingInstrumentation = read('app/src/androidTest/java/com/example/ui/preview/docx/DocxLoadingInstrumentationTest.kt');
 const gestures = read('app/src/main/java/com/example/ui/preview/docx/DocxWebViewGestures.kt');
@@ -30,8 +31,8 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(launcher, /Intent\.ACTION_VIEW/);
   assert.match(launcher, /setOf\("http", "https", "mailto", "tel"\)/);
   assert.match(launcher, /ActivityNotFoundException/);
-  assert.match(host, /fromWebViewScale\(page\.scale, page\.resources\.displayMetrics\.density\)/);
-  assert.match(host, /fromWebViewScale\(scale, web\.resources\.displayMetrics\.density\)/);
+  assert.match(host, /fromWebViewScale\(page\.scale, page\.resources\.displayMetrics\.density, fitScale\)/);
+  assert.match(host, /fromWebViewScale\(scale, web\.resources\.displayMetrics\.density, fitScale\)/);
   assert.match(host, /installDocxGestureListeners\(/);
   assert.match(host, /launchDocxExternalLink\(context, uri\)/);
   assert.match(gestures, /onSingleTapConfirmed/);
@@ -45,13 +46,18 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(gestures, /zoom-anchor-space/);
   assert.match(gestures, /v\.offsetLeft/);
   assert.match(gestures, /v\.offsetTop/);
-  assert.match(gestures, /Math\.abs\(v\.scale-1\)>0\.04/);
+  assert.match(gestures, /window\.DocxViewer\.getState\(\)\.fitScale/);
   assert.match(html, /#scroller\.zoom-anchor-space #stage::before/);
   assert.match(instrumentation, /-d\.offsetLeft/);
   assert.match(instrumentation, /-d\.offsetTop/);
   assert.match(gestures, /if \(event\.pointerCount > 1\)[\s\S]*?false/);
   assert.match(gestures, /evaluateJavascript/);
   assert.doesNotMatch(gestures, /detectTransformGestures/);
+  assert.match(html, /id="docx-viewport" name="viewport"/);
+  assert.match(html, /src="viewport-fit\.js"/);
+  assert.match(viewer, /DocxViewportFit\.calculate/);
+  assert.match(viewer, /minimum-scale=\$\{fit\.minScale\}, maximum-scale=\$\{fit\.maxScale\}/);
+  assert.match(viewportFit, /function calculate\(viewportWidth, pageWidth, visualMargin = 12\)/);
   assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, minimum-scale=0\.5, maximum-scale=5\.0, user-scalable=yes"/);
   assert.match(html, /min-width:\s*0/);
   assert.doesNotMatch(html, /#scaled-document \.docx, #scaled-document section\.docx \{[^}]*max-width:\s*100%\s*!important/s);
@@ -101,9 +107,11 @@ test('Android fit-width regression covers page bounds at both phone viewport siz
 
 test('Android regression fixture checks native zoom defaults, bounds and both horizontal edges', () => {
   assert.match(instrumentation, /nativeWebViewZoomSupportsHorizontalPanToBothEdges/);
-  assert.match(instrumentation, /Initial page zoom must be the 100% fit baseline/);
-  assert.match(instrumentation, /Opening the DOCX must not create horizontal overflow/);
-  assert.match(instrumentation, /balanced readable side margins/);
+  assert.match(instrumentation, /Initial page zoom must equal the measured fit baseline/);
+  assert.match(instrumentation, /Native page zoom is floored at 50% of fit/);
+  assert.match(instrumentation, /Native page zoom is capped at 500% of fit/);
+  assert.match(instrumentation, /Opening the DOCX must not clip the page horizontally/);
+  assert.match(instrumentation, /balanced 12px margins/);
   assert.match(instrumentation, /dispatchPan\(web/);
   assert.match(instrumentation, /Double-tap must keep the document point under the tap while zooming in/);
   assert.match(instrumentation, /Second double-tap must return to 100% fit width/);
@@ -119,8 +127,8 @@ test('Android regression fixture checks native zoom defaults, bounds and both ho
   assert.match(instrumentation, /far-right/);
   assert.match(instrumentation, /repeat\(4\)[\s\S]*?dispatchPinch\(web, SystemClock\.uptimeMillis\(\)/);
   assert.match(instrumentation, /repeat\(6\)[\s\S]*?dispatchPinch\(web, SystemClock\.uptimeMillis\(\), 160f/);
-  assert.match(instrumentation, /minZoom >= \.49f && minZoom <= \.52f/);
-  assert.match(instrumentation, /maxZoom <= 5\.02f && maxZoom >= 4\.9f/);
+  assert.match(instrumentation, /minZoom >= fitScale \* \.49f && minZoom <= fitScale \* \.52f/);
+  assert.match(instrumentation, /maxZoom <= fitScale \* 5\.02f && maxZoom >= fitScale \* 4\.9f/);
   assert.match(instrumentation, /readVisualViewportScale/);
   assert.match(instrumentation, /5\.0/);
 });
