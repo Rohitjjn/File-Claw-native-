@@ -214,7 +214,9 @@ class DocxPreviewInstrumentationTest {
                 zoomOutProgress += readVisualViewportScale(instrumentation, web)
             }
             val minZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native page zoom is floored at 50% of fit: $minZoom after $zoomOutProgress fit=$fitScale",
+            val pinchBounds = evaluateJson(instrumentation, web,
+                "(function(){return JSON.stringify({viewport:document.getElementById('docx-viewport').content,fit:DocxViewer.getState().fitScale,scale:visualViewport.scale});})()")
+            assertTrue("Native page zoom is floored at 50% of fit: $minZoom after $zoomOutProgress fit=$fitScale bounds=$pinchBounds",
                 minZoom >= fitScale * .49f && minZoom <= fitScale * .52f)
             repeat(4) {
                 instrumentation.runOnMainSync {
