@@ -22,19 +22,22 @@ fi
 
 if [ "$gradle_status" -ne 0 ]; then
   logcat_file="$RUNNER_TEMP/docx-android-logcat.txt"
-  adb logcat -d -v threadtime -t 1200 > "$logcat_file" 2>/dev/null || true
-  logcat_failures=$(grep -Ei 'FATAL EXCEPTION|Fatal signal|Process .* has died|crash_dump|AndroidRuntime|chromium|WebView.*(crash|error)|RENDERER_UNAVAILABLE' "$logcat_file" | tail -n 160 || true)
+  adb logcat -d -v threadtime -t 4000 > "$logcat_file" 2>/dev/null || true
+  logcat_failures=$(grep -Ei 'FATAL EXCEPTION|Fatal signal|Process .* has died|crash_dump|AndroidRuntime|chromium|WebView.*(crash|error)|RENDERER_UNAVAILABLE|AndroidJUnitRunner|TestRunner|am_instrument|ActivityManager|libc.*(fatal|signal)|instrumentation.*(crash|fail|exception)' "$logcat_file" | tail -n 240 || true)
   {
     echo "## Android instrumentation compiler/test failure details"
     echo '```text'
     grep -nE '(^e: |^w: |error:|FAILED|Failure|failed|Exception|AssertionError|Tests run:)' "$log_file" | tail -n 100 || tail -n 240 "$log_file"
     echo '```'
+    echo "## Emulator logcat diagnostics (filtered; last 240 matches)"
+    echo '```text'
     if [ -n "$logcat_failures" ]; then
-      echo "## Filtered emulator logcat diagnostics"
-      echo '```text'
       printf '%s\n' "$logcat_failures"
-      echo '```'
+    else
+      echo 'No filtered crash markers were found. Recent emulator logcat follows:'
+      tail -n 180 "$logcat_file"
     fi
+    echo '```'
   } >> "$GITHUB_STEP_SUMMARY"
   if [ -n "$logcat_failures" ]; then
     printf '%s\n' "$logcat_failures"
