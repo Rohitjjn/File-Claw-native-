@@ -21,6 +21,7 @@ internal fun WebView.installDocxGestureListeners(
     var consumeDoubleTapSequence = false
     var dispatchingSyntheticZoom = false
     var lastPinchDistance = 0f
+    var pinchOutSpacePrepared = false
     val detector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(event: MotionEvent): Boolean = true
 
@@ -54,8 +55,9 @@ internal fun WebView.installDocxGestureListeners(
                 val distance = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
                 if (event.actionMasked == MotionEvent.ACTION_MOVE && lastPinchDistance > 0f && distance < lastPinchDistance) {
                     val zoom = DocxZoomPolicy.fromWebViewScale(scale, resources.displayMetrics.density)
-                    if (zoom <= DocxZoomPolicy.DEFAULT_ZOOM + 0.02f) {
-                        zoomBy((distance / lastPinchDistance).coerceIn(0.75f, 0.98f))
+                    if (zoom <= 1.6f && !pinchOutSpacePrepared) {
+                        evaluateJavascript("(function(){var s=document.getElementById('scroller');if(s){s.classList.add('zoom-anchor-space');void s.offsetWidth;}})()", null)
+                        pinchOutSpacePrepared = true
                     }
                 }
                 lastPinchDistance = distance
@@ -63,6 +65,7 @@ internal fun WebView.installDocxGestureListeners(
                 val dx = event.getX(1) - event.getX(0)
                 val dy = event.getY(1) - event.getY(0)
                 lastPinchDistance = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                pinchOutSpacePrepared = false
             }
             if (event.actionMasked == MotionEvent.ACTION_POINTER_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
                 lastPinchDistance = 0f
