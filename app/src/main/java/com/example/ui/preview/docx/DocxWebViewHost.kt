@@ -87,7 +87,7 @@ internal fun DocxWebViewHost(
                     builtInZoomControls = true
                     displayZoomControls = false
                     useWideViewPort = true
-                    loadWithOverviewMode = true
+                    loadWithOverviewMode = false
                 }
                 installDocxGestureListeners(
                     isActive = alive::get,

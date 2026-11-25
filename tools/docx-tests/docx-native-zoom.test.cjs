@@ -22,7 +22,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(host, /builtInZoomControls\s*=\s*true/);
   assert.match(host, /displayZoomControls\s*=\s*false/);
   assert.match(host, /useWideViewPort\s*=\s*true/);
-  assert.match(host, /loadWithOverviewMode\s*=\s*true/);
+  assert.match(host, /loadWithOverviewMode\s*=\s*false/);
   assert.doesNotMatch(html, /body::after[^}]*200vw/);
   assert.match(host, /modifier = modifier\.fillMaxSize\(\)\.clipToBounds\(\)/);
   assert.match(client, /override fun onScaleChanged\(/);
