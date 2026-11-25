@@ -101,6 +101,15 @@ internal fun WebView.animateDocxDoubleTapZoom(
         val factor = target / current
         if (!factor.isFinite() || factor <= 0f || kotlin.math.abs(target - current) < 0.01f) return
 
+        if (target < current) {
+            zoomBy(factor)
+            evaluateJavascript(
+                "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var stable=0;var attempts=0;function restore(){if(!s||!v)return;if(Math.abs(v.scale-$target)>0.04){stable=0;if(attempts++<90){requestAnimationFrame(restore);return;}return;}if(stable++<2){requestAnimationFrame(restore);return;}s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}requestAnimationFrame(restore);})()",
+                null
+            )
+            return
+        }
+
         val initialLeft = metrics.optDouble("left", 0.0)
         val initialTop = metrics.optDouble("top", 0.0)
         val initialOffsetLeft = metrics.optDouble("offsetLeft", 0.0)
