@@ -99,25 +99,17 @@ internal fun WebView.animateDocxDoubleTapZoom(
             return
         }
 
-        val initialLeft = metrics.optDouble("left", 0.0)
-        val initialTop = metrics.optDouble("top", 0.0)
-        val initialOffsetLeft = metrics.optDouble("offsetLeft", 0.0)
-        val initialOffsetTop = metrics.optDouble("offsetTop", 0.0)
-        val initialDocLeft = metrics.optDouble("docLeft", 0.0)
-        val initialDocTop = metrics.optDouble("docTop", 0.0)
-        val anchorX = preservedAnchor?.first
-            ?: (initialLeft + initialOffsetLeft + tapX / (density * current) - initialDocLeft)
-        val anchorY = preservedAnchor?.second
-            ?: (initialTop + initialOffsetTop + tapY / (density * current) - initialDocTop)
+        val anchorX = preservedAnchor?.first ?: metrics.optDouble("anchorX", 0.0)
+        val anchorY = preservedAnchor?.second ?: metrics.optDouble("anchorY", 0.0)
         zoomBy(target)
         evaluateJavascript(
-            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var stable=0,lastScale=0,attempts=0;function apply(){if(!s||!d||!v)return;var scale=v.scale;s.scrollLeft=$anchorX-$tapX/($density*scale)-v.offsetLeft+d.offsetLeft;s.scrollTop=$anchorY-$tapY/($density*scale)-v.offsetTop+d.offsetTop;if(Math.abs(scale-$target)<=0.002&&Math.abs(scale-lastScale)<=0.0005){if(++stable>=5)return;}else{stable=0;}lastScale=scale;if(attempts++<180)requestAnimationFrame(apply);}requestAnimationFrame(apply);})()",
+            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var stable=0,lastScale=0,attempts=0;function apply(){if(!s||!d||!v)return;var scale=v.scale,r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();var x=$tapX/($density*scale)-(r.left-sr.left),y=$tapY/($density*scale)-(r.top-sr.top);s.scrollLeft+=$anchorX-x;s.scrollTop+=$anchorY-y;if(Math.abs(scale-$target)<=0.002&&Math.abs(scale-lastScale)<=0.0005){if(++stable>=5)return;}else{stable=0;}lastScale=scale;if(attempts++<180)requestAnimationFrame(apply);}requestAnimationFrame(apply);})()",
             null
         )
     }
 
     evaluateJavascript(
-        "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var state=window.DocxViewer.getState();var d=document.getElementById('scaled-document');return JSON.stringify({scale:v?v.scale:1,fitScale:state.fitScale,left:s?s.scrollLeft:0,top:s?s.scrollTop:0,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,docLeft:d?d.offsetLeft:0,docTop:d?d.offsetTop:0,anchorSpace:!!(s&&s.classList.contains('zoom-anchor-space'))});})()"
+        "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var state=window.DocxViewer.getState(),r=d&&d.getBoundingClientRect(),sr=s&&s.getBoundingClientRect(),scale=v?v.scale:1;return JSON.stringify({scale:scale,fitScale:state.fitScale,anchorX:r&&sr?$tapX/($density*scale)-(r.left-sr.left):0,anchorY:r&&sr?$tapY/($density*scale)-(r.top-sr.top):0,anchorSpace:!!(s&&s.classList.contains('zoom-anchor-space'))});})()"
     ) { result ->
         if (!isActive()) return@evaluateJavascript
         val metrics = parseMetrics(result) ?: return@evaluateJavascript
@@ -127,10 +119,8 @@ internal fun WebView.animateDocxDoubleTapZoom(
             ?: DocxZoomPolicy.DEFAULT_ZOOM
         val targetZoom = DocxZoomPolicy.doubleTapTarget(current / fitScale)
         if (targetZoom > DocxZoomPolicy.DEFAULT_ZOOM + 0.01f && !metrics.optBoolean("anchorSpace")) {
-            val anchorX = metrics.optDouble("left", 0.0) + metrics.optDouble("offsetLeft", 0.0) +
-                tapX / (density * current) - metrics.optDouble("docLeft", 0.0)
-            val anchorY = metrics.optDouble("top", 0.0) + metrics.optDouble("offsetTop", 0.0) +
-                tapY / (density * current) - metrics.optDouble("docTop", 0.0)
+            val anchorX = metrics.optDouble("anchorX", 0.0)
+            val anchorY = metrics.optDouble("anchorY", 0.0)
             evaluateJavascript(
                 "(function(){var s=document.getElementById('scroller');if(!s)return null;s.classList.add('zoom-anchor-space');void s.offsetWidth;var p=parseFloat(getComputedStyle(s).paddingLeft)||0;s.scrollLeft=Math.max(0,s.clientWidth/2-p);s.scrollTop=window.innerHeight/2;var v=window.visualViewport;return JSON.stringify({scale:v?v.scale:1,left:s.scrollLeft,top:s.scrollTop,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,anchorSpace:true});})()"
             ) { prepared ->
