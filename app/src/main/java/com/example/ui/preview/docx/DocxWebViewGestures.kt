@@ -111,7 +111,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
             ?: (initialTop + initialOffsetTop + tapY / (density * current) - initialDocTop)
         zoomBy(target)
         evaluateJavascript(
-            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var stable=0;var attempts=0;function apply(){if(!s||!d||!v)return;var scale=v.scale,settled=Math.abs(scale-$target)<=0.04;s.scrollLeft=$anchorX-$tapX/($density*scale)-v.offsetLeft+d.offsetLeft;s.scrollTop=$anchorY-$tapY/($density*scale)-v.offsetTop+d.offsetTop;if(settled){if(stable++>=2)return;}else{stable=0;}if(attempts++<90)requestAnimationFrame(apply);}requestAnimationFrame(apply);})()",
+            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var stable=0,lastScale=0,attempts=0;function apply(){if(!s||!d||!v)return;var scale=v.scale;s.scrollLeft=$anchorX-$tapX/($density*scale)-v.offsetLeft+d.offsetLeft;s.scrollTop=$anchorY-$tapY/($density*scale)-v.offsetTop+d.offsetTop;if(Math.abs(scale-$target)<=0.002&&Math.abs(scale-lastScale)<=0.0005){if(++stable>=5)return;}else{stable=0;}lastScale=scale;if(attempts++<180)requestAnimationFrame(apply);}requestAnimationFrame(apply);})()",
             null
         )
     }
