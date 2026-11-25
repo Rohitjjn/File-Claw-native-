@@ -93,6 +93,8 @@ internal fun WebView.animateDocxDoubleTapZoom(
         val target = DocxZoomPolicy.doubleTapTarget(current)
         val factor = target / current
         if (!factor.isFinite() || factor <= 0f || kotlin.math.abs(target - current) < 0.01f) return@evaluateJavascript
+        // Chromium's synthetic pinch recognizer applies only five-sixths of the gesture distance ratio.
+        val gestureFactor = factor * 1.2f
 
         // Wait until the second real tap has ended before passing a separate pinch stream to Chromium.
         postDelayed({
@@ -101,10 +103,10 @@ internal fun WebView.animateDocxDoubleTapZoom(
             val yClearance = minOf(tapY, height - tapY).coerceAtLeast(0f)
             val horizontalAxis = xClearance >= yClearance
             val clearance = maxOf(xClearance, yClearance)
-            val maximumStartDistance = 2f * clearance / factor
+            val maximumStartDistance = 2f * clearance / gestureFactor
             val startDistance = minOf(80f * density, maximumStartDistance * 0.9f)
                 .coerceAtLeast(2f * density)
-            val endDistance = startDistance * factor
+            val endDistance = startDistance * gestureFactor
             val properties = Array(2) { index ->
                 MotionEvent.PointerProperties().apply { id = index; toolType = MotionEvent.TOOL_TYPE_FINGER }
             }
