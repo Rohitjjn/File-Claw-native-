@@ -69,7 +69,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = false
+                settings.loadWithOverviewMode = true
                 installDocxGestureListeners(
                     onSingleTapConfirmed = { event ->
                         dispatchSingleTapIfNotLink(
@@ -113,14 +113,14 @@ class DocxPreviewInstrumentationTest {
                 assertTrue("Native pinch controls must be enabled", web.settings.builtInZoomControls)
                 assertTrue("Native zoom buttons must stay hidden", !web.settings.displayZoomControls)
                 assertTrue("Wide viewport support must be enabled", web.settings.useWideViewPort)
-                assertTrue("Overview mode must not override 100% initial zoom", !web.settings.loadWithOverviewMode)
+                assertTrue("Overview mode must be enabled for fit-to-width rendering", web.settings.loadWithOverviewMode)
                 val density = web.resources.displayMetrics.density
                 assertTrue("Native WebView starts at exactly 100%: ${web.scale / density}", kotlin.math.abs(web.scale / density - 1f) < .02f)
             }
             val initialScale = readVisualViewportScale(instrumentation, web)
             assertTrue("Initial page zoom must be the 100% fit baseline: $initialScale", kotlin.math.abs(initialScale - 1f) < .02f)
             val initialLayout = evaluateJson(instrumentation, web,
-                "(function(){var s=document.getElementById('scroller');var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');var r=p.getBoundingClientRect();return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,pageWidth:r.width,pageLeft:r.left,pageRight:r.right});})()")
+                "(function(){var s=document.getElementById('scroller');var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');var r=p.getBoundingClientRect();return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,pageWidth:r.width,pageHeight:r.height,pageLeft:r.left,pageRight:r.right,pageScrollWidth:p.scrollWidth,pageClientWidth:p.clientWidth});})()")
             assertTrue("DOCX page must fit within the viewport at 100%: $initialLayout",
                 initialLayout.optDouble("pageWidth") > 0 && initialLayout.optDouble("pageWidth") <= initialLayout.optDouble("clientWidth") + 1)
             val leftMargin = initialLayout.optDouble("pageLeft")
@@ -289,7 +289,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = false
+                settings.loadWithOverviewMode = true
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         signalAfterVisualState(web, ready)
@@ -317,22 +317,30 @@ class DocxPreviewInstrumentationTest {
             val layout = evaluateJson(
                 instrumentation,
                 web,
-                "(function(){var s=document.getElementById('scroller');var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');var r=p.getBoundingClientRect(),v=s.getBoundingClientRect();return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,pageWidth:r.width,pageLeft:r.left,pageRight:r.right,viewportLeft:v.left,viewportRight:v.right,scale:visualViewport.scale,paper:getComputedStyle(document.documentElement).getPropertyValue('--paper').trim(),pagePaper:getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim()});})()"
+                "(function(){var s=document.getElementById('scroller');var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');var r=p.getBoundingClientRect();return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,pageCardWidth:r.width,pageCardHeight:r.height,pageCardLeft:r.left,pageCardRight:r.right,pageClientWidth:p.clientWidth,pageScrollWidth:p.scrollWidth,viewportWidth:document.documentElement.clientWidth,scale:visualViewport.scale,paper:getComputedStyle(document.documentElement).getPropertyValue('--paper').trim(),pagePaper:getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim(),shadow:getComputedStyle(p).boxShadow});})()"
             )
-            val viewportLeft = layout.optDouble("viewportLeft")
-            val viewportRight = layout.optDouble("viewportRight")
-            val pageLeft = layout.optDouble("pageLeft")
-            val pageRight = layout.optDouble("pageRight")
-            assertTrue("${widthDp}x${heightDp} must start at fit width: $layout",
+            val pageLeft = layout.optDouble("pageCardLeft")
+            val pageRight = layout.optDouble("pageCardRight")
+            val viewportWidth = layout.optDouble("viewportWidth")
+            val leftMargin = pageLeft
+            val rightMargin = viewportWidth - pageRight
+            assertTrue("${widthDp}x${heightDp} must start at fit-to-width baseline: $layout",
                 kotlin.math.abs(layout.optDouble("scale") - 1.0) < .02)
             assertTrue("Light canvas must be light grey: $layout", layout.optString("paper") == "#f0f0f0")
             assertTrue("Document cards must be white: $layout", layout.optString("pagePaper") == "#ffffff")
-            assertTrue("${widthDp}x${heightDp} page must have positive width: $layout", layout.optDouble("pageWidth") > 0)
-            assertTrue("${widthDp}x${heightDp} page left edge is clipped: $layout", pageLeft >= viewportLeft - 1)
-            assertTrue("${widthDp}x${heightDp} page right edge is clipped: $layout", pageRight <= viewportRight + 1)
-            assertTrue("${widthDp}x${heightDp} page must be centered with readable margins: $layout",
-                pageLeft - viewportLeft >= 8 && viewportRight - pageRight >= 8 &&
-                    kotlin.math.abs((pageLeft - viewportLeft) - (viewportRight - pageRight)) < 3)
+            assertTrue("${widthDp}x${heightDp} page card must have positive dimensions: $layout",
+                layout.optDouble("pageCardWidth") > 0 && layout.optDouble("pageCardHeight") > 0)
+            assertTrue("${widthDp}x${heightDp} pageCardLeft must be >= 0: $layout", pageLeft >= 0)
+            assertTrue("${widthDp}x${heightDp} pageCardRight must be <= viewportWidth: $layout",
+                pageRight <= viewportWidth)
+            assertTrue("${widthDp}x${heightDp} page card must retain the A4 page ratio: $layout",
+                kotlin.math.abs(layout.optDouble("pageCardWidth") / layout.optDouble("pageCardHeight") - 11906.0 / 16838.0) < .03)
+            assertTrue("${widthDp}x${heightDp} page content must not be horizontally clipped: $layout",
+                layout.optDouble("pageScrollWidth") <= layout.optDouble("pageClientWidth") + 1)
+            assertTrue("${widthDp}x${heightDp} page card must have a soft shadow: $layout",
+                layout.optString("shadow") != "none")
+            assertTrue("${widthDp}x${heightDp} page card must have 12px outer margins: $layout",
+                kotlin.math.abs(leftMargin - 12.0) <= 2 && kotlin.math.abs(rightMargin - 12.0) <= 2)
             assertTrue("${widthDp}x${heightDp} must not create horizontal overflow: $layout",
                 layout.optDouble("scrollWidth") <= layout.optDouble("clientWidth") + 1)
         } finally {
@@ -485,7 +493,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = false
+                settings.loadWithOverviewMode = true
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         val metrics = JSONObject(payload)
@@ -550,7 +558,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = false
+                settings.loadWithOverviewMode = true
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) { ready.countDown() }
                     @JavascriptInterface fun onFailure(payload: String) { error.set(payload); failed.countDown() }
@@ -607,7 +615,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = false
+                settings.loadWithOverviewMode = true
                 setBackgroundColor(Color.rgb(240, 240, 240))
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
@@ -729,7 +737,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = false
+                settings.loadWithOverviewMode = true
                 setBackgroundColor(Color.rgb(240, 240, 240))
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
@@ -899,7 +907,7 @@ class DocxPreviewInstrumentationTest {
             <w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tr><w:tc><w:p><w:r><w:t>visible table cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
             <w:p><w:r><w:drawing><wp:inline><wp:extent cx="914400" cy="914400"/><wp:docPr id="1" name="fixture image"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="fixture.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
             <w:p><w:r><w:br w:type="page"/><w:t>Second page marker</w:t></w:r></w:p>
-            <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+            <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
             </w:body></w:document>""".trimIndent()
         val out = ByteArrayOutputStream()
         ZipOutputStream(out).use { zip ->

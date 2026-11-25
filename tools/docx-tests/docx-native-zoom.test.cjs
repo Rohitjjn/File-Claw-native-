@@ -21,7 +21,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(host, /builtInZoomControls\s*=\s*true/);
   assert.match(host, /displayZoomControls\s*=\s*false/);
   assert.match(host, /useWideViewPort\s*=\s*true/);
-  assert.match(host, /loadWithOverviewMode\s*=\s*false/);
+  assert.match(host, /loadWithOverviewMode\s*=\s*true/);
   assert.doesNotMatch(html, /body::after[^}]*200vw/);
   assert.match(host, /modifier = modifier\.fillMaxSize\(\)\.clipToBounds\(\)/);
   assert.match(client, /override fun onScaleChanged\(/);
@@ -54,7 +54,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.doesNotMatch(gestures, /detectTransformGestures/);
   assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, minimum-scale=0\.5, maximum-scale=5\.0, user-scalable=yes"/);
   assert.match(html, /min-width:\s*0/);
-  assert.match(html, /#scaled-document \.docx, #scaled-document section\.docx \{[^}]*max-width:\s*100%\s*!important/s);
+  assert.doesNotMatch(html, /#scaled-document \.docx, #scaled-document section\.docx \{[^}]*max-width:\s*100%\s*!important/s);
   assert.match(html, /#scaled-document \{[^}]*width:\s*100%/);
   assert.match(html, /#scaled-document a \{[^}]*pointer-events:\s*auto/s);
   assert.match(html, /@media print\s*\{\s*html, body\s*\{[^}]*min-width:\s*0/s);
@@ -77,6 +77,7 @@ test('DOCX loading UI is a white surface with only a black spinner and fixed lab
 });
 
 test('DOCX light mode uses a light-grey canvas and white document cards', () => {
+  assert.match(html, /#scroller\s*\{[^}]*padding:\s*12px 12px 28px/i);
   assert.match(html, /--paper:\s*#f0f0f0/i);
   assert.match(html, /--page-paper:\s*#ffffff/i);
   assert.match(screen, /lightCanvas = Color\(0xFFF0F0F0\)/);
@@ -91,8 +92,10 @@ test('Android fit-width regression covers page bounds at both phone viewport siz
   assert.match(instrumentation, /412x915/);
   assert.match(instrumentation, /pageLeft/);
   assert.match(instrumentation, /pageRight/);
-  assert.match(instrumentation, /pageRight <= viewportRight \+ 1/);
-  assert.match(instrumentation, /pageLeft >= viewportLeft - 1/);
+  assert.match(instrumentation, /pageCardLeft must be >= 0/);
+  assert.match(instrumentation, /pageCardRight must be <= viewportWidth/);
+  assert.match(instrumentation, /page card must retain the A4 page ratio/);
+  assert.match(instrumentation, /page card must have 12px outer margins/);
   assert.match(instrumentation, /scrollWidth[\s\S]*?clientWidth/);
 });
 
