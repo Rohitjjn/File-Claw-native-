@@ -86,7 +86,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
     ) {
         if (!isActive()) return
         if (cancelPreviousCorrection) {
-            evaluateJavascript("(function(){if(window.__docxAnchorTimer){clearTimeout(window.__docxAnchorTimer);window.__docxAnchorTimer=0;}})()") {
+            evaluateJavascript("(function(){if(window.__docxAnchorFrame){cancelAnimationFrame(window.__docxAnchorFrame);window.__docxAnchorFrame=0;}})()") {
                 if (isActive()) startZoom(metrics, preservedAnchor, cancelPreviousCorrection = false)
             }
             return
@@ -105,9 +105,12 @@ internal fun WebView.animateDocxDoubleTapZoom(
             null
         )
         if (target < current) {
-            evaluateJavascript("window.DocxViewer.setNativeScale($target)", null)
+            // Keep Chromium's native page-scale as the only zoom owner. Updating
+            // viewport meta here races WebView's zoom compositor and can leave
+            // the old overzoomed tile layer visible over the fit-width frame.
+            zoomBy(target / current)
             evaluateJavascript(
-                "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var stable=0;var attempts=0;function restore(){if(!s||!v)return;if(Math.abs(v.scale-$target)>0.04){stable=0;if(attempts++<90){requestAnimationFrame(restore);return;}return;}if(stable++<2){requestAnimationFrame(restore);return;}s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}requestAnimationFrame(restore);})()",
+                "(function(){var s=document.getElementById('scroller'),v=window.visualViewport;if(!s||!v)return;var stable=0,attempts=0,last=NaN;function restore(){var scale=v.scale;if(Math.abs(scale-$target)>0.04){stable=0;last=scale;if(attempts++<120){requestAnimationFrame(restore);return;}return;}if(Math.abs(scale-last)<0.002)stable++;else stable=0;last=scale;if(stable<3&&attempts++<120){requestAnimationFrame(restore);return;}s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}requestAnimationFrame(restore);})()",
                 null
             )
             return
@@ -115,9 +118,9 @@ internal fun WebView.animateDocxDoubleTapZoom(
 
         val anchorX = preservedAnchor?.first ?: metrics.optDouble("anchorX", 0.0)
         val anchorY = preservedAnchor?.second ?: metrics.optDouble("anchorY", 0.0)
-        zoomBy(target)
+        zoomBy(target / current)
         evaluateJavascript(
-            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var attempts=0;function apply(){if(!s||!d||!v)return;var scale=v.scale,r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();var x=$tapX/($density*scale)-(r.left-sr.left),y=$tapY/($density*scale)-(r.top-sr.top);s.scrollLeft+=$anchorX-x;s.scrollTop+=$anchorY-y;if(attempts++<60)window.__docxAnchorTimer=setTimeout(apply,50);else window.__docxAnchorTimer=0;}window.__docxAnchorTimer=setTimeout(apply,50);})()",
+            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;if(!s||!d||!v)return;var attempts=0,stable=0,lastScale=NaN,lastX=NaN,lastY=NaN;function apply(){if(!s.isConnected||!d.isConnected)return;var scale=v.scale,r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();var x=$tapX/($density*scale)-(r.left-sr.left),y=$tapY/($density*scale)-(r.top-sr.top);if(Math.abs(scale-lastScale)<0.002&&Math.abs(x-lastX)<0.5&&Math.abs(y-lastY)<0.5)stable++;else stable=0;lastScale=scale;lastX=x;lastY=y;if(stable<4&&attempts++<120){window.__docxAnchorFrame=requestAnimationFrame(apply);return;}s.scrollLeft+=$anchorX-x;s.scrollTop+=$anchorY-y;window.__docxAnchorFrame=0;}window.__docxAnchorFrame=requestAnimationFrame(apply);})()",
             null
         )
     }

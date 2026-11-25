@@ -347,14 +347,6 @@
             if (page) els.scroller.scrollTo({ top: els.scroller.scrollTop + page.getBoundingClientRect().top - els.scroller.getBoundingClientRect().top, behavior: 'smooth' });
         },
         clearSearch() { clearHighlights(); send('onSearchResults', { total: 0, current: 0, truncated: false }); },
-        setNativeScale(scale) {
-            if (printMode || !Number.isFinite(scale) || scale <= 0) return false;
-            const page = els.document && els.document.querySelector('.docx, section.docx');
-            const fit = page && window.DocxViewportFit.calculate(layoutViewportWidth(), page.offsetWidth, 12);
-            if (!fit) return false;
-            applyViewportScale(Math.max(fit.minScale, Math.min(fit.maxScale, scale)), fit);
-            return true;
-        },
         setTheme(dark, paper, pagePaper, ink, edge) {
             const root = document.documentElement;
             root.classList.toggle('dark', !!dark);

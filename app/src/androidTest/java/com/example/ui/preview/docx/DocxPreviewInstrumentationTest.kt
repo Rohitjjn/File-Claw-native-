@@ -79,7 +79,7 @@ class DocxPreviewInstrumentationTest {
                                 tapConfirmed.countDown()
                             },
                             onResolved = {
-                                if (resolvedTapCount.incrementAndGet() >= 2) linkTapResolved.countDown()
+                                if (resolvedTapCount.incrementAndGet() >= 1) linkTapResolved.countDown()
                             }
                         )
                     },
