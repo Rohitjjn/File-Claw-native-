@@ -105,7 +105,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
             null
         )
         if (target < current) {
-            zoomOut()
+            evaluateJavascript("window.DocxViewer.setNativeScale($target)", null)
             evaluateJavascript(
                 "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var stable=0;var attempts=0;function restore(){if(!s||!v)return;if(Math.abs(v.scale-$target)>0.04){stable=0;if(attempts++<90){requestAnimationFrame(restore);return;}return;}if(stable++<2){requestAnimationFrame(restore);return;}s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}requestAnimationFrame(restore);})()",
                 null
