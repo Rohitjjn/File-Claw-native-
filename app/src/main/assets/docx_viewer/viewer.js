@@ -88,7 +88,6 @@
         const metrics = visibleLayoutMetrics();
         if (!window.DocxRenderReadiness.hasVisibleLayout(metrics) || !visibleContent()) return;
         readySent = true;
-        window.__docxNativeFitScale = window.visualViewport ? window.visualViewport.scale : fitScale;
         status('');
         send('onDocumentVisuallyRendered', {
             generation: id,

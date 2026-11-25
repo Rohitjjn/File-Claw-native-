@@ -111,6 +111,11 @@ internal fun DocxWebViewHost(
                                 object : WebView.VisualStateCallback() {
                                     override fun onComplete(requestId: Long) {
                                         if (alive.get() && id == generation) {
+                                            val nativeFitScale = web.scale / web.resources.displayMetrics.density
+                                            web.evaluateJavascript(
+                                                "(function(){if(!window.__docxNativeFitScale)window.__docxNativeFitScale=$nativeFitScale;})()",
+                                                null
+                                            )
                                             viewerReady = true
                                             onZoom(com.example.core.format.DocxZoomPolicy.fromWebViewScale(
                                                 web.scale, web.resources.displayMetrics.density, renderedFitScale
