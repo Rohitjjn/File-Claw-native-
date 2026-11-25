@@ -105,7 +105,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
             null
         )
         evaluateJavascript(
-            "(function(){window.__docxDoubleTapZoomActive=true;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=setTimeout(function(){window.__docxDoubleTapZoomActive=false;window.__docxDoubleTapReleaseTimer=0;},5000);})()",
+            "(function(){window.__docxDoubleTapZoomActive=true;window.__docxZoomBoundsSynced=false;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=setTimeout(function(){window.__docxDoubleTapZoomActive=false;window.__docxDoubleTapReleaseTimer=0;},5000);})()",
             null
         )
         if (target < current) {
@@ -114,7 +114,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
             // the old overzoomed tile layer visible over the fit-width frame.
             zoomBy(target / current)
             evaluateJavascript(
-                "(function(){var s=document.getElementById('scroller'),v=window.visualViewport;if(!s||!v)return;var stable=0,attempts=0,last=NaN;function restore(){var scale=v.scale;if(Math.abs(scale-$target)>0.01){stable=0;last=scale;if(attempts++<120){requestAnimationFrame(restore);return;}return;}if(Math.abs(scale-last)<0.002)stable++;else stable=0;last=scale;if(stable<3&&attempts++<120){requestAnimationFrame(restore);return;}s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;window.__docxDoubleTapZoomActive=false;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=0;}requestAnimationFrame(restore);})()",
+                "(function(){var s=document.getElementById('scroller'),v=window.visualViewport;if(!s||!v)return;var stable=0,attempts=0,last=NaN;function restore(){var scale=v.scale;if(Math.abs(scale-$target)>0.01){stable=0;last=scale;if(attempts++<120){requestAnimationFrame(restore);return;}return;}if(Math.abs(scale-last)<0.002)stable++;else stable=0;last=scale;if(stable<3&&attempts++<120){requestAnimationFrame(restore);return;}if(!window.__docxZoomBoundsSynced){window.__docxZoomBoundsSynced=!!window.DocxViewer.syncNativeScaleBounds($target);stable=0;last=NaN;requestAnimationFrame(restore);return;}s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;window.__docxDoubleTapZoomActive=false;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=0;}requestAnimationFrame(restore);})()",
                 null
             )
             return
