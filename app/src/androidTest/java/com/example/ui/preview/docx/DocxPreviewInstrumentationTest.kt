@@ -432,7 +432,9 @@ class DocxPreviewInstrumentationTest {
             Thread.sleep(50)
             actual = readVisualViewportScale(instrumentation, web)
         }
-        assertTrue("Expected native zoom $expected, observed $actual", kotlin.math.abs(actual - expected) < .08f)
+        val state = evaluateJson(instrumentation, web,
+            "(function(){var s=window.DocxViewer.getState();return JSON.stringify({scale:visualViewport.scale,fitScale:s.fitScale,nativeFitScale:s.nativeFitScale,request:window.__docxZoomRequest||null,scrollLeft:document.getElementById('scroller').scrollLeft,scrollTop:document.getElementById('scroller').scrollTop});})()")
+        assertTrue("Expected native zoom $expected, observed $actual, state=$state", kotlin.math.abs(actual - expected) < .08f)
     }
 
     private fun dispatchPinch(web: WebView, downTime: Long, startDistance: Float, endDistance: Float) {

@@ -100,6 +100,10 @@ internal fun WebView.animateDocxDoubleTapZoom(
         val target = fitScale * targetZoom
         if (!target.isFinite() || target <= 0f || kotlin.math.abs(target - current) < 0.01f) return
 
+        evaluateJavascript(
+            "window.__docxZoomRequest={current:$current,fitScale:$fitScale,targetZoom:$targetZoom,target:$target};",
+            null
+        )
         if (target < current) {
             zoomBy(target)
             evaluateJavascript(
