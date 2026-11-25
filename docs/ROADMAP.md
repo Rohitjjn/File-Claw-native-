@@ -4,10 +4,9 @@ This roadmap reflects the inspected checkout, not a promise that every historica
 
 ## Immediate sequence
 
-1. **Audit and workflow setup (current task):** record baseline/toolchain limits, adopt project instructions, correct high-impact documentation conflicts and create an evidence-based issue register. No application code changes.
-2. **DOCX investigation (next phase, awaiting owner review):** reproduce the DOCX findings, validate local/WebView/print/search/fallback paths, prepare a detailed defect and test plan. No fixes until explicit product-owner approval.
-3. **Approved DOCX fixes only:** implement narrowly, regression-test and device-test; update findings with exact evidence. PDF and other formats remain untouched unless a shared cause is proven and scope is explicitly expanded.
-4. **Owner review:** stop after DOCX verification and wait for approval before selecting the next file format.
+1. **DOCX fit-width verification (active):** the initial WebView fit-width geometry passed in a prior emulator run, but the latest exact-SHA workflow failed the native 50% pinch-floor assertion. The working tree now adds explicit page-edge/overflow assertions at 360×800 and 412×915 and changes the light reader surface to a grey canvas with white page cards; these new Android assertions have not yet run. Keep the viewer incomplete until all regression checks pass and the exact pushed SHA has a fully green workflow. See `PROJECT_STATUS.md` and `ISSUE_REGISTER.md` for current evidence; do not infer device behavior from source or syntax checks.
+2. **Owner review:** present the complete DOCX result and limitations. Do not call the DOCX task complete until its agreed verification gates pass.
+3. **Other formats:** remain out of scope unless separately approved. Do not change PDF or other formats as part of DOCX remediation.
 
 ## Historical milestones
 

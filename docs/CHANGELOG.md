@@ -1,9 +1,10 @@
 # Changelog
 
-## [Unreleased] 2026-11-25 — DOCX initial fit-width correction (owner device unverified)
+## [Unreleased] 2026-11-21 — DOCX initial fit-width follow-up (owner device unverified)
 
-- Owner screenshots show the current DOCX first page clipped at the right edge versus the requested centered fit-width view. Production WebView setup now explicitly calls `setInitialScale(100)`; its Android fixture mirrors the setting, while the existing geometry assertions check viewport scale, page width, margins, and horizontal overflow.
-- Removed the experimental hidden 200vw pseudo-element. Local Node regression suite passes 23/23, viewer JavaScript syntax checks pass, and `git diff --check` passes. Exact-SHA CI [45560939950](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45560939950) compiled and built the debug APK; instrumentation passed the initial-scale, fit-width geometry, and double-tap assertions before failing later at the separate 50% native pinch floor (observed 1.0). Physical-device/owner-file confirmation remains pending.
+- Owner screenshots show the DOCX first page clipped at the right edge versus the requested centered fit-width view. Although the viewport already requests `initial-scale=1.0`, an earlier implementation explicitly called `setInitialScale(100)`; its emulator fit-geometry checks passed but the same run failed at the independent native 50% pinch floor. The current working tree removes that override as a hypothesis to re-test, retaining viewport metadata. This change is not yet Android-verified. The light reader surface now uses a `#f0f0f0` canvas and `#ffffff` page cards; dark colors are unchanged.
+- Added an Android WebView regression that opens the bundled fixture at both 360×800 and 412×915 and asserts 100% visual viewport scale, page edges within the viewport, balanced margins, and no horizontal overflow. The updated Android test has not yet run in this sandbox (Java/JDK unavailable). The local Node suite was run after these edits: 25/25 pass; viewer JS syntax checks (`viewer.js`, `search.js`, `render-readiness.js`) and `git diff --check` pass.
+- Latest known exact-SHA CI [45561957804](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45561957804) is not green: Android instrumentation failed the native 50% pinch-floor check (observed `1.0`) and the Unicode/table/search test failed without XML detail. Earlier run [45560939950](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45560939950) passed initial fit geometry then failed at the same pinch floor. No green exact-SHA workflow or verified APK artifact exists for the current working tree. Physical-device/owner-file confirmation remains pending.
 
 ## [Unreleased] 2026-11-21 — DOCX rebuild verification checkpoint
 

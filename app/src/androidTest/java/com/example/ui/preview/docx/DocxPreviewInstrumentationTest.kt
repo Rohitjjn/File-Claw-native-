@@ -70,7 +70,6 @@ class DocxPreviewInstrumentationTest {
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
-                setInitialScale(100)
                 installDocxGestureListeners(
                     onSingleTapConfirmed = { event ->
                         dispatchSingleTapIfNotLink(
@@ -255,6 +254,87 @@ class DocxPreviewInstrumentationTest {
                 draggedTowardLeftTop.optDouble("left") < draggedTowardRightBottom.optDouble("left") - 1 &&
                     draggedTowardLeftTop.optDouble("top") < draggedTowardRightBottom.optDouble("top") - 1)
 
+        } finally {
+            destroyWebView(instrumentation, activity, web)
+        }
+    }
+
+    @Test fun initialPageFitsAt360x800And412x915() {
+        verifyInitialPageFitsViewport(widthDp = 360, heightDp = 800)
+        verifyInitialPageFitsViewport(widthDp = 412, heightDp = 915)
+    }
+
+    private fun verifyInitialPageFitsViewport(widthDp: Int, heightDp: Int) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val activity = launchTestActivity(instrumentation)
+        val fixture = fixtureDocx()
+        val ready = CountDownLatch(1)
+        val failure = AtomicReference<String?>(null)
+        lateinit var web: WebView
+        instrumentation.runOnMainSync {
+            val loader = WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(activity))
+                .addPathHandler("/docx-src/", object : WebViewAssetLoader.PathHandler {
+                    override fun handle(path: String): WebResourceResponse? = if (path == "document.docx")
+                        WebResourceResponse(
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document", null,
+                            200, "OK", mapOf("Content-Length" to fixture.size.toString()), ByteArrayInputStream(fixture)
+                        ) else null
+                }).build()
+            web = WebView(activity).apply {
+                settings.javaScriptEnabled = true
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                settings.setSupportZoom(true)
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = false
+                addJavascriptInterface(object {
+                    @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
+                        signalAfterVisualState(web, ready)
+                    }
+                    @JavascriptInterface fun onFailure(payload: String) {
+                        failure.set(payload)
+                        ready.countDown()
+                    }
+                }, "DocxBridge")
+                webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
+                        request?.url?.let(loader::shouldInterceptRequest)
+                    override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean =
+                        reportRendererGone(failure, ready, detail)
+                }
+                val density = resources.displayMetrics.density
+                attachWebView(activity, this, (widthDp * density).toInt(), (heightDp * density).toInt())
+                loadUrl("https://appassets.androidplatform.net/assets/docx_viewer/index.html?generation=41&file=" +
+                    android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
+            }
+        }
+        try {
+            assertTrue("${widthDp}x${heightDp} render timed out: ${failure.get()}", ready.await(45, TimeUnit.SECONDS))
+            assertTrue("${widthDp}x${heightDp} renderer failed: ${failure.get()}", failure.get() == null)
+            val layout = evaluateJson(
+                instrumentation,
+                web,
+                "(function(){var s=document.getElementById('scroller');var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');var r=p.getBoundingClientRect(),v=s.getBoundingClientRect();return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,pageWidth:r.width,pageLeft:r.left,pageRight:r.right,viewportLeft:v.left,viewportRight:v.right,scale:visualViewport.scale,paper:getComputedStyle(document.documentElement).getPropertyValue('--paper').trim(),pagePaper:getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim()});})()"
+            )
+            val viewportLeft = layout.optDouble("viewportLeft")
+            val viewportRight = layout.optDouble("viewportRight")
+            val pageLeft = layout.optDouble("pageLeft")
+            val pageRight = layout.optDouble("pageRight")
+            assertTrue("${widthDp}x${heightDp} must start at fit width: $layout",
+                kotlin.math.abs(layout.optDouble("scale") - 1.0) < .02)
+            assertTrue("Light canvas must be light grey: $layout", layout.optString("paper") == "#f0f0f0")
+            assertTrue("Document cards must be white: $layout", layout.optString("pagePaper") == "#ffffff")
+            assertTrue("${widthDp}x${heightDp} page must have positive width: $layout", layout.optDouble("pageWidth") > 0)
+            assertTrue("${widthDp}x${heightDp} page left edge is clipped: $layout", pageLeft >= viewportLeft - 1)
+            assertTrue("${widthDp}x${heightDp} page right edge is clipped: $layout", pageRight <= viewportRight + 1)
+            assertTrue("${widthDp}x${heightDp} page must be centered with readable margins: $layout",
+                pageLeft - viewportLeft >= 8 && viewportRight - pageRight >= 8 &&
+                    kotlin.math.abs((pageLeft - viewportLeft) - (viewportRight - pageRight)) < 3)
+            assertTrue("${widthDp}x${heightDp} must not create horizontal overflow: $layout",
+                layout.optDouble("scrollWidth") <= layout.optDouble("clientWidth") + 1)
         } finally {
             destroyWebView(instrumentation, activity, web)
         }
@@ -528,7 +608,7 @@ class DocxPreviewInstrumentationTest {
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
-                setBackgroundColor(Color.rgb(250, 249, 245))
+                setBackgroundColor(Color.rgb(240, 240, 240))
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         result.set(JSONObject(payload))
@@ -563,8 +643,10 @@ class DocxPreviewInstrumentationTest {
             val captured = Bitmap.createBitmap(web.width, web.height, Bitmap.Config.ARGB_8888)
             instrumentation.runOnMainSync { web.draw(android.graphics.Canvas(captured)) }
             var changedPixels = 0
+            val expectedCanvas = Color.rgb(240, 240, 240)
             for (y in 0 until captured.height step 3) for (x in 0 until captured.width step 3) {
-                if (Color.rgb(Color.red(captured.getPixel(x, y)), Color.green(captured.getPixel(x, y)), Color.blue(captured.getPixel(x, y))) != Color.rgb(250, 249, 245)) changedPixels++
+                val pixel = captured.getPixel(x, y)
+                if (Color.rgb(Color.red(pixel), Color.green(pixel), Color.blue(pixel)) != expectedCanvas) changedPixels++
             }
             captured.recycle()
             assertTrue("Rendered WebView pixels are indistinguishable from the blank background", changedPixels > 50)
@@ -603,10 +685,11 @@ class DocxPreviewInstrumentationTest {
                 val bitmap = Bitmap.createBitmap(web.width, web.height, Bitmap.Config.ARGB_8888)
                 web.draw(android.graphics.Canvas(bitmap))
                 saveScreenshot(context, bitmap, "docx-360x800.png")
-                val bg = Color.rgb(250, 249, 245)
+                val background = Color.rgb(240, 240, 240)
                 var changed = 0
                 for (y in 0 until bitmap.height step 3) for (x in 0 until bitmap.width step 3) {
-                    if (Color.rgb(Color.red(bitmap.getPixel(x, y)), Color.green(bitmap.getPixel(x, y)), Color.blue(bitmap.getPixel(x, y))) != bg) changed++
+                    val pixel = bitmap.getPixel(x, y)
+                    if (Color.rgb(Color.red(pixel), Color.green(pixel), Color.blue(pixel)) != background) changed++
                 }
                 bitmap.recycle()
                 assertTrue("Rendered WebView pixels are indistinguishable from the blank background", changed > 50)
@@ -647,7 +730,7 @@ class DocxPreviewInstrumentationTest {
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
-                setBackgroundColor(Color.rgb(250, 249, 245))
+                setBackgroundColor(Color.rgb(240, 240, 240))
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         readiness.set(JSONObject(payload))
@@ -684,9 +767,10 @@ class DocxPreviewInstrumentationTest {
                 web.draw(android.graphics.Canvas(bitmap))
                 saveScreenshot(context, bitmap, "docx-412x915.png")
                 var differentPixels = 0
+                val expectedCanvas = Color.rgb(240, 240, 240)
                 for (y in 0 until bitmap.height step 3) for (x in 0 until bitmap.width step 3) {
                     val pixel = bitmap.getPixel(x, y)
-                    if (Color.red(pixel) !in 245..255 || Color.green(pixel) !in 244..255 || Color.blue(pixel) !in 240..255) {
+                    if (Color.rgb(Color.red(pixel), Color.green(pixel), Color.blue(pixel)) != expectedCanvas) {
                         differentPixels++
                     }
                 }

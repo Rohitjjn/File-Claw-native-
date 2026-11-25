@@ -22,7 +22,6 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(host, /displayZoomControls\s*=\s*false/);
   assert.match(host, /useWideViewPort\s*=\s*true/);
   assert.match(host, /loadWithOverviewMode\s*=\s*false/);
-  assert.match(host, /setInitialScale\(100\)/);
   assert.doesNotMatch(html, /body::after[^}]*200vw/);
   assert.match(host, /modifier = modifier\.fillMaxSize\(\)\.clipToBounds\(\)/);
   assert.match(client, /override fun onScaleChanged\(/);
@@ -75,6 +74,26 @@ test('DOCX loading UI is a white surface with only a black spinner and fixed lab
   assert.match(loadingInstrumentation, /Color\.White/);
   assert.match(loadingInstrumentation, /fetchSemanticsNodes\(\)\.size/);
   assert.doesNotMatch(screen, /MenuBook|Loading Word document|LinearProgressIndicator/);
+});
+
+test('DOCX light mode uses a light-grey canvas and white document cards', () => {
+  assert.match(html, /--paper:\s*#f0f0f0/i);
+  assert.match(html, /--page-paper:\s*#ffffff/i);
+  assert.match(screen, /lightCanvas = Color\(0xFFF0F0F0\)/);
+  assert.match(screen, /lightPage = Color\.White/);
+  assert.match(screen, /paper = if \(isNightMode\) ClaudeOnyx else lightCanvas/);
+  assert.match(screen, /pagePaper = if \(isNightMode\) ClaudeDarkSurface else lightPage/);
+});
+
+test('Android fit-width regression covers page bounds at both phone viewport sizes', () => {
+  assert.match(instrumentation, /initialPageFitsAt360x800And412x915/);
+  assert.match(instrumentation, /360x800/);
+  assert.match(instrumentation, /412x915/);
+  assert.match(instrumentation, /pageLeft/);
+  assert.match(instrumentation, /pageRight/);
+  assert.match(instrumentation, /pageRight <= viewportRight \+ 1/);
+  assert.match(instrumentation, /pageLeft >= viewportLeft - 1/);
+  assert.match(instrumentation, /scrollWidth[\s\S]*?clientWidth/);
 });
 
 test('Android regression fixture checks native zoom defaults, bounds and both horizontal edges', () => {

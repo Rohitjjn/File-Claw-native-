@@ -108,8 +108,10 @@ fun DocxPreviewScreen(
         }
     }
 
-    val paper = if (isNightMode) ClaudeOnyx else ClaudeAlabaster
-    val pagePaper = if (isNightMode) ClaudeDarkSurface else ClaudeWhite
+    val lightCanvas = Color(0xFFF0F0F0)
+    val lightPage = Color.White
+    val paper = if (isNightMode) ClaudeOnyx else lightCanvas
+    val pagePaper = if (isNightMode) ClaudeDarkSurface else lightPage
     val ink = if (isNightMode) ClaudeDarkText else ClaudeCharcoal
     val edge = if (isNightMode) ClaudeDarkBorder else ClaudeSandBorder
 
