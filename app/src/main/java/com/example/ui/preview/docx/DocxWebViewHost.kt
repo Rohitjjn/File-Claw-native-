@@ -94,8 +94,8 @@ internal fun DocxWebViewHost(
                     onSingleTapConfirmed = { event ->
                         dispatchSingleTapIfNotLink(event, onTap, isActive = alive::get)
                     },
-                    onDoubleTap = { event, dispatchSyntheticEvent ->
-                        animateDocxDoubleTapZoom(event, alive::get, dispatchSyntheticEvent)
+                    onDoubleTap = { event ->
+                        animateDocxDoubleTapZoom(event, alive::get)
                     }
                 )
                 var visualStateRequestId = 0L
