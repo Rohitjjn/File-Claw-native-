@@ -180,7 +180,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
                             val scaleY = tapY / (density * target)
                             "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var stable=0;var attempts=0;function apply(){if(!s||!v)return;var settled=Math.abs(v.scale-$target)<=0.04;if(!settled){stable=0;if(attempts++<40){requestAnimationFrame(apply);return;}return;}if(stable++<2){requestAnimationFrame(apply);return;}s.scrollLeft=$anchorX-$scaleX-v.offsetLeft;s.scrollTop=$anchorY-$scaleY-v.offsetTop;}requestAnimationFrame(apply);})()"
                         } else {
-                            "(function(){var s=document.getElementById('scroller');if(s){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}})()"
+                            "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var attempts=0;function restore(){if(!s||!v)return;if(Math.abs(v.scale-1)>0.04&&attempts++<90){requestAnimationFrame(restore);return;}if(Math.abs(v.scale-1)<=0.04){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}}requestAnimationFrame(restore);})()"
                         }
                         evaluateJavascript(script, null)
                     }
