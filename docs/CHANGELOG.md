@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased] 2026-11-25 — DOCX initial fit-width correction (not Android-verified)
+
+- Owner screenshots show the current DOCX first page clipped at the right edge versus the requested centered fit-width view. Production WebView setup now explicitly calls `setInitialScale(100)`; its Android fixture mirrors the setting, while the existing geometry assertions check viewport scale, page width, margins, and horizontal overflow.
+- Removed the experimental hidden 200vw pseudo-element. Local Node regression suite passes 23/23, viewer JavaScript syntax checks pass, and `git diff --check` passes. Android compilation/instrumentation and owner-device confirmation have not yet run for this change.
+
 ## [Unreleased] 2026-11-21 — DOCX rebuild verification checkpoint
 
 - Added the stand-alone `ui/preview/docx/` preview path and locally bundled renderer, safe stream/cache, visual-ready callback, search/navigation, info, retry/recovery, and print integration. Retained the existing PrintManager path and shared PPTX JSZip asset; other viewer routes remain present in split source files.

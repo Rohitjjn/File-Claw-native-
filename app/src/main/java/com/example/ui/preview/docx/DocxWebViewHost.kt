@@ -87,6 +87,9 @@ internal fun DocxWebViewHost(
                     useWideViewPort = true
                     loadWithOverviewMode = false
                 }
+                // Establish a predictable fit-width baseline even when Chromium would otherwise
+                // infer an initial scale from the DOCX page's fixed-size OOXML geometry.
+                setInitialScale(100)
                 installDocxGestureListeners(
                     isActive = alive::get,
                     onSingleTapConfirmed = { event ->

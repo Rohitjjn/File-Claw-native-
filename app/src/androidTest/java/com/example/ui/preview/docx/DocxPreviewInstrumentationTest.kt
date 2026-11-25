@@ -70,6 +70,7 @@ class DocxPreviewInstrumentationTest {
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
+                setInitialScale(100)
                 installDocxGestureListeners(
                     onSingleTapConfirmed = { event ->
                         dispatchSingleTapIfNotLink(
