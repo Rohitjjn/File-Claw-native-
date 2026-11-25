@@ -777,8 +777,7 @@ class DocxPreviewInstrumentationTest {
             assertTrue(report.optInt("pageCount") >= 2)
             assertTrue(report.optInt("visiblePageCount") > 0)
             instrumentation.runOnMainSync {
-                val bitmap = Bitmap.createBitmap(web.width, web.height, Bitmap.Config.ARGB_8888)
-                web.draw(android.graphics.Canvas(bitmap))
+                val bitmap = drawWebViewThumbnail(web)
                 saveScreenshot(context, bitmap, "docx-412x915.png")
                 var differentPixels = 0
                 val expectedCanvas = Color.rgb(240, 240, 240)
@@ -887,14 +886,26 @@ class DocxPreviewInstrumentationTest {
         }
     }
 
+    /** Downsample CI evidence to keep WebView screenshot allocation below the emulator's memory budget. */
+    private fun drawWebViewThumbnail(web: WebView): Bitmap {
+        val sampleFactor = 0.5f
+        val bitmap = Bitmap.createBitmap(
+            (web.width * sampleFactor).toInt().coerceAtLeast(1),
+            (web.height * sampleFactor).toInt().coerceAtLeast(1),
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.scale(sampleFactor, sampleFactor)
+        web.draw(canvas)
+        return bitmap
+    }
+
     private fun captureFailureScreenshot(context: android.content.Context, web: WebView, name: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val bitmap = AtomicReference<Bitmap?>(null)
         instrumentation.runOnMainSync {
             if (web.width > 0 && web.height > 0) {
-                val captured = Bitmap.createBitmap(web.width, web.height, Bitmap.Config.ARGB_8888)
-                web.draw(android.graphics.Canvas(captured))
-                bitmap.set(captured)
+                bitmap.set(drawWebViewThumbnail(web))
             }
         }
         bitmap.get()?.let { captured ->

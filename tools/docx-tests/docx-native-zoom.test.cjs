@@ -102,6 +102,8 @@ test('Android fit-width regression covers page bounds at both phone viewport siz
   assert.match(instrumentation, /pageCardRight must be <= viewportWidth/);
   assert.match(instrumentation, /page card must retain the A4 page ratio/);
   assert.match(instrumentation, /page card must have 12px outer margins/);
+  assert.match(instrumentation, /sampleFactor = 0\.5f/);
+  assert.match(instrumentation, /drawWebViewThumbnail\(web\)/);
   assert.match(instrumentation, /scrollWidth[\s\S]*?clientWidth/);
 });
 
