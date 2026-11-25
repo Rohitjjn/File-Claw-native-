@@ -85,16 +85,6 @@ test('DOCX light mode uses a light-grey canvas and white document cards', () => 
   assert.match(screen, /pagePaper = if \(isNightMode\) ClaudeDarkSurface else lightPage/);
 });
 
-test('native pinch prepares overflow room so Chromium can zoom below fit width', () => {
-  assert.match(host, /onPinchStart\s*=\s*\{ if \(alive\.get\(\)\) web\.prepareDocxNativePinchSpace\(\) \}/);
-  assert.match(host, /onPinchEnd\s*=\s*\{ if \(alive\.get\(\)\) web\.restoreDocxNativePinchSpaceIfAtFit\(\) \}/);
-  assert.match(gestures, /internal fun WebView\.prepareDocxNativePinchSpace\(/);
-  assert.match(gestures, /internal fun WebView\.restoreDocxNativePinchSpaceIfAtFit\(/);
-  assert.match(gestures, /zoom-anchor-space/);
-  assert.match(gestures, /ACTION_POINTER_DOWN/);
-  assert.match(instrumentation, /Native page zoom is floored at 50%/);
-});
-
 test('Android fit-width regression covers page bounds at both phone viewport sizes', () => {
   assert.match(instrumentation, /initialPageFitsAt360x800And412x915/);
   assert.match(instrumentation, /360x800/);

@@ -94,9 +94,7 @@ internal fun DocxWebViewHost(
                     },
                     onDoubleTap = { event, dispatchSyntheticEvent ->
                         animateDocxDoubleTapZoom(event, alive::get, dispatchSyntheticEvent)
-                    },
-                    onPinchStart = { if (alive.get()) web.prepareDocxNativePinchSpace() },
-                    onPinchEnd = { if (alive.get()) web.restoreDocxNativePinchSpaceIfAtFit() }
+                    }
                 )
                 var visualStateRequestId = 0L
                 val bridge = DocxJsBridge(
