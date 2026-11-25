@@ -79,8 +79,18 @@ internal fun WebView.animateDocxDoubleTapZoom(
         JSONObject(JSONTokener(result).nextValue().toString())
     }.getOrNull()
 
-    fun startZoom(metrics: JSONObject, preservedAnchor: Pair<Double, Double>? = null) {
+    fun startZoom(
+        metrics: JSONObject,
+        preservedAnchor: Pair<Double, Double>? = null,
+        cancelPreviousCorrection: Boolean = true
+    ) {
         if (!isActive()) return
+        if (cancelPreviousCorrection) {
+            evaluateJavascript("(function(){if(window.__docxAnchorTimer){clearTimeout(window.__docxAnchorTimer);window.__docxAnchorTimer=0;}})()") {
+                if (isActive()) startZoom(metrics, preservedAnchor, cancelPreviousCorrection = false)
+            }
+            return
+        }
         val current = metrics.optDouble("scale", 1.0).toFloat().takeIf { it.isFinite() && it > 0f }
             ?: DocxZoomPolicy.DEFAULT_ZOOM
         val fitScale = metrics.optDouble("fitScale", 1.0).toFloat().takeIf { it.isFinite() && it > 0f }
@@ -103,7 +113,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
         val anchorY = preservedAnchor?.second ?: metrics.optDouble("anchorY", 0.0)
         zoomBy(target)
         evaluateJavascript(
-            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var attempts=0;function apply(){if(!s||!d||!v)return;var scale=v.scale,r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();var x=$tapX/($density*scale)-(r.left-sr.left),y=$tapY/($density*scale)-(r.top-sr.top);s.scrollLeft+=$anchorX-x;s.scrollTop+=$anchorY-y;if(attempts++<60)setTimeout(apply,50);}setTimeout(apply,50);})()",
+            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var attempts=0;function apply(){if(!s||!d||!v)return;var scale=v.scale,r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();var x=$tapX/($density*scale)-(r.left-sr.left),y=$tapY/($density*scale)-(r.top-sr.top);s.scrollLeft+=$anchorX-x;s.scrollTop+=$anchorY-y;if(attempts++<60)window.__docxAnchorTimer=setTimeout(apply,50);else window.__docxAnchorTimer=0;}window.__docxAnchorTimer=setTimeout(apply,50);})()",
             null
         )
     }
