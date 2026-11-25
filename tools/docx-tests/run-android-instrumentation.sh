@@ -41,6 +41,9 @@ if [ "$gradle_status" -ne 0 ]; then
   } >> "$GITHUB_STEP_SUMMARY"
   if [ -n "$logcat_failures" ]; then
     printf '%s\n' "$logcat_failures"
+  else
+    echo 'No filtered crash markers were found. Recent emulator logcat follows:'
+    tail -n 180 "$logcat_file"
   fi
   diagnostic=$(grep -E '(^e: |^w: |error:|FAILED|Failure|failed|Exception|AssertionError|Tests run:)' "$log_file" | tail -n 60 | tr '\n' ' ' | sed 's/%/%25/g')
   if [ -n "$diagnostic" ]; then
