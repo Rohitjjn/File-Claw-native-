@@ -188,9 +188,6 @@
     }
 
     function layoutViewportWidth() {
-        const visualViewport = window.visualViewport;
-        const stableWidth = visualViewport && visualViewport.width * visualViewport.scale;
-        if (Number.isFinite(stableWidth) && stableWidth > 0) return stableWidth;
         return Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
     }
 
@@ -216,7 +213,7 @@
     }
 
     function refitAfterViewportResize() {
-        if (!readySent || printMode) return;
+        if (!readySent || printMode || window.__docxDoubleTapZoomActive) return;
         const viewportWidth = layoutViewportWidth();
         if (Math.abs(viewportWidth - fitLayoutViewportWidth) < 1) return;
         const page = els.document.querySelector('.docx, section.docx');
