@@ -151,6 +151,10 @@ class DocxPreviewInstrumentationTest {
                 dispatchTap(web, now + 130, tapPoint.get()[0], tapPoint.get()[1])
             }
             awaitVisualViewportScale(instrumentation, web, fitScale * 2f)
+            val zoomRequest = evaluateJson(instrumentation, web, "JSON.stringify(window.__docxZoomRequest)")
+            assertTrue("Double-tap must compute its target from the measured fit scale: $zoomRequest fit=$fitScale",
+                kotlin.math.abs(zoomRequest.optDouble("fitScale") - fitScale) < .03 &&
+                    kotlin.math.abs(zoomRequest.optDouble("target") - fitScale * 2.0) < .04)
             var anchorAt200Percent = documentPointAtTap()
             val anchorDeadline = SystemClock.elapsedRealtime() + 2_000L
             while ((kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) >= 2.0 ||
