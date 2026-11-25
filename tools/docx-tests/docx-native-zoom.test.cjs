@@ -44,6 +44,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(gestures, /v\.offsetTop/);
   assert.match(gestures, /docLeft/);
   assert.match(gestures, /d\.offsetLeft/);
+  assert.match(gestures, /preservedAnchor/);
   assert.match(gestures, /window\.DocxViewer\.getState\(\)/);
   assert.match(html, /#scroller\.zoom-anchor-space #stage::before/);
   assert.match(instrumentation, /-d\.offsetLeft/);

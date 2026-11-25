@@ -79,7 +79,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
         JSONObject(JSONTokener(result).nextValue().toString())
     }.getOrNull()
 
-    fun startZoom(metrics: JSONObject) {
+    fun startZoom(metrics: JSONObject, preservedAnchor: Pair<Double, Double>? = null) {
         if (!isActive()) return
         val current = metrics.optDouble("scale", 1.0).toFloat().takeIf { it.isFinite() && it > 0f }
             ?: DocxZoomPolicy.DEFAULT_ZOOM
@@ -105,8 +105,10 @@ internal fun WebView.animateDocxDoubleTapZoom(
         val initialOffsetTop = metrics.optDouble("offsetTop", 0.0)
         val initialDocLeft = metrics.optDouble("docLeft", 0.0)
         val initialDocTop = metrics.optDouble("docTop", 0.0)
-        val anchorX = initialLeft + initialOffsetLeft + tapX / (density * current) - initialDocLeft
-        val anchorY = initialTop + initialOffsetTop + tapY / (density * current) - initialDocTop
+        val anchorX = preservedAnchor?.first
+            ?: (initialLeft + initialOffsetLeft + tapX / (density * current) - initialDocLeft)
+        val anchorY = preservedAnchor?.second
+            ?: (initialTop + initialOffsetTop + tapY / (density * current) - initialDocTop)
         val scaleX = tapX / (density * target)
         val scaleY = tapY / (density * target)
 
@@ -128,10 +130,14 @@ internal fun WebView.animateDocxDoubleTapZoom(
             ?: DocxZoomPolicy.DEFAULT_ZOOM
         val targetZoom = DocxZoomPolicy.doubleTapTarget(current / fitScale)
         if (targetZoom > DocxZoomPolicy.DEFAULT_ZOOM + 0.01f && !metrics.optBoolean("anchorSpace")) {
+            val anchorX = metrics.optDouble("left", 0.0) + metrics.optDouble("offsetLeft", 0.0) +
+                tapX / (density * current) - metrics.optDouble("docLeft", 0.0)
+            val anchorY = metrics.optDouble("top", 0.0) + metrics.optDouble("offsetTop", 0.0) +
+                tapY / (density * current) - metrics.optDouble("docTop", 0.0)
             evaluateJavascript(
                 "(function(){var s=document.getElementById('scroller');if(!s)return null;s.classList.add('zoom-anchor-space');void s.offsetWidth;var p=parseFloat(getComputedStyle(s).paddingLeft)||0;s.scrollLeft=Math.max(0,s.clientWidth/2-p);s.scrollTop=window.innerHeight/2;var v=window.visualViewport;return JSON.stringify({scale:v?v.scale:1,left:s.scrollLeft,top:s.scrollTop,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,anchorSpace:true});})()"
             ) { prepared ->
-                if (isActive()) parseMetrics(prepared)?.let(::startZoom)
+                if (isActive()) parseMetrics(prepared)?.let { startZoom(it, anchorX to anchorY) }
             }
         } else {
             startZoom(metrics)
