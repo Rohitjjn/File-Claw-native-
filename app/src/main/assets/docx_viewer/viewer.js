@@ -188,6 +188,9 @@
     }
 
     function layoutViewportWidth() {
+        const visualViewport = window.visualViewport;
+        const stableWidth = visualViewport && visualViewport.width * visualViewport.scale;
+        if (Number.isFinite(stableWidth) && stableWidth > 0) return stableWidth;
         return Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
     }
 

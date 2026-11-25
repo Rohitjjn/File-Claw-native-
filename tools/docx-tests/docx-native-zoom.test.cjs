@@ -69,6 +69,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(html, /src="viewport-fit\.js"/);
   assert.match(viewer, /function configureScrollReporting\(\)/);
   assert.match(viewer, /DocxViewportFit\.calculate/);
+  assert.match(viewer, /visualViewport\.width \* visualViewport\.scale/);
   assert.match(viewer, /minimum-scale=\$\{fit\.minScale\}, maximum-scale=\$\{fit\.maxScale\}/);
   assert.match(viewportFit, /function calculate\(viewportWidth, pageWidth, visualMargin = 12\)/);
   assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, minimum-scale=0\.5, maximum-scale=5\.0, user-scalable=yes"/);
