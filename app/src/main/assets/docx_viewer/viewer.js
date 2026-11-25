@@ -348,10 +348,13 @@
         },
         clearSearch() { clearHighlights(); send('onSearchResults', { total: 0, current: 0, truncated: false }); },
         syncNativeScaleBounds(scale) {
-            if (printMode || !Number.isFinite(scale) || scale <= 0) return false;
-            const page = els.document && els.document.querySelector('.docx, section.docx');
-            const fit = page && window.DocxViewportFit.calculate(layoutViewportWidth(), page.offsetWidth, 12);
-            if (!fit) return false;
+            if (printMode || !Number.isFinite(scale) || scale <= 0 || !Number.isFinite(fitScale) || fitScale <= 0) return false;
+            const fit = {
+                fitScale,
+                minScale: fitScale * 0.5,
+                maxScale: fitScale * 5,
+                cssMargin: 12 / fitScale
+            };
             applyViewportScale(Math.max(fit.minScale, Math.min(fit.maxScale, scale)), fit);
             return true;
         },
