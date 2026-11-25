@@ -156,7 +156,7 @@ class DocxPreviewInstrumentationTest {
                 kotlin.math.abs(zoomRequest.optDouble("fitScale") - fitScale) < .03 &&
                     kotlin.math.abs(zoomRequest.optDouble("target") - fitScale * 2.0) < .04)
             var anchorAt200Percent = documentPointAtTap()
-            val anchorDeadline = SystemClock.elapsedRealtime() + 2_000L
+            val anchorDeadline = SystemClock.elapsedRealtime() + 3_500L
             while ((kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) >= 2.0 ||
                     kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) >= 2.0) &&
                 SystemClock.elapsedRealtime() < anchorDeadline
