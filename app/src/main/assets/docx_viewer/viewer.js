@@ -88,6 +88,7 @@
         const metrics = visibleLayoutMetrics();
         if (!window.DocxRenderReadiness.hasVisibleLayout(metrics) || !visibleContent()) return;
         readySent = true;
+        window.__docxNativeFitScale = window.visualViewport ? window.visualViewport.scale : fitScale;
         status('');
         send('onDocumentVisuallyRendered', {
             generation: id,
@@ -354,7 +355,7 @@
                 if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) root.style.setProperty(name, value);
             }
         },
-        getState() { return { ready: readySent, pages: pageCount(), zoom: window.visualViewport ? window.visualViewport.scale : 1, fitScale }; }
+        getState() { return { ready: readySent, pages: pageCount(), zoom: window.visualViewport ? window.visualViewport.scale : 1, fitScale, nativeFitScale: window.__docxNativeFitScale || fitScale }; }
     };
 
     document.addEventListener('DOMContentLoaded', () => {

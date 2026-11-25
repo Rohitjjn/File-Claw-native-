@@ -109,7 +109,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
     }
 
     evaluateJavascript(
-        "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var state=window.DocxViewer.getState(),r=d&&d.getBoundingClientRect(),sr=s&&s.getBoundingClientRect(),scale=v?v.scale:1;return JSON.stringify({scale:scale,fitScale:state.fitScale,anchorX:r&&sr?$tapX/($density*scale)-(r.left-sr.left):0,anchorY:r&&sr?$tapY/($density*scale)-(r.top-sr.top):0,anchorSpace:!!(s&&s.classList.contains('zoom-anchor-space'))});})()"
+        "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var state=window.DocxViewer.getState(),r=d&&d.getBoundingClientRect(),sr=s&&s.getBoundingClientRect(),scale=v?v.scale:1;return JSON.stringify({scale:scale,fitScale:state.nativeFitScale||state.fitScale,anchorX:r&&sr?$tapX/($density*scale)-(r.left-sr.left):0,anchorY:r&&sr?$tapY/($density*scale)-(r.top-sr.top):0,anchorSpace:!!(s&&s.classList.contains('zoom-anchor-space'))});})()"
     ) { result ->
         if (!isActive()) return@evaluateJavascript
         val metrics = parseMetrics(result) ?: return@evaluateJavascript
