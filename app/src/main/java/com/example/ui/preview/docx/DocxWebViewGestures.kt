@@ -109,12 +109,9 @@ internal fun WebView.animateDocxDoubleTapZoom(
             ?: (initialLeft + initialOffsetLeft + tapX / (density * current) - initialDocLeft)
         val anchorY = preservedAnchor?.second
             ?: (initialTop + initialOffsetTop + tapY / (density * current) - initialDocTop)
-        val scaleX = tapX / (density * target)
-        val scaleY = tapY / (density * target)
-
         zoomBy(target)
         evaluateJavascript(
-            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var stable=0;var attempts=0;function apply(){if(!s||!d||!v)return;var settled=Math.abs(v.scale-$target)<=0.04;if(!settled){stable=0;if(attempts++<90){requestAnimationFrame(apply);return;}return;}if(stable++<2){requestAnimationFrame(apply);return;}s.scrollLeft=$anchorX-$scaleX-v.offsetLeft+d.offsetLeft;s.scrollTop=$anchorY-$scaleY-v.offsetTop+d.offsetTop;}requestAnimationFrame(apply);})()",
+            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var stable=0;var attempts=0;function apply(){if(!s||!d||!v)return;var scale=v.scale,settled=Math.abs(scale-$target)<=0.04;s.scrollLeft=$anchorX-$tapX/($density*scale)-v.offsetLeft+d.offsetLeft;s.scrollTop=$anchorY-$tapY/($density*scale)-v.offsetTop+d.offsetTop;if(settled){if(stable++>=2)return;}else{stable=0;}if(attempts++<90)requestAnimationFrame(apply);}requestAnimationFrame(apply);})()",
             null
         )
     }
