@@ -69,7 +69,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = false
+                settings.loadWithOverviewMode = true
                 installDocxGestureListeners(
                     onSingleTapConfirmed = { event ->
                         dispatchSingleTapIfNotLink(
@@ -114,7 +114,7 @@ class DocxPreviewInstrumentationTest {
                 assertTrue("Native pinch controls must be enabled", web.settings.builtInZoomControls)
                 assertTrue("Native zoom buttons must stay hidden", !web.settings.displayZoomControls)
                 assertTrue("Wide viewport support must be enabled", web.settings.useWideViewPort)
-                assertTrue("Overview mode must stay disabled so Chromium honors viewport zoom bounds", !web.settings.loadWithOverviewMode)
+                assertTrue("Overview mode must be enabled for fit-to-width rendering", web.settings.loadWithOverviewMode)
                 val density = web.resources.displayMetrics.density
                 assertTrue("Native WebView scale must equal measured fit baseline: ${web.scale / density}, fit=$fitScale",
                     kotlin.math.abs(web.scale / density - fitScale) < .03f)
@@ -302,7 +302,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = false
+                settings.loadWithOverviewMode = true
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         signalAfterVisualState(web, ready)
