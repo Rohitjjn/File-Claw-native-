@@ -50,6 +50,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(gestures, /window\.__docxAnchorFrame=requestAnimationFrame\(apply\)/);
   assert.match(gestures, /cancelAnimationFrame\(window\.__docxAnchorFrame\)/);
   assert.match(gestures, /stable<4&&attempts\+\+<120/);
+  assert.match(gestures, /top:s\.scrollTop,fitScale:state\.nativeFitScale\|\|state\.fitScale/);
   assert.match(gestures, /window\.DocxViewer\.getState\(\)/);
   assert.match(gestures, /state\.nativeFitScale\|\|state\.fitScale/);
   assert.match(host, /val nativeFitScale = web\.scale \/ web\.resources\.displayMetrics\.density/);

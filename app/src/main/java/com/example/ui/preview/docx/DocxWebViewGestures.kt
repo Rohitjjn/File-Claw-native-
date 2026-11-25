@@ -139,7 +139,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
             val anchorX = metrics.optDouble("anchorX", 0.0)
             val anchorY = metrics.optDouble("anchorY", 0.0)
             evaluateJavascript(
-                "(function(){var s=document.getElementById('scroller');if(!s)return null;s.classList.add('zoom-anchor-space');void s.offsetWidth;var p=parseFloat(getComputedStyle(s).paddingLeft)||0;s.scrollLeft=Math.max(0,s.clientWidth/2-p);s.scrollTop=window.innerHeight/2;var v=window.visualViewport;return JSON.stringify({scale:v?v.scale:1,left:s.scrollLeft,top:s.scrollTop,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,anchorSpace:true});})()"
+                "(function(){var s=document.getElementById('scroller');if(!s)return null;s.classList.add('zoom-anchor-space');void s.offsetWidth;var p=parseFloat(getComputedStyle(s).paddingLeft)||0;s.scrollLeft=Math.max(0,s.clientWidth/2-p);s.scrollTop=window.innerHeight/2;var v=window.visualViewport,state=window.DocxViewer.getState();return JSON.stringify({scale:v?v.scale:1,left:s.scrollLeft,top:s.scrollTop,fitScale:state.nativeFitScale||state.fitScale,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,anchorSpace:true});})()"
             ) { prepared ->
                 if (isActive()) parseMetrics(prepared)?.let { startZoom(it, anchorX to anchorY) }
             }
