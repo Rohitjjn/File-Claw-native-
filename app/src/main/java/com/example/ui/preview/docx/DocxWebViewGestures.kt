@@ -93,7 +93,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
         if (target < current) {
             zoomBy(target)
             evaluateJavascript(
-                "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var stable=0;var attempts=0;function restore(){if(!s||!d||!v)return;if(Math.abs(v.scale-$target)>0.04){stable=0;if(attempts++<90){requestAnimationFrame(restore);return;}return;}if(stable++<2){requestAnimationFrame(restore);return;}d.style.translate='';s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}requestAnimationFrame(restore);})()",
+                "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var stable=0;var attempts=0;function restore(){if(!s||!v)return;if(Math.abs(v.scale-$target)>0.04){stable=0;if(attempts++<90){requestAnimationFrame(restore);return;}return;}if(stable++<2){requestAnimationFrame(restore);return;}s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}requestAnimationFrame(restore);})()",
                 null
             )
             return
@@ -103,7 +103,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
         val anchorY = preservedAnchor?.second ?: metrics.optDouble("anchorY", 0.0)
         zoomBy(target)
         evaluateJavascript(
-            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var stable=0,lastScale=NaN,lastLeft=NaN,lastTop=NaN,attempts=0,tx=0,ty=0;function apply(){if(!s||!d||!v)return;var scale=v.scale,r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();var x=$tapX/($density*scale)-(r.left-sr.left),y=$tapY/($density*scale)-(r.top-sr.top);tx+=x-$anchorX;ty+=y-$anchorY;d.style.translate=tx+'px '+ty+'px';var left=s.scrollLeft,top=s.scrollTop;var scaleSettled=Math.abs(scale-$target)<=0.002&&Math.abs(scale-lastScale)<=0.0005;var scrollSettled=Math.abs(left-lastLeft)<=0.01&&Math.abs(top-lastTop)<=0.01;var anchorSettled=Math.abs(x-$anchorX)<0.25&&Math.abs(y-$anchorY)<0.25;if(scaleSettled&&scrollSettled&&anchorSettled){if(++stable>=8)return;}else{stable=0;}lastScale=scale;lastLeft=left;lastTop=top;if(attempts++<240)requestAnimationFrame(apply);}requestAnimationFrame(apply);})()",
+            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var stable=0,lastScale=NaN,lastLeft=NaN,lastTop=NaN,attempts=0;function apply(){if(!s||!d||!v)return;var scale=v.scale,r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();var x=$tapX/($density*scale)-(r.left-sr.left),y=$tapY/($density*scale)-(r.top-sr.top);s.scrollLeft+=$anchorX-x;s.scrollTop+=$anchorY-y;var left=s.scrollLeft,top=s.scrollTop;var scaleSettled=Math.abs(scale-$target)<=0.002&&Math.abs(scale-lastScale)<=0.0005;var scrollSettled=Math.abs(left-lastLeft)<=0.01&&Math.abs(top-lastTop)<=0.01;var anchorSettled=Math.abs(x-$anchorX)<0.25&&Math.abs(y-$anchorY)<0.25;if(scaleSettled&&scrollSettled&&anchorSettled){if(++stable>=8)return;}else{stable=0;}lastScale=scale;lastLeft=left;lastTop=top;if(attempts++<240)requestAnimationFrame(apply);}requestAnimationFrame(apply);})()",
             null
         )
     }
