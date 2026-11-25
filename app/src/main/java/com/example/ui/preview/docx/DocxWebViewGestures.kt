@@ -120,7 +120,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
         val initialOffsetTop = metrics.optDouble("offsetTop", 0.0)
         val anchorX = initialLeft + initialOffsetLeft + tapX / (density * current)
         val anchorY = initialTop + initialOffsetTop + tapY / (density * current)
-        val gestureFactor = factor * 1.2f
+        val gestureFactor = factor
         val xClearance = minOf(event.x, width - event.x).coerceAtLeast(0f)
         val yClearance = minOf(event.y, height - event.y).coerceAtLeast(0f)
         val horizontalAxis = xClearance >= yClearance
