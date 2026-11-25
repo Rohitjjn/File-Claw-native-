@@ -142,7 +142,7 @@ class DocxPreviewInstrumentationTest {
                 val y = point[1].toDouble().toString()
                 val density = point[2].toDouble().toString()
                 return evaluateJson(instrumentation, web,
-                    "(function(){var s=document.getElementById('scroller'),v=window.visualViewport,d=document.getElementById('scaled-document'),r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();return JSON.stringify({x:$x/($density*v.scale)-(r.left-sr.left),y:$y/($density*v.scale)-(r.top-sr.top),offsetLeft:v.offsetLeft,offsetTop:v.offsetTop,scale:v.scale,scrollerLeft:s.scrollLeft,scrollerTop:s.scrollTop,scrollerMaxLeft:s.scrollWidth-s.clientWidth,scrollerMaxTop:s.scrollHeight-s.clientHeight,docLeft:d.offsetLeft,docTop:d.offsetTop,docRectLeft:r.left,docRectTop:r.top,scrollerRectLeft:sr.left,scrollerRectTop:sr.top});})()")
+                    "(function(){var s=document.getElementById('scroller'),v=window.visualViewport,d=document.getElementById('scaled-document'),r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();return JSON.stringify({x:$x/($density*v.scale)-(r.left-sr.left),y:$y/($density*v.scale)-(r.top-sr.top),offsetLeft:v.offsetLeft,offsetTop:v.offsetTop,scale:v.scale,scrollerLeft:s.scrollLeft,scrollerTop:s.scrollTop,scrollerMaxLeft:s.scrollWidth-s.clientWidth,scrollerMaxTop:s.scrollHeight-s.clientHeight,docLeft:d.offsetLeft,docTop:d.offsetTop,docRectLeft:r.left,docRectTop:r.top,scrollerRectLeft:sr.left,scrollerRectTop:sr.top,anchorDebug:window.__docxAnchorDebug||null});})()")
             }
             val anchorBeforeZoom = documentPointAtTap()
             instrumentation.runOnMainSync {
