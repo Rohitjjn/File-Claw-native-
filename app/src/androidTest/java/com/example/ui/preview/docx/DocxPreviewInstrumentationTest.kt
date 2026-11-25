@@ -83,7 +83,9 @@ class DocxPreviewInstrumentationTest {
                             }
                         )
                     },
-                    onDoubleTap = { event -> animateDocxDoubleTapZoom(event) }
+                    onDoubleTap = { event, dispatchSyntheticEvent ->
+                        animateDocxDoubleTapZoom(event, dispatchSyntheticEvent = dispatchSyntheticEvent)
+                    }
                 )
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {

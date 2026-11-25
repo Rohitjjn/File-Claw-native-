@@ -92,7 +92,9 @@ internal fun DocxWebViewHost(
                     onSingleTapConfirmed = { event ->
                         dispatchSingleTapIfNotLink(event, onTap, isActive = alive::get)
                     },
-                    onDoubleTap = { event -> animateDocxDoubleTapZoom(event, alive::get) }
+                    onDoubleTap = { event, dispatchSyntheticEvent ->
+                        animateDocxDoubleTapZoom(event, alive::get, dispatchSyntheticEvent)
+                    }
                 )
                 var visualStateRequestId = 0L
                 val bridge = DocxJsBridge(
@@ -137,16 +139,9 @@ internal fun DocxWebViewHost(
                         }
                     },
                     onScaleChanged = { scale ->
-                        if (alive.get()) {
-                            val zoom = com.example.core.format.DocxZoomPolicy.fromWebViewScale(scale, web.resources.displayMetrics.density)
-                            if (zoom <= com.example.core.format.DocxZoomPolicy.DEFAULT_ZOOM + 0.01f) {
-                                web.evaluateJavascript(
-                                    "(function(){var s=document.getElementById('scroller');if(s&&s.classList.contains('zoom-anchor-space')){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}})()",
-                                    null
-                                )
-                            }
-                            onZoom(zoom)
-                        }
+                        if (alive.get()) onZoom(
+                            com.example.core.format.DocxZoomPolicy.fromWebViewScale(scale, web.resources.displayMetrics.density)
+                        )
                     }
                 )
                 onCreated(this)
