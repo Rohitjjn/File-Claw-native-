@@ -183,6 +183,10 @@
         if (currentSearchQuery) search(currentSearchQuery);
     }
 
+    function configureScrollReporting() {
+        els.scroller.addEventListener('scroll', () => requestAnimationFrame(reportPage), { passive: true });
+    }
+
     function layoutViewportWidth() {
         return Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
     }

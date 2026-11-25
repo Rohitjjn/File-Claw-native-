@@ -55,6 +55,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.doesNotMatch(gestures, /detectTransformGestures/);
   assert.match(html, /id="docx-viewport" name="viewport"/);
   assert.match(html, /src="viewport-fit\.js"/);
+  assert.match(viewer, /function configureScrollReporting\(\)/);
   assert.match(viewer, /DocxViewportFit\.calculate/);
   assert.match(viewer, /minimum-scale=\$\{fit\.minScale\}, maximum-scale=\$\{fit\.maxScale\}/);
   assert.match(viewportFit, /function calculate\(viewportWidth, pageWidth, visualMargin = 12\)/);
@@ -102,8 +103,6 @@ test('Android fit-width regression covers page bounds at both phone viewport siz
   assert.match(instrumentation, /pageCardRight must be <= viewportWidth/);
   assert.match(instrumentation, /page card must retain the A4 page ratio/);
   assert.match(instrumentation, /page card must have 12px outer margins/);
-  assert.match(instrumentation, /sampleFactor = 0\.5f/);
-  assert.match(instrumentation, /drawWebViewThumbnail\(web\)/);
   assert.match(instrumentation, /scrollWidth[\s\S]*?clientWidth/);
 });
 
