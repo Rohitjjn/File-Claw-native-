@@ -16,10 +16,13 @@ import org.json.JSONTokener
 internal fun WebView.installDocxGestureListeners(
     isActive: () -> Boolean = { true },
     onSingleTapConfirmed: (MotionEvent) -> Unit,
-    onDoubleTap: (MotionEvent, (MotionEvent) -> Unit) -> Unit
+    onDoubleTap: (MotionEvent, (MotionEvent) -> Unit) -> Unit,
+    onPinchStart: () -> Unit = {},
+    onPinchEnd: () -> Unit = {}
 ) {
     var consumeDoubleTapSequence = false
     var dispatchingSyntheticZoom = false
+    var pinchPrepared = false
     val detector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(event: MotionEvent): Boolean = true
 
@@ -44,7 +47,20 @@ internal fun WebView.installDocxGestureListeners(
         }
     })
     setOnTouchListener { _, event ->
-        if (!dispatchingSyntheticZoom) detector.onTouchEvent(event)
+        if (!dispatchingSyntheticZoom) {
+            detector.onTouchEvent(event)
+            if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+                onPinchStart()
+                pinchPrepared = true
+            } else if (pinchPrepared &&
+                (event.actionMasked == MotionEvent.ACTION_POINTER_UP ||
+                    event.actionMasked == MotionEvent.ACTION_UP ||
+                    event.actionMasked == MotionEvent.ACTION_CANCEL)
+            ) {
+                onPinchEnd()
+                pinchPrepared = false
+            }
+        }
         if (event.pointerCount > 1) {
             consumeDoubleTapSequence = false
             false
@@ -56,6 +72,22 @@ internal fun WebView.installDocxGestureListeners(
             consume
         }
     }
+}
+
+/** Adds temporary native scroll extent before a user pinch so Chromium can zoom below fit width. */
+internal fun WebView.prepareDocxNativePinchSpace() {
+    evaluateJavascript(
+        "(function(){var s=document.getElementById('scroller');if(!s||s.classList.contains('zoom-anchor-space'))return;var left=s.scrollLeft,top=s.scrollTop;s.classList.add('zoom-anchor-space');void s.offsetWidth;var p=parseFloat(getComputedStyle(s).paddingLeft)||0;s.scrollLeft=left+Math.max(0,s.clientWidth/2-p);s.scrollTop=top+window.innerHeight/2;})()",
+        null
+    )
+}
+
+/** Removes temporary pinch space when no zoom change occurred, without consuming Chromium events. */
+internal fun WebView.restoreDocxNativePinchSpaceIfAtFit() {
+    evaluateJavascript(
+        "(function(){setTimeout(function(){var s=document.getElementById('scroller'),v=window.visualViewport;if(s&&v&&s.classList.contains('zoom-anchor-space')&&Math.abs(v.scale-1)<0.01){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}},320)})()",
+        null
+    )
 }
 
 /** A hyperlink tap stays clickable and never toggles the preview's focus mode. */

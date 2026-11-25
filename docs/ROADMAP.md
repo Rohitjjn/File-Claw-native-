@@ -4,7 +4,7 @@ This roadmap reflects the inspected checkout, not a promise that every historica
 
 ## Immediate sequence
 
-1. **DOCX fit-width verification (active):** the initial WebView fit-width geometry passed in a prior emulator run, but the latest exact-SHA workflow failed the native 50% pinch-floor assertion. The working tree now adds explicit page-edge/overflow assertions at 360×800 and 412×915 and changes the light reader surface to a grey canvas with white page cards; these new Android assertions have not yet run. Keep the viewer incomplete until all regression checks pass and the exact pushed SHA has a fully green workflow. See `PROJECT_STATUS.md` and `ISSUE_REGISTER.md` for current evidence; do not infer device behavior from source or syntax checks.
+1. **DOCX fit-width verification (active):** exact-SHA run [45569454759](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45569454759) on `51771c391868af5ab68a94f5a5e5d535fbb5435b` passed 360×800 and 412×915 fit-width instrumentation, but failed the native 50% pinch-floor assertion at `1.0`. Removing explicit `setInitialScale(100)` did not change the floor. The latest unverified hypothesis prepares temporary layout space when a native pinch starts; verify the gesture still pans/zooms naturally and the floor reaches 0.5 before treating this as a fix. Keep DOCX incomplete until full exact-SHA workflow passes.
 2. **Owner review:** present the complete DOCX result and limitations. Do not call the DOCX task complete until its agreed verification gates pass.
 3. **Other formats:** remain out of scope unless separately approved. Do not change PDF or other formats as part of DOCX remediation.
 

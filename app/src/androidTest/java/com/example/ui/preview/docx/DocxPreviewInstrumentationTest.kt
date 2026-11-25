@@ -85,7 +85,9 @@ class DocxPreviewInstrumentationTest {
                     },
                     onDoubleTap = { event, dispatchSyntheticEvent ->
                         animateDocxDoubleTapZoom(event, dispatchSyntheticEvent = dispatchSyntheticEvent)
-                    }
+                    },
+                    onPinchStart = { web.prepareDocxNativePinchSpace() },
+                    onPinchEnd = { web.restoreDocxNativePinchSpaceIfAtFit() }
                 )
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
