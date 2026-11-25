@@ -103,20 +103,22 @@ internal fun WebView.animateDocxDoubleTapZoom(
         val initialTop = metrics.optDouble("top", 0.0)
         val initialOffsetLeft = metrics.optDouble("offsetLeft", 0.0)
         val initialOffsetTop = metrics.optDouble("offsetTop", 0.0)
-        val anchorX = initialLeft + initialOffsetLeft + tapX / (density * current)
-        val anchorY = initialTop + initialOffsetTop + tapY / (density * current)
+        val initialDocLeft = metrics.optDouble("docLeft", 0.0)
+        val initialDocTop = metrics.optDouble("docTop", 0.0)
+        val anchorX = initialLeft + initialOffsetLeft + tapX / (density * current) - initialDocLeft
+        val anchorY = initialTop + initialOffsetTop + tapY / (density * current) - initialDocTop
         val scaleX = tapX / (density * target)
         val scaleY = tapY / (density * target)
 
         zoomBy(target)
         evaluateJavascript(
-            "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var stable=0;var attempts=0;function apply(){if(!s||!v)return;var settled=Math.abs(v.scale-$target)<=0.04;if(!settled){stable=0;if(attempts++<90){requestAnimationFrame(apply);return;}return;}if(stable++<2){requestAnimationFrame(apply);return;}s.scrollLeft=$anchorX-$scaleX-v.offsetLeft;s.scrollTop=$anchorY-$scaleY-v.offsetTop;}requestAnimationFrame(apply);})()",
+            "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;var stable=0;var attempts=0;function apply(){if(!s||!d||!v)return;var settled=Math.abs(v.scale-$target)<=0.04;if(!settled){stable=0;if(attempts++<90){requestAnimationFrame(apply);return;}return;}if(stable++<2){requestAnimationFrame(apply);return;}s.scrollLeft=$anchorX-$scaleX-v.offsetLeft+d.offsetLeft;s.scrollTop=$anchorY-$scaleY-v.offsetTop+d.offsetTop;}requestAnimationFrame(apply);})()",
             null
         )
     }
 
     evaluateJavascript(
-        "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var state=window.DocxViewer.getState();return JSON.stringify({scale:v?v.scale:1,fitScale:state.fitScale,left:s?s.scrollLeft:0,top:s?s.scrollTop:0,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,anchorSpace:!!(s&&s.classList.contains('zoom-anchor-space'))});})()"
+        "(function(){var s=document.getElementById('scroller');var v=window.visualViewport;var state=window.DocxViewer.getState();var d=document.getElementById('scaled-document');return JSON.stringify({scale:v?v.scale:1,fitScale:state.fitScale,left:s?s.scrollLeft:0,top:s?s.scrollTop:0,offsetLeft:v?v.offsetLeft:0,offsetTop:v?v.offsetTop:0,docLeft:d?d.offsetLeft:0,docTop:d?d.offsetTop:0,anchorSpace:!!(s&&s.classList.contains('zoom-anchor-space'))});})()"
     ) { result ->
         if (!isActive()) return@evaluateJavascript
         val metrics = parseMetrics(result) ?: return@evaluateJavascript
