@@ -164,7 +164,8 @@ class DocxPreviewInstrumentationTest {
                 Thread.sleep(50)
                 anchorAt200Percent = documentPointAtTap()
             }
-            assertTrue("Double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt200Percent",
+            val anchorCorrection = evaluateJson(instrumentation, web, "JSON.stringify(window.__docxAnchorCorrection||{})")
+            assertTrue("Double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt200Percent correction=$anchorCorrection",
                 kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) < 2.0 &&
                     kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) < 2.0)
             assertTrue("Double-tap must not trigger focus mode", confirmedTaps.get() == 0)
