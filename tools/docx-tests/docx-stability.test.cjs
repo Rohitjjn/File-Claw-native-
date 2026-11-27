@@ -24,6 +24,8 @@ test('DOCX uses one WebView and Chromium overview cannot compete with fit layout
   assert.doesNotMatch(host.slice(scaleCallbackStart, scaleCallbackEnd), /evaluateJavascript|postDelayed/);
   assert.doesNotMatch(viewer, /ResizeObserver|refitAfterViewportResize|addEventListener\(['"]resize/);
   assert.doesNotMatch(viewer, /els\.viewport\.content\s*=/);
+  assert.match(viewer, /window\.visualViewport && window\.visualViewport\.width/);
+  assert.match(viewer, /Math\.max\(\.\.\.pages\.map\(page => page\.offsetWidth\)\)/);
   assert.match(viewer, /pages\.forEach\(page => \{ page\.style\.zoom = String\(fit\.fitScale\); \}\)/);
   assert.equal((viewer.match(/\.style\.zoom\s*=/g) || []).length, 1);
   assert.doesNotMatch(viewer, /setInterval|onScaleChanged|syncNativeScaleBounds/);

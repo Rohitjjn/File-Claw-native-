@@ -185,16 +185,17 @@
         els.scroller.addEventListener('scroll', () => requestAnimationFrame(reportPage), { passive: true });
     }
 
-    function layoutViewportWidth() {
-        return Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
+    function fitViewportWidth() {
+        return Math.max(1, window.visualViewport && window.visualViewport.width ||
+            document.documentElement.clientWidth || window.innerWidth || 1);
     }
 
     function applyInitialFit() {
         if (printMode) return 1;
         const pages = Array.from(els.document.querySelectorAll('.docx, section.docx'));
         const fit = pages.length && window.DocxViewportFit.calculate(
-            layoutViewportWidth(),
-            pages[0].offsetWidth,
+            fitViewportWidth(),
+            Math.max(...pages.map(page => page.offsetWidth)),
             12
         );
         if (!fit) throw new Error('FIT_TO_WIDTH_UNAVAILABLE');
