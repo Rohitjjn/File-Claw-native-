@@ -292,7 +292,7 @@ class DocxPreviewInstrumentationTest {
                 attachWebView(activity, this, (412 * density).toInt(), (915 * density).toInt())
                 loadDataWithBaseURL(
                     "https://appassets.androidplatform.net/",
-                    """<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes"><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%}#scroller{position:absolute;inset:0;overflow:auto}#rootExtent{position:absolute;z-index:-1;pointer-events:none;width:200vw;height:200vh}</style><div id="rootExtent"></div><main id="scroller"><div style="width:200vw;height:200vh"></div></main>""",
+                    """<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes"><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%}#rootExtent{width:200vw;height:200vh;visibility:hidden}#scroller{position:absolute;inset:0;overflow:auto}</style><div id="rootExtent"></div><main id="scroller"><div style="width:200vw;height:200vh"></div></main>""",
                     "text/html", "UTF-8", null
                 )
             }
@@ -318,7 +318,7 @@ class DocxPreviewInstrumentationTest {
             }
             val zoomedOut = readVisualViewportScale(instrumentation, web)
             val geometry = evaluateJson(instrumentation, web,
-                "JSON.stringify({scale:visualViewport.scale,htmlWidth:document.documentElement.scrollWidth,bodyWidth:document.body.scrollWidth,viewportWidth:visualViewport.width})")
+                "JSON.stringify({scale:visualViewport.scale,htmlWidth:document.documentElement.scrollWidth,htmlHeight:document.documentElement.scrollHeight,bodyWidth:document.body.scrollWidth,bodyHeight:document.body.scrollHeight,rootScrollX:window.scrollX,rootScrollY:window.scrollY,viewportWidth:visualViewport.width})")
             assertTrue("Native pinch-out should reach the declared 50% viewport minimum: $zoomedOut geometry=$geometry",
                 zoomedOut >= .49f && zoomedOut <= .52f)
         } finally {
