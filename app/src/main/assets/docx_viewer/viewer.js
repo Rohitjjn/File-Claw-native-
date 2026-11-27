@@ -238,10 +238,13 @@
             if (!appliedScale) return;
             lastFitViewportWidth = viewportWidth;
             els.scroller.scrollLeft = 0;
-            const newRange = Math.max(0, els.scroller.scrollHeight - els.scroller.clientHeight);
-            els.scroller.scrollTop = scrollRatio * newRange;
-            window.__docxFitReflowCount = (window.__docxFitReflowCount || 0) + 1;
-            window.__docxLastFitReflow = { viewportWidth, fitScale: appliedScale, scrollRatio };
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                if (!els.scroller || !els.scroller.isConnected) return;
+                const newRange = Math.max(0, els.scroller.scrollHeight - els.scroller.clientHeight);
+                els.scroller.scrollTop = scrollRatio * newRange;
+                window.__docxFitReflowCount = (window.__docxFitReflowCount || 0) + 1;
+                window.__docxLastFitReflow = { viewportWidth, fitScale: appliedScale, scrollRatio };
+            }));
         }, 80);
         return true;
     }
