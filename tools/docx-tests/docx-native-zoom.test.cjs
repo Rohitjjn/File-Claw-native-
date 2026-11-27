@@ -17,6 +17,13 @@ const loadingInstrumentation = read('app/src/androidTest/java/com/example/ui/pre
 const gestures = read('app/src/main/java/com/example/ui/preview/docx/DocxWebViewGestures.kt');
 const surface = read('app/src/main/java/com/example/ui/preview/viewers/PreviewScreenSurface.kt');
 
+test('DOCX retains root overflow so native zoom can go below 100%', () => {
+  assert.match(html, /html, body\s*\{[^}]*overflow:\s*visible/);
+  assert.match(html, /#native-zoom-extent\s*\{[^}]*width:\s*200vw;[^}]*height:\s*200vh/);
+  assert.match(html, /<div id="native-zoom-extent" aria-hidden="true"><\/div>/);
+  assert.match(html, /#scroller\s*\{[^}]*overflow:\s*auto/);
+});
+
 test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(host, /setSupportZoom\(true\)/);
   assert.match(host, /builtInZoomControls\s*=\s*true/);
