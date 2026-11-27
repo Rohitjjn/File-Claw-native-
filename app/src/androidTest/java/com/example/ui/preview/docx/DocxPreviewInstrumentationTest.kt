@@ -305,6 +305,7 @@ class DocxPreviewInstrumentationTest {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
                 }
+                awaitVisualState(instrumentation, web, "minimal fixture native zoom-in pinch")
             }
             val zoomedIn = readVisualViewportScale(instrumentation, web)
             assertTrue("Minimal fixture must allow native pinch-in: $zoomedIn", zoomedIn >= 4.9f)
@@ -312,6 +313,7 @@ class DocxPreviewInstrumentationTest {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 160f * web.resources.displayMetrics.density, 40f * web.resources.displayMetrics.density)
                 }
+                awaitVisualState(instrumentation, web, "minimal fixture native zoom-out pinch")
             }
             val zoomedOut = readVisualViewportScale(instrumentation, web)
             val geometry = evaluateJson(instrumentation, web,
