@@ -123,7 +123,7 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Initial page zoom must equal the measured fit baseline: $initialScale fit=$fitScale",
                 kotlin.math.abs(initialScale - fitScale) < .03f)
             val initialLayout = evaluateJson(instrumentation, web,
-                "(function(){var s=document.getElementById('scroller'),p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p.getBoundingClientRect(),v=visualViewport,z=v.scale;return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,visualViewportWidth:v.width,pageWidth:r.width*z,pageHeight:r.height*z,pageLeft:(r.left-v.offsetLeft)*z,pageRight:(r.right-v.offsetLeft)*z,viewportWidth:v.width*z,pageScrollWidth:p.scrollWidth,pageClientWidth:p.clientWidth,inlineZoom:p.style.zoom,computedZoom:getComputedStyle(p).zoom,layoutViewportWidth:document.documentElement.clientWidth,fitScale:DocxViewer.getState().fitScale});})()")
+                "(function(){var s=document.getElementById('scroller'),p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p.getBoundingClientRect(),v=visualViewport,z=v.scale;return JSON.stringify({clientWidth:s.clientWidth,scrollWidth:s.scrollWidth,visualViewportWidth:v.width,pageWidth:r.width*z,pageHeight:r.height*z,pageLeft:(r.left-v.offsetLeft)*z,pageRight:(r.right-v.offsetLeft)*z,viewportWidth:v.width*z,pageScrollWidth:p.scrollWidth,pageClientWidth:p.clientWidth,fitTransform:document.getElementById('scaled-document').style.transform,computedTransform:getComputedStyle(document.getElementById('scaled-document')).transform,layoutViewportWidth:document.documentElement.clientWidth,fitScale:DocxViewer.getState().fitScale});})()")
             assertTrue("DOCX page must fit within the viewport at fit baseline: $initialLayout",
                 initialLayout.optDouble("pageWidth") > 0 && initialLayout.optDouble("pageRight") <= initialLayout.optDouble("viewportWidth"))
             val leftMargin = initialLayout.optDouble("pageLeft")
@@ -232,7 +232,7 @@ class DocxPreviewInstrumentationTest {
             val panRead = CountDownLatch(1)
             val panJson = AtomicReference<String?>(null)
             instrumentation.runOnMainSync {
-                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important;max-width:none!important;flex:0 0 1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var top=s.scrollTop;s.scrollLeft=Number.MAX_SAFE_INTEGER;s.scrollTop=Number.MAX_SAFE_INTEGER;var right=s.scrollLeft;var bottom=s.scrollTop;s.scrollLeft=right+100;s.scrollTop=bottom+100;var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');return JSON.stringify({left:left,right:right,maxX:right,top:top,bottom:bottom,maxY:bottom,afterRight:s.scrollLeft,afterBottom:s.scrollTop,zoom:visualViewport.scale,cssZoom:document.getElementById('scaled-document').style.zoom,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
+                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important;max-width:none!important;flex:0 0 1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var top=s.scrollTop;s.scrollLeft=Number.MAX_SAFE_INTEGER;s.scrollTop=Number.MAX_SAFE_INTEGER;var right=s.scrollLeft;var bottom=s.scrollTop;s.scrollLeft=right+100;s.scrollTop=bottom+100;var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');return JSON.stringify({left:left,right:right,maxX:right,top:top,bottom:bottom,maxY:bottom,afterRight:s.scrollLeft,afterBottom:s.scrollTop,zoom:visualViewport.scale,fitTransform:document.getElementById('scaled-document').style.transform,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
                     panJson.set(it); panRead.countDown()
                 }
             }
@@ -244,8 +244,8 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Native pan must stop at the far-right limit: $pan", pan.optDouble("afterRight") <= pan.optDouble("right") + 1)
             assertTrue("Native pan must work downward as well as upward: $pan", pan.optDouble("maxY") > 0 && pan.optDouble("bottom") >= pan.optDouble("maxY") - 1)
             assertTrue("Native pan must stop at the bottom limit: $pan", pan.optDouble("afterBottom") <= pan.optDouble("bottom") + 1)
-            assertTrue("One-time fit zoom must remain on the document root: $pan", pan.optString("cssZoom").toFloatOrNull()?.let { it > 0f && it <= 1f } == true)
-            assertTrue("Viewer must not apply a CSS transform: $pan", pan.optString("transform") == "none")
+            assertTrue("One-time fit scale must remain on the document root: $pan", pan.optString("fitTransform").contains("scale(") && pan.optString("fitTransform").isNotEmpty())
+            assertTrue("Document fit transform must be present and matrix-valued: $pan", pan.optString("transform").startsWith("matrix("))
 
             val midpoint = evaluateJson(instrumentation, web,
                 "(function(){var s=document.getElementById('scroller');s.scrollLeft=s.scrollWidth/2;s.scrollTop=s.scrollHeight/2;return JSON.stringify({left:s.scrollLeft,top:s.scrollTop});})()")
@@ -331,7 +331,7 @@ class DocxPreviewInstrumentationTest {
             val layout = evaluateJson(
                 instrumentation,
                 web,
-                "(function(){var s=document.getElementById('scroller'),p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p.getBoundingClientRect(),v=visualViewport,z=v.scale;return JSON.stringify({clientWidth:s.clientWidth*z,scrollWidth:s.scrollWidth*z,visualViewportWidth:v.width*z,pageCardWidth:r.width*z,pageCardHeight:r.height*z,pageCardLeft:(r.left-v.offsetLeft)*z,pageCardRight:(r.right-v.offsetLeft)*z,pageClientWidth:p.clientWidth,pageScrollWidth:p.scrollWidth,viewportWidth:v.width*z,layoutViewportWidth:document.documentElement.clientWidth,visualViewportWidth:v.width,inlineZoom:p.style.zoom,computedZoom:getComputedStyle(p).zoom,scale:z,fitScale:DocxViewer.getState().fitScale,paper:getComputedStyle(document.documentElement).getPropertyValue('--paper').trim(),pagePaper:getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim(),shadow:getComputedStyle(p).boxShadow});})()"
+                "(function(){var s=document.getElementById('scroller'),p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p.getBoundingClientRect(),v=visualViewport,z=v.scale;return JSON.stringify({clientWidth:s.clientWidth*z,scrollWidth:s.scrollWidth*z,visualViewportWidth:v.width*z,pageCardWidth:r.width*z,pageCardHeight:r.height*z,pageCardLeft:(r.left-v.offsetLeft)*z,pageCardRight:(r.right-v.offsetLeft)*z,pageClientWidth:p.clientWidth,pageScrollWidth:p.scrollWidth,viewportWidth:v.width*z,layoutViewportWidth:document.documentElement.clientWidth,visualViewportWidth:v.width,fitTransform:document.getElementById('scaled-document').style.transform,computedTransform:getComputedStyle(document.getElementById('scaled-document')).transform,scale:z,fitScale:DocxViewer.getState().fitScale,paper:getComputedStyle(document.documentElement).getPropertyValue('--paper').trim(),pagePaper:getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim(),shadow:getComputedStyle(p).boxShadow});})()"
             )
             val pageLeft = layout.optDouble("pageCardLeft")
             val pageRight = layout.optDouble("pageCardRight")
@@ -415,7 +415,7 @@ class DocxPreviewInstrumentationTest {
             val nativeScale = AtomicReference<Float>()
             instrumentation.runOnMainSync { nativeScale.set(web.scale) }
             val layout = evaluateJson(instrumentation, web,
-                "(function(){var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p&&p.getBoundingClientRect();return JSON.stringify({wrappers:document.querySelectorAll('.docx-wrapper').length,scale:visualViewport.scale,zoom:document.getElementById('scaled-document').style.zoom,left:r&&r.left,top:r&&r.top,width:r&&r.width,height:r&&r.height});})()")
+                "(function(){var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p&&p.getBoundingClientRect();return JSON.stringify({wrappers:document.querySelectorAll('.docx-wrapper').length,scale:visualViewport.scale,fitTransform:document.getElementById('scaled-document').style.transform,left:r&&r.left,top:r&&r.top,width:r&&r.width,height:r&&r.height});})()")
             observations += layout to nativeScale.get()
             Thread.sleep(50)
         }
@@ -425,7 +425,7 @@ class DocxPreviewInstrumentationTest {
         val baseline = observations.first()
         val maxVisualScaleDrift = observations.maxOf { kotlin.math.abs(it.first.optDouble("scale") - baseline.first.optDouble("scale")) }
         val maxNativeScaleDrift = observations.maxOf { kotlin.math.abs(it.second - baseline.second) }
-        val maxCssZoomDrift = observations.maxOf { (layout, _) -> kotlin.math.abs(layout.optDouble("zoom") - baseline.first.optDouble("zoom")) }
+        val fitTransformStable = observations.all { (layout, _) -> layout.optString("fitTransform") == baseline.first.optString("fitTransform") }
         val maxBoundsDrift = observations.maxOf { (layout, _) ->
             listOf("left", "top", "width", "height").maxOf { key ->
                 kotlin.math.abs(layout.optDouble(key) - baseline.first.optDouble(key))
@@ -434,8 +434,8 @@ class DocxPreviewInstrumentationTest {
         assertTrue(
             "native scale and page bounds must remain stable during two-second idle observation: " +
                 "visualScaleDrift=$maxVisualScaleDrift nativeScaleDrift=$maxNativeScaleDrift " +
-                "cssZoomDrift=$maxCssZoomDrift boundsDrift=$maxBoundsDrift baseline=${baseline.first}",
-            maxVisualScaleDrift < .001 && maxNativeScaleDrift < .01f && maxCssZoomDrift < .0001 && maxBoundsDrift < .1
+                "fitTransformStable=$fitTransformStable boundsDrift=$maxBoundsDrift baseline=${baseline.first}",
+            maxVisualScaleDrift < .001 && maxNativeScaleDrift < .01f && fitTransformStable && maxBoundsDrift < .1
         )
     }
 

@@ -199,9 +199,15 @@
             12
         );
         if (!fit) throw new Error('FIT_TO_WIDTH_UNAVAILABLE');
-        els.scroller.style.paddingLeft = '12px';
-        els.scroller.style.paddingRight = '12px';
-        els.document.style.setProperty('zoom', String(fit.fitScale), 'important');
+        const rootRect = els.document.getBoundingClientRect();
+        const pageRect = pages[0].getBoundingClientRect();
+        const scrollerRect = els.scroller.getBoundingClientRect();
+        const targetLeft = scrollerRect.left + 12;
+        const translateX = targetLeft - (rootRect.left + (pageRect.left - rootRect.left) * fit.fitScale);
+        const contentHeight = els.document.scrollHeight;
+        els.document.style.transformOrigin = 'top left';
+        els.document.style.transform = `translateX(${translateX}px) scale(${fit.fitScale})`;
+        els.document.style.marginBottom = `${-contentHeight * (1 - fit.fitScale)}px`;
         fitScale = 1;
         return fitScale;
     }

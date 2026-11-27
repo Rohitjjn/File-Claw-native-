@@ -12,7 +12,7 @@ const nativeZoom = read('tools/docx-tests/docx-native-zoom.test.cjs');
 test('DOCX pinch/zoom regressions are guarded by Chromium and Android edge-pan coverage', () => {
   assert.match(nativeZoom, /nativeWebViewZoomSupportsHorizontalPanToBothEdges/);
   assert.match(nativeZoom, /builtInZoomControls/);
-  assert.match(viewer, /function applyInitialFit\(\)[\s\S]*?els\.document\.style\.setProperty\('zoom', String\(fit\.fitScale\), 'important'\)/);
+  assert.match(viewer, /function applyInitialFit\(\)[\s\S]*?els\.document\.style\.transform = `translateX\(\$\{translateX\}px\) scale\(\$\{fit\.fitScale\}\)`/);
   assert.doesNotMatch(viewer, /touchmove|function setZoom|transform\s*:\s*scale/);
   assert.doesNotMatch(viewer, /onDocumentDoubleTap|onZoomChanged/);
 });
