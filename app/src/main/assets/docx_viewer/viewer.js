@@ -193,12 +193,16 @@
     function applyInitialFit() {
         if (printMode) return 1;
         const pages = Array.from(els.document.querySelectorAll('.docx, section.docx'));
-        const fit = pages.length && window.DocxViewportFit.calculate(
+        const pageWidth = pages.length ? Math.max(...pages.map(page => page.offsetWidth)) : 0;
+        const fit = pageWidth && window.DocxViewportFit.calculate(
             fitViewportWidth(),
-            Math.max(...pages.map(page => page.offsetWidth)),
+            pageWidth,
             12
         );
         if (!fit) throw new Error('FIT_TO_WIDTH_UNAVAILABLE');
+        els.document.style.width = `${pageWidth}px`;
+        els.document.style.maxWidth = 'none';
+        els.document.style.flex = '0 0 auto';
         const rootRect = els.document.getBoundingClientRect();
         const pageRect = pages[0].getBoundingClientRect();
         const scrollerRect = els.scroller.getBoundingClientRect();
