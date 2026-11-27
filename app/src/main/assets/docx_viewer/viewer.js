@@ -201,7 +201,7 @@
         if (!fit) throw new Error('FIT_TO_WIDTH_UNAVAILABLE');
         els.scroller.style.paddingLeft = '12px';
         els.scroller.style.paddingRight = '12px';
-        pages.forEach(page => { page.style.zoom = String(fit.fitScale); });
+        pages.forEach(page => page.style.setProperty('zoom', String(fit.fitScale), 'important'));
         fitScale = 1;
         return fitScale;
     }
