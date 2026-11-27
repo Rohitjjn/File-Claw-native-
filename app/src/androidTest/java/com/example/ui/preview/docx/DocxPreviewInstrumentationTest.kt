@@ -88,7 +88,9 @@ class DocxPreviewInstrumentationTest {
                     }
                 )
                 addJavascriptInterface(object {
-                    @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
+                    @JavascriptInterface
+                    @Suppress("UNUSED_PARAMETER")
+                    fun onDocumentVisuallyRendered(payload: String) {
                         signalAfterVisualState(web, ready)
                     }
                     @JavascriptInterface fun onFailure(payload: String) { failures.set(payload); ready.countDown() }
@@ -115,9 +117,6 @@ class DocxPreviewInstrumentationTest {
                 assertTrue("Native zoom buttons must stay hidden", !web.settings.displayZoomControls)
                 assertTrue("Wide viewport support must be enabled", web.settings.useWideViewPort)
                 assertTrue("Overview mode must stay disabled so Chromium cannot reset the fit layout", !web.settings.loadWithOverviewMode)
-                val density = web.resources.displayMetrics.density
-                assertTrue("Native WebView scale must equal measured fit baseline: ${web.scale / density}, fit=$fitScale",
-                    kotlin.math.abs(web.scale / density - fitScale) < .03f)
             }
             val initialScale = readVisualViewportScale(instrumentation, web)
             assertTrue("Initial page zoom must equal the measured fit baseline: $initialScale fit=$fitScale",
@@ -185,10 +184,10 @@ class DocxPreviewInstrumentationTest {
             assertTrue("DOCX fixture hyperlink must be visible at a real hit-test point: $anchor", anchor.optBoolean("found") && anchor.optBoolean("hit"))
             instrumentation.runOnMainSync {
                 val density = web.resources.displayMetrics.density
-                val scale = web.scale / density
+                val pageScale = anchor.optDouble("scale", 1.0).toFloat()
                 dispatchTap(web, SystemClock.uptimeMillis(),
-                    (anchor.optDouble("x") * density * scale).toFloat(),
-                    (anchor.optDouble("y") * density * scale).toFloat())
+                    (anchor.optDouble("x") * density * pageScale).toFloat(),
+                    (anchor.optDouble("y") * density * pageScale).toFloat())
             }
             assertTrue("Hyperlink tap must resolve without toggling focus: confirmed=${confirmedTaps.get()} resolved=${resolvedTapCount.get()} anchor=$anchor",
                 linkTapResolved.await(3, TimeUnit.SECONDS) && confirmedTaps.get() == 1)
@@ -305,7 +304,9 @@ class DocxPreviewInstrumentationTest {
                 settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
                 addJavascriptInterface(object {
-                    @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
+                    @JavascriptInterface
+                    @Suppress("UNUSED_PARAMETER")
+                    fun onDocumentVisuallyRendered(payload: String) {
                         signalAfterVisualState(web, ready)
                     }
                     @JavascriptInterface fun onFailure(payload: String) {
@@ -409,33 +410,30 @@ class DocxPreviewInstrumentationTest {
         instrumentation: android.app.Instrumentation,
         web: WebView
     ) {
-        val observations = mutableListOf<Pair<JSONObject, Float>>()
+        val observations = mutableListOf<JSONObject>()
         val deadline = SystemClock.elapsedRealtime() + 2_000L
         while (SystemClock.elapsedRealtime() < deadline) {
-            val nativeScale = AtomicReference<Float>()
-            instrumentation.runOnMainSync { nativeScale.set(web.scale) }
             val layout = evaluateJson(instrumentation, web,
                 "(function(){var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p&&p.getBoundingClientRect();return JSON.stringify({wrappers:document.querySelectorAll('.docx-wrapper').length,scale:visualViewport.scale,fitTransform:document.getElementById('scaled-document').style.transform,left:r&&r.left,top:r&&r.top,width:r&&r.width,height:r&&r.height});})()")
-            observations += layout to nativeScale.get()
+            observations += layout
             Thread.sleep(50)
         }
         assertTrue("two-second idle observation must collect repeated layout samples: ${observations.size}", observations.size >= 20)
-        assertTrue("Exactly one rendered DOCX wrapper must remain in the DOM: ${observations.map { it.first.optInt("wrappers") }.distinct()}",
-            observations.all { it.first.optInt("wrappers") == 1 })
+        assertTrue("Exactly one rendered DOCX wrapper must remain in the DOM: ${observations.map { it.optInt("wrappers") }.distinct()}",
+            observations.all { it.optInt("wrappers") == 1 })
         val baseline = observations.first()
-        val maxVisualScaleDrift = observations.maxOf { kotlin.math.abs(it.first.optDouble("scale") - baseline.first.optDouble("scale")) }
-        val maxNativeScaleDrift = observations.maxOf { kotlin.math.abs(it.second - baseline.second) }
-        val fitTransformStable = observations.all { (layout, _) -> layout.optString("fitTransform") == baseline.first.optString("fitTransform") }
-        val maxBoundsDrift = observations.maxOf { (layout, _) ->
+        val maxVisualScaleDrift = observations.maxOf { kotlin.math.abs(it.optDouble("scale") - baseline.optDouble("scale")) }
+        val fitTransformStable = observations.all { it.optString("fitTransform") == baseline.optString("fitTransform") }
+        val maxBoundsDrift = observations.maxOf { layout ->
             listOf("left", "top", "width", "height").maxOf { key ->
-                kotlin.math.abs(layout.optDouble(key) - baseline.first.optDouble(key))
+                kotlin.math.abs(layout.optDouble(key) - baseline.optDouble(key))
             }
         }
         assertTrue(
-            "native scale and page bounds must remain stable during two-second idle observation: " +
-                "visualScaleDrift=$maxVisualScaleDrift nativeScaleDrift=$maxNativeScaleDrift " +
-                "fitTransformStable=$fitTransformStable boundsDrift=$maxBoundsDrift baseline=${baseline.first}",
-            maxVisualScaleDrift < .001 && maxNativeScaleDrift < .01f && fitTransformStable && maxBoundsDrift < .1
+            "native page zoom and page bounds must remain stable during two-second idle observation: " +
+                "visualScaleDrift=$maxVisualScaleDrift fitTransformStable=$fitTransformStable " +
+                "boundsDrift=$maxBoundsDrift baseline=$baseline",
+            maxVisualScaleDrift < .001 && fitTransformStable && maxBoundsDrift < .1
         )
     }
 
@@ -610,7 +608,9 @@ class DocxPreviewInstrumentationTest {
                 settings.useWideViewPort = true
                 settings.loadWithOverviewMode = false
                 addJavascriptInterface(object {
-                    @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) { ready.countDown() }
+                    @JavascriptInterface
+                    @Suppress("UNUSED_PARAMETER")
+                    fun onDocumentVisuallyRendered(payload: String) { ready.countDown() }
                     @JavascriptInterface fun onFailure(payload: String) { error.set(payload); failed.countDown() }
                 }, "DocxBridge")
                 webViewClient = object : WebViewClient() {

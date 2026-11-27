@@ -40,5 +40,6 @@ test('DOCX render is once per generation and leaves exactly one visible wrapper'
   assert.match(viewer, /wrappers !== 1/);
   assert.match(instrumentation, /document\.querySelectorAll\(['"]\.docx-wrapper['"]\)\.length/);
   assert.match(instrumentation, /two-second idle observation/);
-  assert.match(instrumentation, /native scale and page bounds must remain stable/);
+  assert.match(instrumentation, /native page zoom and page bounds must remain stable/);
+  assert.doesNotMatch(instrumentation, /\bweb\.scale\b/);
 });

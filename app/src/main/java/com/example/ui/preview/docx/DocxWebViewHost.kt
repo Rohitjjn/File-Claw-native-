@@ -1,7 +1,6 @@
 package com.example.ui.preview.docx
 
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,12 +45,12 @@ internal fun DocxWebViewHost(
     var searchCursor by remember(generation) { mutableStateOf(DocxSearchController.Cursor()) }
     var viewerReady by remember(generation) { mutableStateOf(false) }
     var lastPage by remember(generation) { mutableStateOf<Int?>(null) }
-    var fitScale by remember(generation) { mutableFloatStateOf(1f) }
     val alive = remember(generation) { java.util.concurrent.atomic.AtomicBoolean(true) }
     AndroidView(
         modifier = modifier.fillMaxSize().clipToBounds(),
         factory = { context ->
             lateinit var web: WebView
+            var nativeFitScale = 1f
             alive.set(true)
             val loader = WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
@@ -103,7 +102,6 @@ internal fun DocxWebViewHost(
                     isCurrent = { alive.get() },
                     onVisualRender = { id, pages, height, width, visiblePages, renderedFitScale ->
                         if (id == generation && alive.get()) {
-                            fitScale = renderedFitScale.coerceAtLeast(0.01f)
                             // DOM geometry is necessary but does not prove Chromium has committed
                             // the corresponding pixels. Hold Compose readiness until that frame.
                             web.postVisualStateCallback(
@@ -111,15 +109,13 @@ internal fun DocxWebViewHost(
                                 object : WebView.VisualStateCallback() {
                                     override fun onComplete(requestId: Long) {
                                         if (alive.get() && id == generation) {
-                                            val nativeFitScale = web.scale / web.resources.displayMetrics.density
+                                            nativeFitScale = renderedFitScale.coerceAtLeast(0.01f)
                                             web.evaluateJavascript(
                                                 "(function(){if(!window.__docxNativeFitScale)window.__docxNativeFitScale=$nativeFitScale;})()",
                                                 null
                                             )
                                             viewerReady = true
-                                            onZoom(com.example.core.format.DocxZoomPolicy.fromWebViewScale(
-                                                web.scale, web.resources.displayMetrics.density, renderedFitScale
-                                            ))
+                                            onZoom(com.example.core.format.DocxZoomPolicy.DEFAULT_ZOOM)
                                             onVisualRender(id, pages, height, width, visiblePages)
                                         }
                                     }
@@ -146,13 +142,12 @@ internal fun DocxWebViewHost(
                             page.evaluateJavascript(
                                 "DocxViewer.setTheme($dark,${org.json.JSONObject.quote(paper)},${org.json.JSONObject.quote(pagePaper)},${org.json.JSONObject.quote(ink)},${org.json.JSONObject.quote(edge)});", null
                             )
-                            onZoom(com.example.core.format.DocxZoomPolicy.fromWebViewScale(page.scale, page.resources.displayMetrics.density, fitScale))
                         }
                     },
                     onScaleChanged = { scale ->
                         if (alive.get()) {
                             onZoom(com.example.core.format.DocxZoomPolicy.fromWebViewScale(
-                                scale, web.resources.displayMetrics.density, fitScale
+                                scale, web.resources.displayMetrics.density, nativeFitScale
                             ))
                         }
                     }

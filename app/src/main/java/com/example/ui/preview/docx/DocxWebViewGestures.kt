@@ -53,11 +53,10 @@ internal fun WebView.dispatchSingleTapIfNotLink(
     onResolved: () -> Unit = {}
 ) {
     val density = resources.displayMetrics.density
-    val pageZoom = DocxZoomPolicy.fromWebViewScale(scale, density)
-    val x = (event.x / (density * pageZoom)).toString()
-    val y = (event.y / (density * pageZoom)).toString()
+    val x = event.x.toString()
+    val y = event.y.toString()
     evaluateJavascript(
-        "(function(){var node=document.elementFromPoint($x,$y);return !!(node&&node.closest&&node.closest('a[href]'));})()"
+        "(function(){var v=window.visualViewport,scale=v&&v.scale>0?v.scale:1;var node=document.elementFromPoint($x/($density*scale),$y/($density*scale));return !!(node&&node.closest&&node.closest('a[href]'));})()"
     ) { result ->
         if (isActive()) {
             if (result != "true") onTap()

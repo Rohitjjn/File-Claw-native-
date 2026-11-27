@@ -31,8 +31,10 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(launcher, /Intent\.ACTION_VIEW/);
   assert.match(launcher, /setOf\("http", "https", "mailto", "tel"\)/);
   assert.match(launcher, /ActivityNotFoundException/);
-  assert.match(host, /fromWebViewScale\(page\.scale, page\.resources\.displayMetrics\.density, fitScale\)/);
-  assert.match(host, /scale, web\.resources\.displayMetrics\.density, fitScale/);
+  assert.match(host, /nativeFitScale = renderedFitScale\.coerceAtLeast\(0\.01f\)/);
+  assert.match(host, /onZoom\(com\.example\.core\.format\.DocxZoomPolicy\.DEFAULT_ZOOM\)/);
+  assert.match(host, /scale, web\.resources\.displayMetrics\.density, nativeFitScale/);
+  assert.doesNotMatch(host, /\b(?:web|page)\.scale\b/);
   assert.match(host, /installDocxGestureListeners\(/);
   assert.match(host, /launchDocxExternalLink\(context, uri\)/);
   assert.match(gestures, /onSingleTapConfirmed/);
@@ -55,8 +57,11 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(gestures, /top:s\.scrollTop,fitScale:state\.nativeFitScale\|\|state\.fitScale/);
   assert.match(gestures, /window\.DocxViewer\.getState\(\)/);
   assert.match(gestures, /state\.nativeFitScale\|\|state\.fitScale/);
-  assert.match(host, /val nativeFitScale = web\.scale \/ web\.resources\.displayMetrics\.density/);
   assert.match(host, /window\.__docxNativeFitScale/);
+  assert.doesNotMatch(host, /\b(?:web|page)\.scale\b/);
+  assert.doesNotMatch(instrumentation, /\bweb\.scale\b/);
+  assert.equal((instrumentation.match(/@Suppress\("UNUSED_PARAMETER"\)/g) || []).length, 3);
+  assert.match(instrumentation, /@Suppress\("UNUSED_PARAMETER"\)\s+fun onDocumentVisuallyRendered\(payload: String\)/);
   assert.match(viewer, /nativeFitScale: window\.__docxNativeFitScale \|\| fitScale/);
   assert.match(html, /#scroller\.zoom-anchor-space #stage::before/);
   assert.match(instrumentation, /r\.left-sr\.left/);
