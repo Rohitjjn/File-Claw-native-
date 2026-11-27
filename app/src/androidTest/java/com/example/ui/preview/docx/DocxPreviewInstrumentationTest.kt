@@ -374,6 +374,7 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Initial portrait width mismatch: $portraitStart", kotlin.math.abs(portraitStart.optDouble("width") - portraitWidth) < 3)
             evaluateJson(instrumentation, web,
                 "(function(){var s=document.getElementById('scroller');s.scrollTop=(s.scrollHeight-s.clientHeight)*0.55;return JSON.stringify({ratio:s.scrollTop/Math.max(1,s.scrollHeight-s.clientHeight)});})()")
+            awaitVisualState(instrumentation, web, "portrait reading position before container resize")
             val before = evaluateJson(instrumentation, web,
                 "(function(){var s=document.getElementById('scroller'),ratio=s.scrollTop/Math.max(1,s.scrollHeight-s.clientHeight);return JSON.stringify({ratio:ratio,cachedRatio:DocxViewer.getState().scrollRatio,count:window.__docxFitReflowCount||0});})()")
             assertTrue("Scroll handler must remember reading progress before the viewport changes: $before",
