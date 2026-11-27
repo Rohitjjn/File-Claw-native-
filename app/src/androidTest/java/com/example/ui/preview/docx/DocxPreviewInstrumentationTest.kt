@@ -299,6 +299,7 @@ class DocxPreviewInstrumentationTest {
         }
         try {
             assertTrue("Minimal viewport fixture did not load", ready.await(10, TimeUnit.SECONDS))
+            awaitVisualState(instrumentation, web, "minimal fixture initial load")
             val initial = readVisualViewportScale(instrumentation, web)
             assertTrue("Minimal viewport fixture must start at 100%: $initial", kotlin.math.abs(initial - 1f) < .03f)
             repeat(4) {
