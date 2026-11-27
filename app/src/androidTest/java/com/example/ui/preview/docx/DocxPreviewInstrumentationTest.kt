@@ -232,7 +232,7 @@ class DocxPreviewInstrumentationTest {
             val panRead = CountDownLatch(1)
             val panJson = AtomicReference<String?>(null)
             instrumentation.runOnMainSync {
-                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important;max-width:none!important;flex:0 0 1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var top=s.scrollTop;s.scrollLeft=Number.MAX_SAFE_INTEGER;s.scrollTop=Number.MAX_SAFE_INTEGER;var right=s.scrollLeft;var bottom=s.scrollTop;s.scrollLeft=right+100;s.scrollTop=bottom+100;var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');return JSON.stringify({left:left,right:right,maxX:right,top:top,bottom:bottom,maxY:bottom,afterRight:s.scrollLeft,afterBottom:s.scrollTop,zoom:visualViewport.scale,cssZoom:p&&p.style.zoom,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
+                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important;max-width:none!important;flex:0 0 1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var top=s.scrollTop;s.scrollLeft=Number.MAX_SAFE_INTEGER;s.scrollTop=Number.MAX_SAFE_INTEGER;var right=s.scrollLeft;var bottom=s.scrollTop;s.scrollLeft=right+100;s.scrollTop=bottom+100;var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');return JSON.stringify({left:left,right:right,maxX:right,top:top,bottom:bottom,maxY:bottom,afterRight:s.scrollLeft,afterBottom:s.scrollTop,zoom:visualViewport.scale,cssZoom:document.getElementById('scaled-document').style.zoom,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
                     panJson.set(it); panRead.countDown()
                 }
             }
@@ -244,7 +244,7 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Native pan must stop at the far-right limit: $pan", pan.optDouble("afterRight") <= pan.optDouble("right") + 1)
             assertTrue("Native pan must work downward as well as upward: $pan", pan.optDouble("maxY") > 0 && pan.optDouble("bottom") >= pan.optDouble("maxY") - 1)
             assertTrue("Native pan must stop at the bottom limit: $pan", pan.optDouble("afterBottom") <= pan.optDouble("bottom") + 1)
-            assertTrue("One-time fit zoom must be retained on each page: $pan", pan.optString("cssZoom").toFloatOrNull()?.let { it > 0f && it <= 1f } == true)
+            assertTrue("One-time fit zoom must remain on the document root: $pan", pan.optString("cssZoom").toFloatOrNull()?.let { it > 0f && it <= 1f } == true)
             assertTrue("Viewer must not apply a CSS transform: $pan", pan.optString("transform") == "none")
 
             val midpoint = evaluateJson(instrumentation, web,
@@ -415,7 +415,7 @@ class DocxPreviewInstrumentationTest {
             val nativeScale = AtomicReference<Float>()
             instrumentation.runOnMainSync { nativeScale.set(web.scale) }
             val layout = evaluateJson(instrumentation, web,
-                "(function(){var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p&&p.getBoundingClientRect();return JSON.stringify({wrappers:document.querySelectorAll('.docx-wrapper').length,scale:visualViewport.scale,zoom:p&&p.style.zoom,left:r&&r.left,top:r&&r.top,width:r&&r.width,height:r&&r.height});})()")
+                "(function(){var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p&&p.getBoundingClientRect();return JSON.stringify({wrappers:document.querySelectorAll('.docx-wrapper').length,scale:visualViewport.scale,zoom:document.getElementById('scaled-document').style.zoom,left:r&&r.left,top:r&&r.top,width:r&&r.width,height:r&&r.height});})()")
             observations += layout to nativeScale.get()
             Thread.sleep(50)
         }
