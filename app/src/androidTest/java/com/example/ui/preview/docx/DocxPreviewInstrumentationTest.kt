@@ -215,7 +215,7 @@ class DocxPreviewInstrumentationTest {
             }
             val minZoom = readVisualViewportScale(instrumentation, web)
             val pinchBounds = evaluateJson(instrumentation, web,
-                "(function(){return JSON.stringify({viewport:document.getElementById('docx-viewport').content,fit:DocxViewer.getState().fitScale,scale:visualViewport.scale});})()")
+                "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document');return JSON.stringify({viewport:document.getElementById('docx-viewport').content,fit:DocxViewer.getState().fitScale,scale:visualViewport.scale,visualViewportWidth:visualViewport.width,layoutViewportWidth:document.documentElement.clientWidth,htmlScrollWidth:document.documentElement.scrollWidth,bodyClientWidth:document.body.clientWidth,bodyScrollWidth:document.body.scrollWidth,bodyComputedWidth:getComputedStyle(document.body).width,scrollerClientWidth:s.clientWidth,scrollerScrollWidth:s.scrollWidth,documentClientWidth:d.clientWidth,documentScrollWidth:d.scrollWidth});})()")
             assertTrue("Native page zoom is floored at 50% of fit: $minZoom after $zoomOutProgress fit=$fitScale bounds=$pinchBounds",
                 minZoom >= .49f && minZoom <= .52f)
             repeat(4) {
