@@ -272,6 +272,57 @@ class DocxPreviewInstrumentationTest {
         }
     }
 
+    @Test fun nativeViewportMetaAllowsZoomOutForScrollableHtmlContent() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val activity = launchTestActivity(instrumentation)
+        val ready = CountDownLatch(1)
+        lateinit var web: WebView
+        instrumentation.runOnMainSync {
+            web = WebView(activity).apply {
+                settings.javaScriptEnabled = true
+                settings.setSupportZoom(true)
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = false
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView?, url: String?) { ready.countDown() }
+                }
+                val density = resources.displayMetrics.density
+                attachWebView(activity, this, (412 * density).toInt(), (915 * density).toInt())
+                loadDataWithBaseURL(
+                    "https://appassets.androidplatform.net/",
+                    """<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes"><style>html,body{margin:0;width:100%;height:100%;}#extent{width:200vw;height:200vh;}</style><div id="extent"></div>""",
+                    "text/html", "UTF-8", null
+                )
+            }
+        }
+        try {
+            assertTrue("Minimal viewport fixture did not load", ready.await(10, TimeUnit.SECONDS))
+            val initial = readVisualViewportScale(instrumentation, web)
+            assertTrue("Minimal viewport fixture must start at 100%: $initial", kotlin.math.abs(initial - 1f) < .03f)
+            repeat(4) {
+                instrumentation.runOnMainSync {
+                    dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
+                }
+            }
+            val zoomedIn = readVisualViewportScale(instrumentation, web)
+            assertTrue("Minimal fixture must allow native pinch-in: $zoomedIn", zoomedIn >= 4.9f)
+            repeat(6) {
+                instrumentation.runOnMainSync {
+                    dispatchPinch(web, SystemClock.uptimeMillis(), 160f * web.resources.displayMetrics.density, 40f * web.resources.displayMetrics.density)
+                }
+            }
+            val zoomedOut = readVisualViewportScale(instrumentation, web)
+            val geometry = evaluateJson(instrumentation, web,
+                "JSON.stringify({scale:visualViewport.scale,htmlWidth:document.documentElement.scrollWidth,bodyWidth:document.body.scrollWidth,viewportWidth:visualViewport.width})")
+            assertTrue("Native pinch-out should reach the declared 50% viewport minimum: $zoomedOut geometry=$geometry",
+                zoomedOut >= .49f && zoomedOut <= .52f)
+        } finally {
+            destroyWebView(instrumentation, activity, web)
+        }
+    }
+
     @Test fun initialPageFitsAt360x800And412x915() {
         verifyInitialPageFitsViewport(widthDp = 360, heightDp = 800)
         verifyInitialPageFitsViewport(widthDp = 412, heightDp = 915)

@@ -124,6 +124,7 @@ test('Android fit-width regression covers page bounds at both phone viewport siz
 });
 
 test('Android regression fixture checks native zoom defaults, bounds and both horizontal edges', () => {
+  assert.match(instrumentation, /nativeViewportMetaAllowsZoomOutForScrollableHtmlContent/);
   assert.match(instrumentation, /nativeWebViewZoomSupportsHorizontalPanToBothEdges/);
   assert.match(instrumentation, /Initial page zoom must equal the measured fit baseline/);
   assert.match(instrumentation, /Native page zoom is floored at 50% of fit/);
