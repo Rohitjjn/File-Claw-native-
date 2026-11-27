@@ -14,7 +14,9 @@
     let readySent = false;
     let activePage = 0;
     let fitScale = 1;
-    let fitLayoutViewportWidth = 0;
+    let lastLoadGeneration = null;
+    let loadPromise = null;
+    let renderQueue = Promise.resolve();
     let printMode = false;
 
     function send(method, payload) {
@@ -179,10 +181,6 @@
         send('onSearchResults', { total: totalMatches, current: matchIndex + 1, truncated: matchesTruncated });
     }
 
-    function rebuildHighlights() {
-        if (currentSearchQuery) search(currentSearchQuery);
-    }
-
     function configureScrollReporting() {
         els.scroller.addEventListener('scroll', () => requestAnimationFrame(reportPage), { passive: true });
     }
@@ -191,38 +189,20 @@
         return Math.max(1, document.documentElement.clientWidth || window.innerWidth || 1);
     }
 
-    function applyViewportScale(targetScale, fit) {
-        fitScale = fit.fitScale;
-        fitLayoutViewportWidth = layoutViewportWidth();
-        els.scroller.style.paddingLeft = `${fit.cssMargin}px`;
-        els.scroller.style.paddingRight = `${fit.cssMargin}px`;
-        els.viewport.content = `width=device-width, initial-scale=${targetScale}, minimum-scale=${fit.minScale}, maximum-scale=${fit.maxScale}, user-scalable=yes`;
-    }
-
     function applyInitialFit() {
         if (printMode) return 1;
-        const page = els.document.querySelector('.docx, section.docx');
-        const fit = page && window.DocxViewportFit.calculate(
+        const pages = Array.from(els.document.querySelectorAll('.docx, section.docx'));
+        const fit = pages.length && window.DocxViewportFit.calculate(
             layoutViewportWidth(),
-            page.offsetWidth,
+            pages[0].offsetWidth,
             12
         );
         if (!fit) throw new Error('FIT_TO_WIDTH_UNAVAILABLE');
-        applyViewportScale(fit.fitScale, fit);
-        return fit.fitScale;
-    }
-
-    function refitAfterViewportResize() {
-        if (!readySent || printMode || window.__docxDoubleTapZoomActive) return;
-        const viewportWidth = layoutViewportWidth();
-        if (Math.abs(viewportWidth - fitLayoutViewportWidth) < 1) return;
-        const page = els.document.querySelector('.docx, section.docx');
-        const fit = page && window.DocxViewportFit.calculate(viewportWidth, page.offsetWidth, 12);
-        if (!fit) return;
-        const currentScale = window.visualViewport ? window.visualViewport.scale : fitScale;
-        const relativeZoom = currentScale / fitScale;
-        const targetScale = Math.min(fit.maxScale, Math.max(fit.minScale, fit.fitScale * relativeZoom));
-        applyViewportScale(targetScale, fit);
+        els.scroller.style.paddingLeft = '12px';
+        els.scroller.style.paddingRight = '12px';
+        pages.forEach(page => { page.style.zoom = String(fit.fitScale); });
+        fitScale = 1;
+        return fitScale;
     }
 
     async function readDocumentStream(response, generation) {
@@ -260,25 +240,51 @@
         return combined.buffer;
     }
 
-    async function load(fileUrl, generation) {
+    function load(fileUrl, generation) {
+        if (generation === lastLoadGeneration) return loadPromise;
+        lastLoadGeneration = generation;
         renderId = generation;
         readySent = false;
         els.document.replaceChildren();
         clearHighlights();
+        loadPromise = loadDocument(fileUrl, generation);
+        return loadPromise;
+    }
+
+    async function renderOnce(buffer, generation, options) {
+        const render = renderQueue.then(async () => {
+            if (generation !== renderId) return false;
+            els.document.replaceChildren();
+            await window.docx.renderAsync(buffer, els.document, undefined, options);
+            if (generation !== renderId) {
+                els.document.replaceChildren();
+                return false;
+            }
+            return true;
+        });
+        renderQueue = render.catch(() => {});
+        return render;
+    }
+
+    async function loadDocument(fileUrl, generation) {
         status('Loading document…');
         if (!window.JSZip || !window.docx || typeof window.docx.renderAsync !== 'function') throw new Error('RENDERER_UNAVAILABLE');
         const response = await fetch(fileUrl);
+        if (generation !== renderId) return;
         if (!response.ok) throw new Error('LOAD_FAILED_' + response.status);
         const buffer = await readDocumentStream(response, generation);
+        if (generation !== renderId) return;
         if (buffer.byteLength > MAX_BYTES) throw new Error('RESOURCE_LIMIT_EXCEEDED');
         status('Preparing document…');
         try {
             const archive = await JSZip.loadAsync(buffer, { checkCRC32: false });
+            if (generation !== renderId) return;
             const entries = Object.keys(archive.files);
             if (!archive.file('[Content_Types].xml') || !archive.file('word/document.xml')) throw new Error('INVALID_PACKAGE');
             if (entries.length > 20000) throw new Error('RESOURCE_LIMIT_EXCEEDED');
             const core = archive.file('word/document.xml');
             const xml = await core.async('string');
+            if (generation !== renderId) return;
             if (xml.length > MAX_TEXT_CHARS * 8) throw new Error('RESOURCE_LIMIT_EXCEEDED');
         } catch (error) {
             if (/INVALID_PACKAGE|RESOURCE_LIMIT/.test(String(error && error.message))) throw error;
@@ -294,11 +300,12 @@
             renderAltChunks: false, debug: false
         };
         try {
-            await window.docx.renderAsync(buffer, els.document, undefined, options);
+            if (!await renderOnce(buffer, generation, options)) return;
         } catch (_) {
             throw new Error('RENDER_FAILED');
         }
-        if (generation !== renderId) return;
+        const wrappers = els.document.querySelectorAll('.docx-wrapper').length;
+        if (wrappers !== 1) throw new Error(wrappers === 0 ? 'EMPTY_DOCUMENT_WITHOUT_WRAPPER' : 'DUPLICATE_DOCUMENT_WRAPPERS');
         status('Laying out pages…');
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         if (!pageCount()) throw new Error('EMPTY_DOCUMENT_WITHOUT_PAGES');
@@ -334,7 +341,9 @@
         const path = params.get('file');
         const generation = Number(params.get('generation') || 1);
         if (!path) { throwFailure('LOAD_FAILED_MISSING_FILE'); return; }
-        load(path, generation).catch(error => throwFailure(String(error && error.message || error || 'LOAD_FAILED')));
+        load(path, generation).catch(error => {
+            if (generation === renderId) throwFailure(String(error && error.message || error || 'LOAD_FAILED'));
+        });
     }
 
     window.DocxViewer = {
@@ -347,17 +356,6 @@
             if (page) els.scroller.scrollTo({ top: els.scroller.scrollTop + page.getBoundingClientRect().top - els.scroller.getBoundingClientRect().top, behavior: 'smooth' });
         },
         clearSearch() { clearHighlights(); send('onSearchResults', { total: 0, current: 0, truncated: false }); },
-        syncNativeScaleBounds(scale) {
-            if (printMode || !Number.isFinite(scale) || scale <= 0 || !Number.isFinite(fitScale) || fitScale <= 0) return false;
-            const fit = {
-                fitScale,
-                minScale: fitScale * 0.5,
-                maxScale: fitScale * 5,
-                cssMargin: 12 / fitScale
-            };
-            applyViewportScale(Math.max(fit.minScale, Math.min(fit.maxScale, scale)), fit);
-            return true;
-        },
         setTheme(dark, paper, pagePaper, ink, edge) {
             const root = document.documentElement;
             root.classList.toggle('dark', !!dark);
@@ -373,17 +371,7 @@
         els.stage = document.getElementById('stage');
         els.document = document.getElementById('scaled-document');
         els.status = document.getElementById('status');
-        els.viewport = document.getElementById('docx-viewport');
         configureScrollReporting();
-        window.addEventListener('resize', refitAfterViewportResize);
-        const onResize = () => {
-            if (pageCount()) {
-                if (readySent) rebuildHighlights();
-                else reportReady(renderId);
-            }
-        };
-        if (typeof ResizeObserver !== 'undefined') new ResizeObserver(onResize).observe(els.scroller);
-        else window.addEventListener('resize', onResize);
         runFromUrl();
     });
 })();

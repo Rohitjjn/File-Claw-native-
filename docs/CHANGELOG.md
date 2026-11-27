@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased] 2026-11-21 — DOCX single-render and idle stability remediation (not yet verified)
+
+- Added per-generation load de-duplication and serialized DOCX render execution; clear the renderer root before a render and reject output unless exactly one `.docx-wrapper` is present. Keep one Compose `AndroidView` WebView and disable overview mode.
+- Use the fixed device-width viewport with initial 1× and 0.5×–5× native bounds. Compute page fit once after each render and remove automatic resize/refit or delayed scale-reset paths. Preserve the existing native gestures, focus tap, external links, loading surface and action tray.
+- Added Node source-contract regression coverage and an Android two-second idle stability assertion for wrapper count, visual/native WebView scale, fitted page zoom and page bounds. **Local checks PASS:** Node DOCX suite 30/30, four relevant JavaScript syntax checks, and `git diff --check`. Java/JDK and Android SDK are unavailable, and no new exact-SHA workflow or device result exists. Do not claim this fixes the owner-reported symptom or distribute an APK until exact-SHA CI is green and the artifact is verified.
+
 ## [Unreleased] 2026-11-21 — DOCX initial fit-width follow-up (owner device unverified)
 
 - Owner screenshots show the DOCX first page clipped at the right edge versus the requested centered fit-width view. An earlier implementation explicitly called `setInitialScale(100)`; fit geometry passed at 412×915, but the native 50% pinch floor remained stuck at 1.0. Removing that override did not resolve the floor. The light reader surface now uses a `#f0f0f0` canvas and `#ffffff` page cards; dark colors are unchanged.

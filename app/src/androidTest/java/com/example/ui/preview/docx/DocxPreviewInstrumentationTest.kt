@@ -69,7 +69,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
+                settings.loadWithOverviewMode = false
                 installDocxGestureListeners(
                     onSingleTapConfirmed = { event ->
                         dispatchSingleTapIfNotLink(
@@ -114,7 +114,7 @@ class DocxPreviewInstrumentationTest {
                 assertTrue("Native pinch controls must be enabled", web.settings.builtInZoomControls)
                 assertTrue("Native zoom buttons must stay hidden", !web.settings.displayZoomControls)
                 assertTrue("Wide viewport support must be enabled", web.settings.useWideViewPort)
-                assertTrue("Overview mode must be enabled for fit-to-width rendering", web.settings.loadWithOverviewMode)
+                assertTrue("Overview mode must stay disabled so Chromium cannot reset the fit layout", !web.settings.loadWithOverviewMode)
                 val density = web.resources.displayMetrics.density
                 assertTrue("Native WebView scale must equal measured fit baseline: ${web.scale / density}, fit=$fitScale",
                     kotlin.math.abs(web.scale / density - fitScale) < .03f)
@@ -130,6 +130,7 @@ class DocxPreviewInstrumentationTest {
             val rightMargin = initialLayout.optDouble("viewportWidth") - initialLayout.optDouble("pageRight")
             assertTrue("Fit-to-width page must have balanced 12px margins: $initialLayout",
                 kotlin.math.abs(leftMargin - 12) <= 2 && kotlin.math.abs(rightMargin - 12) <= 2)
+            assertSingleWrapperAndStableIdleLayout(instrumentation, web)
             assertTrue("Opening the DOCX must not clip the page horizontally: $initialLayout",
                 initialLayout.optDouble("scrollWidth") <= initialLayout.optDouble("visualViewportWidth") + 1)
             val tapPoint = AtomicReference<FloatArray>()
@@ -204,7 +205,7 @@ class DocxPreviewInstrumentationTest {
             }
             val maxZoom = readVisualViewportScale(instrumentation, web)
             assertTrue("Native page zoom is capped at 500% of fit: $maxZoom after $zoomInProgress fit=$fitScale",
-                maxZoom <= fitScale * 5.02f && maxZoom >= fitScale * 4.9f)
+                maxZoom <= 5.02f && maxZoom >= 4.9f)
             val zoomOutProgress = mutableListOf<Float>()
             repeat(6) {
                 instrumentation.runOnMainSync {
@@ -217,7 +218,7 @@ class DocxPreviewInstrumentationTest {
             val pinchBounds = evaluateJson(instrumentation, web,
                 "(function(){return JSON.stringify({viewport:document.getElementById('docx-viewport').content,fit:DocxViewer.getState().fitScale,scale:visualViewport.scale});})()")
             assertTrue("Native page zoom is floored at 50% of fit: $minZoom after $zoomOutProgress fit=$fitScale bounds=$pinchBounds",
-                minZoom >= fitScale * .49f && minZoom <= fitScale * .52f)
+                minZoom >= .49f && minZoom <= .52f)
             repeat(4) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
@@ -226,12 +227,12 @@ class DocxPreviewInstrumentationTest {
             }
             val recoveredZoom = readVisualViewportScale(instrumentation, web)
             assertTrue("Native pinch must recover toward fit from the 50% floor: $recoveredZoom fit=$fitScale",
-                recoveredZoom >= fitScale * .9f && recoveredZoom <= fitScale * 5.02f)
+                recoveredZoom >= .9f && recoveredZoom <= 5.02f)
 
             val panRead = CountDownLatch(1)
             val panJson = AtomicReference<String?>(null)
             instrumentation.runOnMainSync {
-                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important;max-width:none!important;flex:0 0 1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var top=s.scrollTop;s.scrollLeft=Number.MAX_SAFE_INTEGER;s.scrollTop=Number.MAX_SAFE_INTEGER;var right=s.scrollLeft;var bottom=s.scrollTop;s.scrollLeft=right+100;s.scrollTop=bottom+100;return JSON.stringify({left:left,right:right,maxX:right,top:top,bottom:bottom,maxY:bottom,afterRight:s.scrollLeft,afterBottom:s.scrollTop,zoom:visualViewport.scale,cssZoom:document.getElementById('scaled-document').style.zoom,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
+                web.evaluateJavascript("(function(){var style=document.createElement('style');style.textContent='#scaled-document{width:1800px!important;max-width:none!important;flex:0 0 1800px!important}';document.head.appendChild(style);var s=document.getElementById('scroller');s.scrollLeft=0;s.scrollTop=0;var left=s.scrollLeft;var top=s.scrollTop;s.scrollLeft=Number.MAX_SAFE_INTEGER;s.scrollTop=Number.MAX_SAFE_INTEGER;var right=s.scrollLeft;var bottom=s.scrollTop;s.scrollLeft=right+100;s.scrollTop=bottom+100;var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx');return JSON.stringify({left:left,right:right,maxX:right,top:top,bottom:bottom,maxY:bottom,afterRight:s.scrollLeft,afterBottom:s.scrollTop,zoom:visualViewport.scale,cssZoom:p&&p.style.zoom,transform:getComputedStyle(document.getElementById('scaled-document')).transform})})()") {
                     panJson.set(it); panRead.countDown()
                 }
             }
@@ -243,7 +244,7 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Native pan must stop at the far-right limit: $pan", pan.optDouble("afterRight") <= pan.optDouble("right") + 1)
             assertTrue("Native pan must work downward as well as upward: $pan", pan.optDouble("maxY") > 0 && pan.optDouble("bottom") >= pan.optDouble("maxY") - 1)
             assertTrue("Native pan must stop at the bottom limit: $pan", pan.optDouble("afterBottom") <= pan.optDouble("bottom") + 1)
-            assertTrue("Viewer must not use custom CSS zoom: $pan", pan.optString("cssZoom").isEmpty())
+            assertTrue("One-time fit zoom must be retained on each page: $pan", pan.optString("cssZoom").toFloatOrNull()?.let { it > 0f && it <= 1f } == true)
             assertTrue("Viewer must not apply a CSS transform: $pan", pan.optString("transform") == "none")
 
             val midpoint = evaluateJson(instrumentation, web,
@@ -302,7 +303,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
+                settings.loadWithOverviewMode = false
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         signalAfterVisualState(web, ready)
@@ -402,6 +403,40 @@ class DocxPreviewInstrumentationTest {
         send(MotionEvent.ACTION_DOWN, 0f)
         for (step in 1..8) send(MotionEvent.ACTION_MOVE, step / 8f)
         send(MotionEvent.ACTION_UP, 1f)
+    }
+
+    private fun assertSingleWrapperAndStableIdleLayout(
+        instrumentation: android.app.Instrumentation,
+        web: WebView
+    ) {
+        val observations = mutableListOf<Pair<JSONObject, Float>>()
+        val deadline = SystemClock.elapsedRealtime() + 2_000L
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val nativeScale = AtomicReference<Float>()
+            instrumentation.runOnMainSync { nativeScale.set(web.scale) }
+            val layout = evaluateJson(instrumentation, web,
+                "(function(){var p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p&&p.getBoundingClientRect();return JSON.stringify({wrappers:document.querySelectorAll('.docx-wrapper').length,scale:visualViewport.scale,zoom:p&&p.style.zoom,left:r&&r.left,top:r&&r.top,width:r&&r.width,height:r&&r.height});})()")
+            observations += layout to nativeScale.get()
+            Thread.sleep(50)
+        }
+        assertTrue("two-second idle observation must collect repeated layout samples: ${observations.size}", observations.size >= 20)
+        assertTrue("Exactly one rendered DOCX wrapper must remain in the DOM: ${observations.map { it.first.optInt("wrappers") }.distinct()}",
+            observations.all { it.first.optInt("wrappers") == 1 })
+        val baseline = observations.first()
+        val maxVisualScaleDrift = observations.maxOf { kotlin.math.abs(it.first.optDouble("scale") - baseline.first.optDouble("scale")) }
+        val maxNativeScaleDrift = observations.maxOf { kotlin.math.abs(it.second - baseline.second) }
+        val maxCssZoomDrift = observations.maxOf { (layout, _) -> kotlin.math.abs(layout.optDouble("zoom") - baseline.first.optDouble("zoom")) }
+        val maxBoundsDrift = observations.maxOf { (layout, _) ->
+            listOf("left", "top", "width", "height").maxOf { key ->
+                kotlin.math.abs(layout.optDouble(key) - baseline.first.optDouble(key))
+            }
+        }
+        assertTrue(
+            "native scale and page bounds must remain stable during two-second idle observation: " +
+                "visualScaleDrift=$maxVisualScaleDrift nativeScaleDrift=$maxNativeScaleDrift " +
+                "cssZoomDrift=$maxCssZoomDrift boundsDrift=$maxBoundsDrift baseline=${baseline.first}",
+            maxVisualScaleDrift < .001 && maxNativeScaleDrift < .01f && maxCssZoomDrift < .0001 && maxBoundsDrift < .1
+        )
     }
 
     private fun readVisualViewportScale(instrumentation: android.app.Instrumentation, web: WebView): Float {
@@ -508,7 +543,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
+                settings.loadWithOverviewMode = false
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
                         val metrics = JSONObject(payload)
@@ -573,7 +608,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
+                settings.loadWithOverviewMode = false
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) { ready.countDown() }
                     @JavascriptInterface fun onFailure(payload: String) { error.set(payload); failed.countDown() }
@@ -630,7 +665,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
+                settings.loadWithOverviewMode = false
                 setBackgroundColor(Color.rgb(240, 240, 240))
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {
@@ -752,7 +787,7 @@ class DocxPreviewInstrumentationTest {
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.useWideViewPort = true
-                settings.loadWithOverviewMode = true
+                settings.loadWithOverviewMode = false
                 setBackgroundColor(Color.rgb(240, 240, 240))
                 addJavascriptInterface(object {
                     @JavascriptInterface fun onDocumentVisuallyRendered(payload: String) {

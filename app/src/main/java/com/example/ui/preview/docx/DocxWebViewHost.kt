@@ -87,7 +87,7 @@ internal fun DocxWebViewHost(
                     builtInZoomControls = true
                     displayZoomControls = false
                     useWideViewPort = true
-                    loadWithOverviewMode = true
+                    loadWithOverviewMode = false
                 }
                 installDocxGestureListeners(
                     isActive = alive::get,
@@ -151,16 +151,9 @@ internal fun DocxWebViewHost(
                     },
                     onScaleChanged = { scale ->
                         if (alive.get()) {
-                            val zoom = com.example.core.format.DocxZoomPolicy.fromWebViewScale(scale, web.resources.displayMetrics.density, fitScale)
-                            if (kotlin.math.abs(zoom - com.example.core.format.DocxZoomPolicy.DEFAULT_ZOOM) < 0.01f) {
-                                web.postDelayed({
-                                    if (alive.get()) web.evaluateJavascript(
-                                        "(function(){var s=document.getElementById('scroller'),v=window.visualViewport,fit=window.DocxViewer.getState().fitScale;if(s&&v&&s.classList.contains('zoom-anchor-space')&&Math.abs(v.scale-fit)<0.01){s.classList.remove('zoom-anchor-space');s.scrollLeft=0;s.scrollTop=0;}})()",
-                                        null
-                                    )
-                                }, 300L)
-                            }
-                            onZoom(zoom)
+                            onZoom(com.example.core.format.DocxZoomPolicy.fromWebViewScale(
+                                scale, web.resources.displayMetrics.density, fitScale
+                            ))
                         }
                     }
                 )
