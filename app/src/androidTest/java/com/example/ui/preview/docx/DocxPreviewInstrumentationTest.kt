@@ -134,7 +134,7 @@ class DocxPreviewInstrumentationTest {
                 initialLayout.optDouble("scrollWidth") <= initialLayout.optDouble("visualViewportWidth") + 1)
             val tapPoint = AtomicReference<FloatArray>()
             instrumentation.runOnMainSync {
-                tapPoint.set(floatArrayOf(web.width * .5f, web.height * .35f, web.resources.displayMetrics.density))
+                tapPoint.set(floatArrayOf(web.width * .33f, web.height * .62f, web.resources.displayMetrics.density))
             }
             fun documentPointAtTap(): JSONObject {
                 val point = tapPoint.get()
@@ -142,7 +142,7 @@ class DocxPreviewInstrumentationTest {
                 val y = point[1].toDouble().toString()
                 val density = point[2].toDouble().toString()
                 return evaluateJson(instrumentation, web,
-                    "(function(){var s=document.getElementById('scroller'),v=window.visualViewport,d=document.getElementById('scaled-document'),r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();return JSON.stringify({x:$x/($density*v.scale)-(r.left-sr.left),y:$y/($density*v.scale)-(r.top-sr.top),offsetLeft:v.offsetLeft,offsetTop:v.offsetTop,scale:v.scale,scrollerLeft:s.scrollLeft,scrollerTop:s.scrollTop,scrollerMaxLeft:s.scrollWidth-s.clientWidth,scrollerMaxTop:s.scrollHeight-s.clientHeight,docLeft:d.offsetLeft,docTop:d.offsetTop,docRectLeft:r.left,docRectTop:r.top,scrollerRectLeft:sr.left,scrollerRectTop:sr.top});})()")
+                    "(function(){var s=document.getElementById('scroller'),v=window.visualViewport,d=document.getElementById('scaled-document'),r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();return JSON.stringify({x:$x/($density*v.scale)+v.offsetLeft-(r.left-sr.left),y:$y/($density*v.scale)+v.offsetTop-(r.top-sr.top),offsetLeft:v.offsetLeft,offsetTop:v.offsetTop,scale:v.scale,scrollerLeft:s.scrollLeft,scrollerTop:s.scrollTop,scrollerMaxLeft:s.scrollWidth-s.clientWidth,scrollerMaxTop:s.scrollHeight-s.clientHeight,docLeft:d.offsetLeft,docTop:d.offsetTop,docRectLeft:r.left,docRectTop:r.top,scrollerRectLeft:sr.left,scrollerRectTop:sr.top});})()")
             }
             val anchorBeforeZoom = documentPointAtTap()
             instrumentation.runOnMainSync {
@@ -326,9 +326,126 @@ class DocxPreviewInstrumentationTest {
         }
     }
 
+    @Test fun fitReflowsAfterContainerResizeAndPreservesScrollRatio() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val activity = launchTestActivity(instrumentation)
+        val fixture = fixtureDocx()
+        val ready = CountDownLatch(1)
+        val failure = AtomicReference<String?>(null)
+        lateinit var web: WebView
+        instrumentation.runOnMainSync {
+            val loader = WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(activity))
+                .addPathHandler("/docx-src/", object : WebViewAssetLoader.PathHandler {
+                    override fun handle(path: String): WebResourceResponse? = if (path == "document.docx")
+                        WebResourceResponse("application/vnd.openxmlformats-officedocument.wordprocessingml.document", null,
+                            200, "OK", mapOf("Content-Length" to fixture.size.toString()), ByteArrayInputStream(fixture)) else null
+                }).build()
+            web = WebView(activity).apply {
+                settings.javaScriptEnabled = true
+                settings.setSupportZoom(true)
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.useWideViewPort = true
+                settings.loadWithOverviewMode = false
+                addJavascriptInterface(object {
+                    @JavascriptInterface @Suppress("UNUSED_PARAMETER")
+                    fun onDocumentVisuallyRendered(payload: String) { signalAfterVisualState(web, ready) }
+                    @JavascriptInterface fun onFailure(payload: String) { failure.set(payload); ready.countDown() }
+                }, "DocxBridge")
+                webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? =
+                        request?.url?.let(loader::shouldInterceptRequest)
+                }
+                val density = resources.displayMetrics.density
+                attachWebView(activity, this, (412 * density).toInt(), (915 * density).toInt())
+                loadUrl("https://appassets.androidplatform.net/assets/docx_viewer/index.html?generation=38&file=" +
+                    android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
+            }
+        }
+        try {
+            assertTrue("DOCX render timed out before orientation resize: ${failure.get()}", ready.await(45, TimeUnit.SECONDS))
+            assertTrue("DOCX renderer failed before orientation resize: ${failure.get()}", failure.get() == null)
+            val density = web.resources.displayMetrics.density
+            val portraitWidth = 412
+            val landscapeWidth = 915
+            val portraitStart = evaluateJson(instrumentation, web,
+                "(function(){var s=document.getElementById('scroller'),v=visualViewport;return JSON.stringify({width:s.clientWidth,viewport:v.width,count:window.__docxFitReflowCount||0,range:s.scrollHeight-s.clientHeight});})()")
+            assertTrue("Initial portrait width mismatch: $portraitStart", kotlin.math.abs(portraitStart.optDouble("width") - portraitWidth) < 3)
+            evaluateJson(instrumentation, web,
+                "(function(){var s=document.getElementById('scroller');s.scrollTop=(s.scrollHeight-s.clientHeight)*0.55;return JSON.stringify({ratio:s.scrollTop/Math.max(1,s.scrollHeight-s.clientHeight)});})()")
+            val before = evaluateJson(instrumentation, web,
+                "(function(){var s=document.getElementById('scroller');return JSON.stringify({ratio:s.scrollTop/Math.max(1,s.scrollHeight-s.clientHeight),count:window.__docxFitReflowCount||0});})()")
+            resizeWebView(instrumentation, web, (landscapeWidth * density).toInt(), (412 * density).toInt())
+            val landscape = awaitFitReflow(instrumentation, web, landscapeWidth, before.optInt("count") + 1)
+            assertPageFillsViewport(landscape, landscapeWidth)
+            assertTrue("Landscape reflow must preserve vertical reading progress: before=$before after=$landscape",
+                kotlin.math.abs(landscape.optDouble("scrollRatio") - before.optDouble("ratio")) < .04)
+            Thread.sleep(250)
+            val stableLandscape = evaluateJson(instrumentation, web,
+                "(function(){var s=document.getElementById('scroller'),p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p.getBoundingClientRect();return JSON.stringify({count:window.__docxFitReflowCount||0,transform:document.getElementById('scaled-document').style.transform,pageWidth:r.width,scrollTop:s.scrollTop});})()")
+            assertTrue("Resize observer must settle after one landscape reflow: $stableLandscape", stableLandscape.optInt("count") == landscape.optInt("count"))
+
+            resizeWebView(instrumentation, web, (portraitWidth * density).toInt(), (915 * density).toInt())
+            val portrait = awaitFitReflow(instrumentation, web, portraitWidth, stableLandscape.optInt("count") + 1)
+            assertPageFillsViewport(portrait, portraitWidth)
+            assertTrue("Returning to portrait must preserve the same reading progress: $before -> $portrait",
+                kotlin.math.abs(portrait.optDouble("scrollRatio") - before.optDouble("ratio")) < .04)
+        } finally {
+            destroyWebView(instrumentation, activity, web)
+        }
+    }
+
     @Test fun initialPageFitsAt360x800And412x915() {
         verifyInitialPageFitsViewport(widthDp = 360, heightDp = 800)
         verifyInitialPageFitsViewport(widthDp = 412, heightDp = 915)
+    }
+
+    private fun resizeWebView(
+        instrumentation: android.app.Instrumentation,
+        web: WebView,
+        widthPx: Int,
+        heightPx: Int
+    ) {
+        instrumentation.runOnMainSync {
+            val params = web.layoutParams as FrameLayout.LayoutParams
+            params.width = widthPx
+            params.height = heightPx
+            web.layoutParams = params
+            web.measure(
+                View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(heightPx, View.MeasureSpec.EXACTLY)
+            )
+            web.layout(0, 0, widthPx, heightPx)
+            web.requestLayout()
+        }
+    }
+
+    private fun awaitFitReflow(
+        instrumentation: android.app.Instrumentation,
+        web: WebView,
+        expectedWidth: Int,
+        expectedCount: Int
+    ): JSONObject {
+        val deadline = SystemClock.elapsedRealtime() + 5_000L
+        var metrics = JSONObject()
+        do {
+            metrics = evaluateJson(instrumentation, web,
+                "(function(){var s=document.getElementById('scroller'),p=document.querySelector('#scaled-document .docx, #scaled-document section.docx'),r=p.getBoundingClientRect(),v=visualViewport,range=s.scrollHeight-s.clientHeight;return JSON.stringify({width:s.clientWidth,viewport:v.width,count:window.__docxFitReflowCount||0,pageLeft:(r.left-v.offsetLeft)*v.scale,pageRight:(r.right-v.offsetLeft)*v.scale,pageWidth:r.width*v.scale,viewportWidth:v.width*v.scale,fitTransform:document.getElementById('scaled-document').style.transform,scrollRatio:s.scrollTop/Math.max(1,range)});})()")
+            if (kotlin.math.abs(metrics.optDouble("width") - expectedWidth) < 3 &&
+                kotlin.math.abs(metrics.optDouble("viewport") - expectedWidth) < 3 &&
+                metrics.optInt("count") == expectedCount
+            ) return metrics
+            Thread.sleep(50)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        throw AssertionError("Fit did not settle at $expectedWidth px in one reflow: $metrics")
+    }
+
+    private fun assertPageFillsViewport(metrics: JSONObject, expectedWidth: Int) {
+        assertTrue("Reflowed page must fill available landscape/portrait width with balanced gutters: $metrics",
+            kotlin.math.abs(metrics.optDouble("pageLeft") - 12.0) <= 2.0 &&
+                kotlin.math.abs((metrics.optDouble("viewportWidth") - metrics.optDouble("pageRight")) - 12.0) <= 2.0 &&
+                kotlin.math.abs(metrics.optDouble("pageWidth") - (expectedWidth - 24.0)) <= 4.0)
     }
 
     private fun verifyInitialPageFitsViewport(widthDp: Int, heightDp: Int) {

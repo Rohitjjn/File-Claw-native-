@@ -10,8 +10,8 @@
             viewportWidth <= 0 || pageWidth <= 0 || visualMargin < 0 || viewportWidth <= visualMargin * 2) {
             return null;
         }
-        const fitScale = Math.min(1, (viewportWidth - visualMargin * 2) / pageWidth);
-        if (!Number.isFinite(fitScale) || fitScale <= 0) return null;
+        const fitScale = (viewportWidth - visualMargin * 2) / pageWidth;
+        if (!Number.isFinite(fitScale) || fitScale <= 0 || fitScale > 5) return null;
         return {
             fitScale,
             minScale: fitScale * 0.5,

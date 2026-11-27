@@ -41,7 +41,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(gestures, /onDoubleTap/);
   assert.match(gestures, /DocxZoomPolicy\.doubleTapTarget/);
   assert.equal((gestures.match(/zoomBy\(target \/ current\)/g) || []).length, 2);
-  assert.match(viewer, /function applyInitialFit\(\)[\s\S]*?els\.document\.style\.transform = `translateX\(\$\{translateX\}px\) scale\(\$\{fit\.fitScale\}\)`/);
+  assert.match(viewer, /function applyFitToWidth\(viewportWidth\)[\s\S]*?els\.document\.style\.transform = `translateX\(\$\{translateX\}px\) scale\(\$\{fit\.fitScale\}\)`/);
   assert.match(gestures, /zoom-anchor-space/);
   assert.match(gestures, /getBoundingClientRect\(\)/);
   assert.match(gestures, /dx=\$anchorX-x,dy=\$anchorY-y/);
@@ -49,6 +49,11 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(gestures, /s\.scrollTop\+=dy/);
   assert.match(gestures, /preservedAnchor/);
   assert.match(gestures, /\$tapX\/\(\$density\*scale\)/);
+  assert.match(gestures, /v\.offsetLeft/);
+  assert.match(gestures, /v\.offsetTop/);
+  assert.match(instrumentation, /tapPoint\.set\(floatArrayOf\(web\.width \* \.33f, web\.height \* \.62f/);
+  assert.match(instrumentation, /\+v\.offsetLeft/);
+  assert.match(instrumentation, /\+v\.offsetTop/);
   assert.match(gestures, /window\.__docxAnchorFrame=requestAnimationFrame\(apply\)/);
   assert.match(gestures, /cancelAnimationFrame\(window\.__docxAnchorFrame\)/);
   assert.match(gestures, /Math\.abs\(scale-\$target\)>0\.01/);
@@ -60,7 +65,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(host, /window\.__docxNativeFitScale/);
   assert.doesNotMatch(host, /\b(?:web|page)\.scale\b/);
   assert.doesNotMatch(instrumentation, /\bweb\.scale\b/);
-  assert.equal((instrumentation.match(/@Suppress\("UNUSED_PARAMETER"\)/g) || []).length, 3);
+  assert.equal((instrumentation.match(/@Suppress\("UNUSED_PARAMETER"\)/g) || []).length, 4);
   assert.match(instrumentation, /@Suppress\("UNUSED_PARAMETER"\)\s+fun onDocumentVisuallyRendered\(payload: String\)/);
   assert.match(viewer, /nativeFitScale: window\.__docxNativeFitScale \|\| fitScale/);
   assert.match(html, /#scroller\.zoom-anchor-space #stage::before/);
@@ -73,6 +78,10 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(html, /src="viewport-fit\.js"/);
   assert.match(viewer, /function configureScrollReporting\(\)/);
   assert.match(viewer, /DocxViewportFit\.calculate/);
+  assert.match(viewer, /function recalculateFitToWidth\(/);
+  assert.match(viewer, /new ResizeObserver\(/);
+  assert.match(viewer, /scrollRatio/);
+  assert.match(instrumentation, /fitReflowsAfterContainerResizeAndPreservesScrollRatio/);
   assert.match(gestures, /window\.__docxDoubleTapZoomActive=true/);
   assert.match(gestures, /window\.__docxDoubleTapZoomActive=false/);
   assert.match(viewportFit, /function calculate\(viewportWidth, pageWidth, visualMargin = 12\)/);

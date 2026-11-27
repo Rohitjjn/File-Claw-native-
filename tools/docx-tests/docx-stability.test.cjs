@@ -22,14 +22,18 @@ test('DOCX uses one WebView and Chromium overview cannot compete with fit layout
   const scaleCallbackEnd = host.indexOf('onCreated(this)', scaleCallbackStart);
   assert.notEqual(scaleCallbackStart, -1);
   assert.doesNotMatch(host.slice(scaleCallbackStart, scaleCallbackEnd), /evaluateJavascript|postDelayed/);
-  assert.doesNotMatch(viewer, /ResizeObserver|refitAfterViewportResize|addEventListener\(['"]resize/);
+  assert.match(viewer, /new ResizeObserver\(/);
+  assert.match(viewer, /function recalculateFitToWidth\(/);
+  assert.match(viewer, /fitReflowTimer = window\.setTimeout/);
   assert.doesNotMatch(viewer, /els\.viewport\.content\s*=/);
-  assert.match(viewer, /window\.visualViewport && window\.visualViewport\.width/);
-  assert.match(viewer, /Math\.max\(\.\.\.pages\.map\(page => page\.offsetWidth\)\)/);
+  assert.match(viewer, /function fitViewportWidth\(\)[\s\S]*?els\.scroller\.clientWidth/);
+  assert.match(viewer, /pageNaturalWidth = Math\.max\(\.\.\.pages\.map\(page => page\.offsetWidth\)\)/);
   assert.match(viewer, /els\.document\.style\.transformOrigin = 'top left'/);
   assert.match(viewer, /els\.document\.style\.transform = `translateX\(\$\{translateX\}px\) scale\(\$\{fit\.fitScale\}\)`/);
-  assert.match(viewer, /els\.document\.style\.marginBottom = `\$\{-contentHeight \* \(1 - fit\.fitScale\)\}px`/);
-  assert.equal((viewer.match(/els\.document\.style\.transform\s*=/g) || []).length, 1);
+  assert.match(viewer, /els\.document\.style\.marginBottom = `\$\{contentHeight \* \(fit\.fitScale - 1\)\}px`/);
+  assert.match(viewer, /scrollRatio = oldRange > 0 \? els\.scroller\.scrollTop \/ oldRange : 0/);
+  assert.equal((viewer.match(/els\.document\.style\.transform\s*=/g) || []).length, 2);
+  assert.match(viewer, /els\.document\.style\.transform = 'none'/);
   assert.doesNotMatch(viewer, /setInterval|onScaleChanged|syncNativeScaleBounds/);
 });
 

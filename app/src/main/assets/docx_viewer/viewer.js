@@ -18,6 +18,10 @@
     let loadPromise = null;
     let renderQueue = Promise.resolve();
     let printMode = false;
+    let pageNaturalWidth = 0;
+    let lastFitViewportWidth = 0;
+    let fitResizeObserver = null;
+    let fitReflowTimer = 0;
 
     function send(method, payload) {
         try {
@@ -99,6 +103,7 @@
             visiblePageCount: metrics.visiblePageCount,
             fitScale
         });
+        observeViewportWidth();
         reportPage();
     }
 
@@ -186,19 +191,18 @@
     }
 
     function fitViewportWidth() {
-        return Math.max(1, window.visualViewport && window.visualViewport.width ||
+        return Math.max(1, els.scroller && els.scroller.clientWidth ||
             document.documentElement.clientWidth || window.innerWidth || 1);
     }
 
-    function applyInitialFit() {
-        if (printMode) return 1;
+    function applyFitToWidth(viewportWidth) {
         const pages = Array.from(els.document.querySelectorAll('.docx, section.docx'));
-        const fit = pages.length && window.DocxViewportFit.calculate(
-            fitViewportWidth(),
-            Math.max(...pages.map(page => page.offsetWidth)),
-            12
-        );
-        if (!fit) throw new Error('FIT_TO_WIDTH_UNAVAILABLE');
+        if (!pages.length) return null;
+        if (!(pageNaturalWidth > 0)) pageNaturalWidth = Math.max(...pages.map(page => page.offsetWidth));
+        const fit = window.DocxViewportFit.calculate(viewportWidth, pageNaturalWidth, 12);
+        if (!fit) return null;
+        els.document.style.transform = 'none';
+        els.document.style.marginBottom = '0px';
         const rootRect = els.document.getBoundingClientRect();
         const pageRect = pages[0].getBoundingClientRect();
         const scrollerRect = els.scroller.getBoundingClientRect();
@@ -207,9 +211,45 @@
         const contentHeight = els.document.scrollHeight;
         els.document.style.transformOrigin = 'top left';
         els.document.style.transform = `translateX(${translateX}px) scale(${fit.fitScale})`;
-        els.document.style.marginBottom = `${-contentHeight * (1 - fit.fitScale)}px`;
+        els.document.style.marginBottom = `${contentHeight * (fit.fitScale - 1)}px`;
+        return fit.fitScale;
+    }
+
+    function applyInitialFit() {
+        if (printMode) return 1;
+        const viewportWidth = fitViewportWidth();
+        if (!applyFitToWidth(viewportWidth)) throw new Error('FIT_TO_WIDTH_UNAVAILABLE');
+        lastFitViewportWidth = viewportWidth;
         fitScale = 1;
         return fitScale;
+    }
+
+    function recalculateFitToWidth() {
+        if (printMode || !readySent) return false;
+        if (fitReflowTimer) clearTimeout(fitReflowTimer);
+        fitReflowTimer = window.setTimeout(() => {
+            fitReflowTimer = 0;
+            if (!readySent || !els.scroller || !els.document) return;
+            const viewportWidth = fitViewportWidth();
+            if (Math.abs(viewportWidth - lastFitViewportWidth) < 1) return;
+            const oldRange = Math.max(0, els.scroller.scrollHeight - els.scroller.clientHeight);
+            const scrollRatio = oldRange > 0 ? els.scroller.scrollTop / oldRange : 0;
+            const appliedScale = applyFitToWidth(viewportWidth);
+            if (!appliedScale) return;
+            lastFitViewportWidth = viewportWidth;
+            els.scroller.scrollLeft = 0;
+            const newRange = Math.max(0, els.scroller.scrollHeight - els.scroller.clientHeight);
+            els.scroller.scrollTop = scrollRatio * newRange;
+            window.__docxFitReflowCount = (window.__docxFitReflowCount || 0) + 1;
+            window.__docxLastFitReflow = { viewportWidth, fitScale: appliedScale, scrollRatio };
+        }, 80);
+        return true;
+    }
+
+    function observeViewportWidth() {
+        if (printMode || fitResizeObserver || typeof ResizeObserver === 'undefined') return;
+        fitResizeObserver = new ResizeObserver(() => recalculateFitToWidth());
+        fitResizeObserver.observe(els.scroller);
     }
 
     async function readDocumentStream(response, generation) {
@@ -252,6 +292,8 @@
         lastLoadGeneration = generation;
         renderId = generation;
         readySent = false;
+        pageNaturalWidth = 0;
+        lastFitViewportWidth = 0;
         els.document.replaceChildren();
         clearHighlights();
         loadPromise = loadDocument(fileUrl, generation);
@@ -363,6 +405,7 @@
             if (page) els.scroller.scrollTo({ top: els.scroller.scrollTop + page.getBoundingClientRect().top - els.scroller.getBoundingClientRect().top, behavior: 'smooth' });
         },
         clearSearch() { clearHighlights(); send('onSearchResults', { total: 0, current: 0, truncated: false }); },
+        recalculateFitToWidth() { return recalculateFitToWidth(); },
         setTheme(dark, paper, pagePaper, ink, edge) {
             const root = document.documentElement;
             root.classList.toggle('dark', !!dark);

@@ -45,6 +45,13 @@ class DocxZoomPolicyTest {
     }
 
     @Test
+    fun `double tap switches at the stable reading zoom threshold`() {
+        assertEquals(2f, DocxZoomPolicy.doubleTapTarget(1.49f))
+        assertEquals(1f, DocxZoomPolicy.doubleTapTarget(1.5f))
+        assertEquals(2f, DocxZoomPolicy.doubleTapTarget(Float.NaN))
+    }
+
+    @Test
     fun `percent conversions round trip`() {
         assertEquals(1.00f, DocxZoomPolicy.fromPercent(100))
         assertEquals(125, DocxZoomPolicy.toPercent(1.25f))
