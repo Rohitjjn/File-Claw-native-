@@ -235,6 +235,19 @@
         return fitScale;
     }
 
+    function alignFittedPageToGutter() {
+        const page = els.document.querySelector('.docx, section.docx');
+        if (!page) return;
+        const fitTransform = els.document.style.transform.match(/^translateX\((-?[0-9.]+)px\) scale\(([0-9.]+)\)$/);
+        if (!fitTransform) return;
+        const targetLeft = els.scroller.getBoundingClientRect().left + 12;
+        const delta = targetLeft - page.getBoundingClientRect().left;
+        if (Math.abs(delta) > 0.5) {
+            const translateX = Number(fitTransform[1]) + delta;
+            els.document.style.transform = `translateX(${translateX}px) scale(${fitTransform[2]})`;
+        }
+    }
+
     function recalculateFitToWidth() {
         if (printMode || !readySent) return false;
         if (fitReflowTimer) clearTimeout(fitReflowTimer);
@@ -248,14 +261,17 @@
             if (!appliedScale) return;
             lastFitViewportWidth = viewportWidth;
             els.scroller.scrollLeft = 0;
-            requestAnimationFrame(() => requestAnimationFrame(() => {
-                if (!els.scroller || !els.scroller.isConnected) return;
-                const newRange = Math.max(0, els.scroller.scrollHeight - els.scroller.clientHeight);
-                els.scroller.scrollTop = scrollRatio * newRange;
-                lastKnownScrollRatio = scrollRatio;
-                window.__docxFitReflowCount = (window.__docxFitReflowCount || 0) + 1;
-                window.__docxLastFitReflow = { viewportWidth, fitScale: appliedScale, scrollRatio };
-            }));
+            requestAnimationFrame(() => {
+                alignFittedPageToGutter();
+                requestAnimationFrame(() => {
+                    if (!els.scroller || !els.scroller.isConnected) return;
+                    const newRange = Math.max(0, els.scroller.scrollHeight - els.scroller.clientHeight);
+                    els.scroller.scrollTop = scrollRatio * newRange;
+                    lastKnownScrollRatio = scrollRatio;
+                    window.__docxFitReflowCount = (window.__docxFitReflowCount || 0) + 1;
+                    window.__docxLastFitReflow = { viewportWidth, fitScale: appliedScale, scrollRatio };
+                });
+            });
         }, 80);
         return true;
     }
