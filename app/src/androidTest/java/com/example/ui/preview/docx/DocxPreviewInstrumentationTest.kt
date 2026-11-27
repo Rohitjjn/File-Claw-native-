@@ -375,7 +375,9 @@ class DocxPreviewInstrumentationTest {
             evaluateJson(instrumentation, web,
                 "(function(){var s=document.getElementById('scroller');s.scrollTop=(s.scrollHeight-s.clientHeight)*0.55;return JSON.stringify({ratio:s.scrollTop/Math.max(1,s.scrollHeight-s.clientHeight)});})()")
             val before = evaluateJson(instrumentation, web,
-                "(function(){var s=document.getElementById('scroller');return JSON.stringify({ratio:s.scrollTop/Math.max(1,s.scrollHeight-s.clientHeight),count:window.__docxFitReflowCount||0});})()")
+                "(function(){var s=document.getElementById('scroller'),ratio=s.scrollTop/Math.max(1,s.scrollHeight-s.clientHeight);return JSON.stringify({ratio:ratio,cachedRatio:DocxViewer.getState().scrollRatio,count:window.__docxFitReflowCount||0});})()")
+            assertTrue("Scroll handler must remember reading progress before the viewport changes: $before",
+                kotlin.math.abs(before.optDouble("cachedRatio") - before.optDouble("ratio")) < .04)
             resizeWebView(instrumentation, web, (landscapeWidth * density).toInt(), (412 * density).toInt())
             val landscape = awaitFitReflow(instrumentation, web, landscapeWidth, before.optInt("count") + 1)
             assertPageFillsViewport(landscape, landscapeWidth)

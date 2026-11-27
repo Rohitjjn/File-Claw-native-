@@ -31,7 +31,10 @@ test('DOCX uses one WebView and Chromium overview cannot compete with fit layout
   assert.match(viewer, /els\.document\.style\.transformOrigin = 'top left'/);
   assert.match(viewer, /els\.document\.style\.transform = `translateX\(\$\{translateX\}px\) scale\(\$\{fit\.fitScale\}\)`/);
   assert.match(viewer, /els\.document\.style\.marginBottom = `\$\{contentHeight \* \(fit\.fitScale - 1\)\}px`/);
-  assert.match(viewer, /scrollRatio = oldRange > 0 \? els\.scroller\.scrollTop \/ oldRange : 0/);
+  assert.match(viewer, /let lastKnownScrollRatio = 0/);
+  assert.match(viewer, /function rememberFitScrollProgress\(\)/);
+  assert.match(viewer, /Math\.abs\(fitViewportWidth\(\) - lastFitViewportWidth\) >= 1/);
+  assert.match(viewer, /const scrollRatio = lastKnownScrollRatio/);
   assert.equal((viewer.match(/els\.document\.style\.transform\s*=/g) || []).length, 2);
   assert.match(viewer, /els\.document\.style\.transform = 'none'/);
   assert.doesNotMatch(viewer, /setInterval|onScaleChanged|syncNativeScaleBounds/);

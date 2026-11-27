@@ -20,6 +20,7 @@
     let printMode = false;
     let pageNaturalWidth = 0;
     let lastFitViewportWidth = 0;
+    let lastKnownScrollRatio = 0;
     let fitResizeObserver = null;
     let fitReflowTimer = 0;
 
@@ -94,6 +95,7 @@
         const metrics = visibleLayoutMetrics();
         if (!window.DocxRenderReadiness.hasVisibleLayout(metrics) || !visibleContent()) return;
         readySent = true;
+        rememberFitScrollProgress();
         status('');
         send('onDocumentVisuallyRendered', {
             generation: id,
@@ -186,8 +188,17 @@
         send('onSearchResults', { total: totalMatches, current: matchIndex + 1, truncated: matchesTruncated });
     }
 
+    function rememberFitScrollProgress() {
+        if (!readySent || !els.scroller || Math.abs(fitViewportWidth() - lastFitViewportWidth) >= 1) return;
+        const range = Math.max(0, els.scroller.scrollHeight - els.scroller.clientHeight);
+        lastKnownScrollRatio = range > 0 ? els.scroller.scrollTop / range : 0;
+    }
+
     function configureScrollReporting() {
-        els.scroller.addEventListener('scroll', () => requestAnimationFrame(reportPage), { passive: true });
+        els.scroller.addEventListener('scroll', () => {
+            rememberFitScrollProgress();
+            requestAnimationFrame(reportPage);
+        }, { passive: true });
     }
 
     function fitViewportWidth() {
@@ -232,8 +243,7 @@
             if (!readySent || !els.scroller || !els.document) return;
             const viewportWidth = fitViewportWidth();
             if (Math.abs(viewportWidth - lastFitViewportWidth) < 1) return;
-            const oldRange = Math.max(0, els.scroller.scrollHeight - els.scroller.clientHeight);
-            const scrollRatio = oldRange > 0 ? els.scroller.scrollTop / oldRange : 0;
+            const scrollRatio = lastKnownScrollRatio;
             const appliedScale = applyFitToWidth(viewportWidth);
             if (!appliedScale) return;
             lastFitViewportWidth = viewportWidth;
@@ -242,6 +252,7 @@
                 if (!els.scroller || !els.scroller.isConnected) return;
                 const newRange = Math.max(0, els.scroller.scrollHeight - els.scroller.clientHeight);
                 els.scroller.scrollTop = scrollRatio * newRange;
+                lastKnownScrollRatio = scrollRatio;
                 window.__docxFitReflowCount = (window.__docxFitReflowCount || 0) + 1;
                 window.__docxLastFitReflow = { viewportWidth, fitScale: appliedScale, scrollRatio };
             }));
@@ -297,6 +308,7 @@
         readySent = false;
         pageNaturalWidth = 0;
         lastFitViewportWidth = 0;
+        lastKnownScrollRatio = 0;
         els.document.replaceChildren();
         clearHighlights();
         loadPromise = loadDocument(fileUrl, generation);
@@ -416,7 +428,7 @@
                 if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) root.style.setProperty(name, value);
             }
         },
-        getState() { return { ready: readySent, pages: pageCount(), zoom: window.visualViewport ? window.visualViewport.scale : 1, fitScale, nativeFitScale: window.__docxNativeFitScale || fitScale }; }
+        getState() { return { ready: readySent, pages: pageCount(), zoom: window.visualViewport ? window.visualViewport.scale : 1, fitScale, nativeFitScale: window.__docxNativeFitScale || fitScale, scrollRatio: lastKnownScrollRatio }; }
     };
 
     document.addEventListener('DOMContentLoaded', () => {
