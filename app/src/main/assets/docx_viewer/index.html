@@ -10,8 +10,7 @@
         :root.dark { color-scheme: dark; --paper: #181715; --ink: #faf9f5; --edge: #2d2c2a; --page-paper: #252320; --page-ink: #faf9f5; --page-edge: #2d2c2a; }
         * { box-sizing: border-box; }
         html, body { width: 100%; min-width: 0; height: 100%; margin: 0; overflow: hidden; background: var(--paper); color: var(--ink); font-family: "Noto Sans Devanagari", "Noto Sans", system-ui, sans-serif; }
-        body { min-width: 200vw; }
-        #scroller { position: absolute; inset: 0; width: 100vw; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px 12px 28px; }
+        #scroller { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px 12px 28px; }
         #status { position: sticky; z-index: 5; top: 0; margin: 12px auto; padding: 12px 16px; width: fit-content; max-width: calc(100% - 24px); border: 1px solid var(--edge); border-radius: 10px; background: var(--paper); color: var(--ink); box-shadow: 0 2px 10px #0002; }
         #status[hidden] { display: none; }
         #status.error { position: relative; width: auto; color: #a31520; border-color: #d98389; }
