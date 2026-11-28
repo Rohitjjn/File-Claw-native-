@@ -70,6 +70,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(gestures, /window\.DocxViewer\.startZoomAnchorCorrection/);
   assert.match(html, /#scaled-document\.docx-zooming\s*\{\s*will-change:\s*transform/);
   assert.match(viewer, /startZoomAnchorCorrection\(anchorX, anchorY, tapX, tapY, density\)/);
+  assert.match(viewer, /window\.__docxZoomCorrectionStop = \{[\s\S]*?durationMs: performance\.now\(\) - window\.__docxZoomCorrectionStartedAt/);
   assert.match(gestures, /stable<3/);
   assert.match(gestures, /scrollTop:s\?s\.scrollTop:0/);
   assert.match(gestures, /window\.DocxViewer\.getState\(\)/);

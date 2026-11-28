@@ -174,9 +174,11 @@ class DocxPreviewInstrumentationTest {
                     kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt400Percent.optDouble("y")) < 2.0)
             val correctionFrames = evaluateJson(instrumentation, web,
                 "JSON.stringify({frames:window.__docxZoomCorrectionFrames||0})").optInt("frames")
+            val correctionStats = evaluateJson(instrumentation, web,
+                "JSON.stringify(window.__docxZoomCorrectionStop||{})")
             val androidAnimatorScale = android.animation.ValueAnimator.getDurationScale()
             val doubleTapElapsedMs = SystemClock.elapsedRealtime() - doubleTapStartedAt
-            assertTrue("Focal correction should follow Chromium animation frames: frames=$correctionFrames animatorScale=$androidAnimatorScale elapsedMs=$doubleTapElapsedMs", correctionFrames >= 8)
+            assertTrue("Focal correction should follow Chromium animation frames: frames=$correctionFrames stats=$correctionStats animatorScale=$androidAnimatorScale elapsedMs=$doubleTapElapsedMs", correctionFrames >= 8)
             assertTrue("Double-tap must not trigger focus mode", confirmedTaps.get() == 0)
             instrumentation.runOnMainSync {
                 val now = SystemClock.uptimeMillis()

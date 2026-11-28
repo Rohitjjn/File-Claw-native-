@@ -284,6 +284,12 @@
     }
 
     function stopZoomAnchorCorrection() {
+        if (window.__docxDoubleTapZoomActive && window.__docxZoomCorrectionStartedAt) {
+            window.__docxZoomCorrectionStop = {
+                frames: window.__docxZoomCorrectionFrames || 0,
+                durationMs: performance.now() - window.__docxZoomCorrectionStartedAt
+            };
+        }
         if (zoomAnchorFrame) cancelAnimationFrame(zoomAnchorFrame);
         zoomAnchorFrame = 0;
         if (els.document) els.document.classList.remove('docx-zooming');
@@ -317,6 +323,7 @@
             zoomAnchorFrame = requestAnimationFrame(correct);
         };
         window.__docxZoomCorrectionFrames = 0;
+        window.__docxZoomCorrectionStartedAt = performance.now();
         zoomAnchorFrame = requestAnimationFrame(correct);
         return true;
     }
