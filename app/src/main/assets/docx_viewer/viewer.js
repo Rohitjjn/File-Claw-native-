@@ -292,6 +292,7 @@
         }
         if (zoomAnchorFrame) cancelAnimationFrame(zoomAnchorFrame);
         zoomAnchorFrame = 0;
+        window.__docxCorrectZoomAnchorFrame = null;
         if (els.document) els.document.classList.remove('docx-zooming');
     }
 
@@ -320,11 +321,11 @@
                 };
                 window.__docxZoomCorrectionFrames = (window.__docxZoomCorrectionFrames || 0) + 1;
             }
-            zoomAnchorFrame = requestAnimationFrame(correct);
         };
         window.__docxZoomCorrectionFrames = 0;
         window.__docxZoomCorrectionStartedAt = performance.now();
-        zoomAnchorFrame = requestAnimationFrame(correct);
+        window.__docxCorrectZoomAnchorFrame = correct;
+        correct();
         return true;
     }
 
@@ -529,6 +530,9 @@
         recalculateFitToWidth() { return recalculateFitToWidth(); },
         startZoomAnchorCorrection(anchorX, anchorY, tapX, tapY, density) {
             return startZoomAnchorCorrection(anchorX, anchorY, tapX, tapY, density);
+        },
+        correctZoomAnchorFrame() {
+            if (typeof window.__docxCorrectZoomAnchorFrame === 'function') window.__docxCorrectZoomAnchorFrame();
         },
         stopZoomAnchorCorrection() { stopZoomAnchorCorrection(); },
         prepareForPrint() { return prepareForPrint(); },

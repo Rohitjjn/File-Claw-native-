@@ -79,9 +79,7 @@ internal fun PreviewScreenSurface(
     previewCanvasColor: Color,
     modifier: Modifier
 ) {
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
+    val previewHeader: @Composable () -> Unit = {
             PreviewHeader(
                 state = PreviewHeaderState(
                     visible = screenState.isBarsVisible,
@@ -181,7 +179,11 @@ internal fun PreviewScreenSurface(
                 isTextFile = activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"),
                 focusRequester = searchFieldFocusRequester
             )
-        },
+    }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {},
         containerColor = previewCanvasColor,
         modifier = modifier.testTag("file_preview_screen")
     ) { innerPadding ->
@@ -197,8 +199,7 @@ internal fun PreviewScreenSurface(
                     } else Modifier
                 )
                 .background(previewCanvasColor)
-                // Always respect the animated scaffold insets: the padding shrinks frame-by-frame
-                // while the bars slide away, so focus mode no longer snaps the content full-bleed.
+                // Scaffold has no chrome slots; reader content stays full-size underneath overlays.
                 .padding(innerPadding)
         ) {
             PreviewFocusPill(
@@ -394,7 +395,11 @@ internal fun PreviewScreenSurface(
                 )
             }
 
-
+            // Keep reader content at a stable size while the chrome enters or exits focus mode.
+            // The header floats over the preview instead of resizing its WebView on every frame.
+            Box(Modifier.fillMaxWidth().align(Alignment.TopCenter)) {
+                previewHeader()
+            }
         }
     }
 

@@ -71,8 +71,8 @@ fun PreviewHeader(
 ) {
     AnimatedVisibility(
         visible = state.visible,
-        enter = slideInVertically(tween(260, easing = FastOutSlowInEasing)) { -it } + fadeIn(tween(220)),
-        exit = slideOutVertically(tween(260, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(220)),
+        enter = slideInVertically(tween(280, easing = FastOutSlowInEasing)) { -it } + fadeIn(tween(280, easing = FastOutSlowInEasing)),
+        exit = slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(280, easing = FastOutSlowInEasing)),
         modifier = modifier.statusBarsPadding()
     ) {
         if (state.searchOpen) {

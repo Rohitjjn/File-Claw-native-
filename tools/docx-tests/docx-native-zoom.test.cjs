@@ -66,10 +66,11 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   const updateStart = gestures.indexOf('addUpdateListener { valueAnimator ->');
   const listenerEnd = gestures.indexOf('addListener(object : android.animation.AnimatorListenerAdapter()', updateStart);
   assert.ok(updateStart >= 0 && listenerEnd > updateStart, 'Native zoom animation listener must be present');
-  assert.doesNotMatch(gestures.slice(updateStart, listenerEnd), /evaluateJavascript/);
+  assert.match(gestures.slice(updateStart, listenerEnd), /correctZoomAnchorFrame/);
   assert.match(gestures, /window\.DocxViewer\.startZoomAnchorCorrection/);
   assert.match(html, /#scaled-document\.docx-zooming\s*\{\s*will-change:\s*transform/);
   assert.match(viewer, /startZoomAnchorCorrection\(anchorX, anchorY, tapX, tapY, density\)/);
+  assert.match(viewer, /correctZoomAnchorFrame\(\)\s*\{\s*if \(typeof window\.__docxCorrectZoomAnchorFrame === 'function'\)/);
   assert.match(viewer, /window\.__docxZoomCorrectionStop = \{[\s\S]*?durationMs: performance\.now\(\) - window\.__docxZoomCorrectionStartedAt/);
   assert.match(gestures, /stable<3/);
   assert.match(gestures, /scrollTop:s\?s\.scrollTop:0/);
@@ -158,10 +159,10 @@ test('Android regression fixture checks native zoom defaults, bounds and both ho
   assert.match(instrumentation, /balanced 12px margins/);
   assert.match(instrumentation, /dispatchPan\(web/);
   assert.match(instrumentation, /Animated double-tap must keep the document point under the tap while zooming in/);
-  assert.match(instrumentation, /intermediateNativeScales\.size >= 3/);
+  assert.match(instrumentation, /intermediateNativeScales\.size >= 10/);
   assert.match(instrumentation, /onScaleUpdate = \{ scale -> nativeZoomScaleSamples\.add\(scale\) \}/);
   assert.match(gestures, /onScaleUpdate\(desiredScale\)/);
-  assert.match(instrumentation, /correctionFrames >= 1/);
+  assert.match(instrumentation, /correctionFrames >= 5/);
   assert.match(workflow, /disable-animations:\s*false/);
   assert.match(workflow, /action defaults disable-animations to true/);
   assert.match(instrumentation, /Zooming back to fit must preserve the current page and paragraph/);

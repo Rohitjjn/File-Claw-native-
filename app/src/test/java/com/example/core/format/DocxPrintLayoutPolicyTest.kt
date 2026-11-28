@@ -6,12 +6,12 @@ import org.junit.Test
 
 class DocxPrintLayoutPolicyTest {
     @Test
-    fun `accepts unit scale untransformed full-width print layout`() {
+    fun `accepts unit scale printable layout when screen and paper widths differ`() {
         assertTrue(DocxPrintLayoutPolicy.isReadyForPrint(
             scale = 1.0,
             viewportWidth = 400.0,
             rootWidth = 400.0,
-            pageWidth = 400.0,
+            pageWidth = 280.0,
             transform = "none"
         ))
     }
@@ -28,11 +28,11 @@ class DocxPrintLayoutPolicyTest {
     }
 
     @Test
-    fun `rejects top-left quarter page sizing and residual transforms`() {
+    fun `rejects missing page geometry and residual transforms`() {
         assertFalse(DocxPrintLayoutPolicy.isReadyForPrint(
             scale = 1.0,
             viewportWidth = 400.0,
-            rootWidth = 200.0,
+            rootWidth = 0.0,
             pageWidth = 100.0,
             transform = "none"
         ))

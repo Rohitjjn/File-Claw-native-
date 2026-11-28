@@ -5,6 +5,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -65,8 +67,10 @@ fun PreviewFloatingTray(
 ) {
     AnimatedVisibility(
         visible = visible,
-        enter = slideInVertically { it } + fadeIn(),
-        exit = slideOutVertically { it } + fadeOut(),
+        enter = slideInVertically(tween(280, easing = FastOutSlowInEasing)) { it } +
+            fadeIn(tween(280, easing = FastOutSlowInEasing)),
+        exit = slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it } +
+            fadeOut(tween(280, easing = FastOutSlowInEasing)),
         modifier = modifier
     ) {
         Box(

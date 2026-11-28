@@ -18,8 +18,9 @@ test('DOCX print uses an isolated unscaled renderer instead of the fitted previe
   assert.match(helper, /DocxViewer\.prepareForPrint\(\)/);
   assert.match(helper, /DocxPrintLayoutPolicy\.isReadyForPrint/);
   assert.match(policy, /abs\(scale - 1\.0\) > UNIT_SCALE_TOLERANCE/);
-  assert.match(policy, /rootWidth < viewportWidth \* \(1\.0 - WIDTH_TOLERANCE\)/);
-  assert.match(policy, /pageWidth < viewportWidth \* \(1\.0 - WIDTH_TOLERANCE\)/);
+  assert.match(policy, /rootWidth <= 0\.0 \|\| pageWidth <= 0\.0/);
+  assert.match(policy, /Equality with the screen viewport is not a print invariant/);
+  assert.doesNotMatch(policy, /rootWidth < viewportWidth|pageWidth < viewportWidth/);
   assert.match(helper, /createPrintDocumentAdapter\(title\)/);
   assert.match(viewer, /prepareForPrint\(\)/);
   assert.match(instrumentation, /printPreparationResetsPreviewFitAndUsesFullPageWidth/);

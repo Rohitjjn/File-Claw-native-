@@ -66,7 +66,7 @@ internal fun WebView.dispatchSingleTapIfNotLink(
     }
 }
 
-/** Animates native page scale and keeps the tapped document point under the finger. */
+/** Animates native page scale, corrects the tap anchor each frame, and optionally reports each native scale update. */
 private val activeDocxZoomAnimations = java.util.WeakHashMap<WebView, android.animation.ValueAnimator>()
 
 internal fun WebView.animateDocxDoubleTapZoom(
@@ -120,6 +120,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
                 if (increment.isFinite() && increment > 0f && kotlin.math.abs(increment - 1f) > 0.0001f) {
                     zoomBy(increment)
                     lastScale = desiredScale
+                    evaluateJavascript("if(window.DocxViewer)window.DocxViewer.correctZoomAnchorFrame()", null)
                     onScaleUpdate(desiredScale)
                 }
             }

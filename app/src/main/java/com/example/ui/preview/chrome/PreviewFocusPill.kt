@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Row
@@ -31,8 +32,10 @@ import androidx.compose.ui.unit.dp
 fun PreviewFocusPill(visible: Boolean, onBack: () -> Unit, onExitFocus: () -> Unit, modifier: Modifier = Modifier) {
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(tween(220)) + slideInVertically(tween(260)) { -it },
-        exit = fadeOut(tween(220)) + slideOutVertically(tween(260)) { -it },
+        enter = fadeIn(tween(280, easing = FastOutSlowInEasing)) +
+            slideInVertically(tween(280, easing = FastOutSlowInEasing)) { -it },
+        exit = fadeOut(tween(280, easing = FastOutSlowInEasing)) +
+            slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { -it },
         modifier = modifier.statusBarsPadding().padding(16.dp)
     ) {
         Surface(
