@@ -148,6 +148,7 @@ class DocxPreviewInstrumentationTest {
                     "(function(){var s=document.getElementById('scroller'),v=window.visualViewport,d=document.getElementById('scaled-document'),r=d.getBoundingClientRect(),sr=s.getBoundingClientRect();return JSON.stringify({x:$x/($density*v.scale)+v.offsetLeft-(r.left-sr.left),y:$y/($density*v.scale)+v.offsetTop-(r.top-sr.top),offsetLeft:v.offsetLeft,offsetTop:v.offsetTop,scale:v.scale,scrollerLeft:s.scrollLeft,scrollerTop:s.scrollTop,scrollerMaxLeft:s.scrollWidth-s.clientWidth,scrollerMaxTop:s.scrollHeight-s.clientHeight,docLeft:d.offsetLeft,docTop:d.offsetTop,docRectLeft:r.left,docRectTop:r.top,scrollerRectLeft:sr.left,scrollerRectTop:sr.top});})()")
             }
             val anchorBeforeZoom = documentPointAtTap()
+            val doubleTapStartedAt = SystemClock.elapsedRealtime()
             instrumentation.runOnMainSync {
                 val now = SystemClock.uptimeMillis()
                 dispatchTap(web, now, tapPoint.get()[0], tapPoint.get()[1])
@@ -173,7 +174,9 @@ class DocxPreviewInstrumentationTest {
                     kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt400Percent.optDouble("y")) < 2.0)
             val correctionFrames = evaluateJson(instrumentation, web,
                 "JSON.stringify({frames:window.__docxZoomCorrectionFrames||0})").optInt("frames")
-            assertTrue("Focal correction should follow Chromium animation frames, observed $correctionFrames", correctionFrames >= 8)
+            val androidAnimatorScale = android.animation.ValueAnimator.getDurationScale()
+            val doubleTapElapsedMs = SystemClock.elapsedRealtime() - doubleTapStartedAt
+            assertTrue("Focal correction should follow Chromium animation frames: frames=$correctionFrames animatorScale=$androidAnimatorScale elapsedMs=$doubleTapElapsedMs", correctionFrames >= 8)
             assertTrue("Double-tap must not trigger focus mode", confirmedTaps.get() == 0)
             instrumentation.runOnMainSync {
                 val now = SystemClock.uptimeMillis()
