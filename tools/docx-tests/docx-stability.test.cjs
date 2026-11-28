@@ -16,7 +16,7 @@ test('DOCX uses one WebView and Chromium overview cannot compete with fit layout
   assert.equal((host.match(/AndroidView\(/g) || []).length, 1);
   assert.match(host, /useWideViewPort\s*=\s*true/);
   assert.match(host, /loadWithOverviewMode\s*=\s*false/);
-  assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, minimum-scale=0\.5, maximum-scale=5\.0, user-scalable=yes"/);
+  assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, minimum-scale=0\.5, maximum-scale=10\.0, user-scalable=yes"/);
   assert.match(html, /#scaled-document \.docx-wrapper \{[^}]*box-sizing: border-box; width: 100%; max-width: 100%/);
   const scaleCallbackStart = host.indexOf('onScaleChanged =');
   const scaleCallbackEnd = host.indexOf('onCreated(this)', scaleCallbackStart);

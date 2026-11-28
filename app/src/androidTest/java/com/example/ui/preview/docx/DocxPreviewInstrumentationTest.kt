@@ -132,6 +132,9 @@ class DocxPreviewInstrumentationTest {
             assertSingleWrapperAndStableIdleLayout(instrumentation, web)
             assertTrue("Opening the DOCX must not clip the page horizontally: $initialLayout",
                 initialLayout.optDouble("scrollWidth") <= initialLayout.optDouble("visualViewportWidth") + 1)
+            val pageTwoBefore = evaluateJson(instrumentation, web,
+                "(function(){var p=Array.from(document.querySelectorAll('#scaled-document p')).find(function(n){return n.textContent.indexOf('Second page marker')>=0}),s=document.getElementById('scroller');if(!p)return JSON.stringify({found:false});p.scrollIntoView({block:'center'});var r=p.getBoundingClientRect(),sr=s.getBoundingClientRect();return JSON.stringify({found:true,top:r.top-sr.top,scrollTop:s.scrollTop,text:p.textContent});})()")
+            assertTrue("The multi-page zoom regression must start on page two: $pageTwoBefore", pageTwoBefore.optBoolean("found"))
             val tapPoint = AtomicReference<FloatArray>()
             instrumentation.runOnMainSync {
                 tapPoint.set(floatArrayOf(web.width * .33f, web.height * .62f, web.resources.displayMetrics.density))
@@ -150,24 +153,24 @@ class DocxPreviewInstrumentationTest {
                 dispatchTap(web, now, tapPoint.get()[0], tapPoint.get()[1])
                 dispatchTap(web, now + 130, tapPoint.get()[0], tapPoint.get()[1])
             }
-            awaitVisualViewportScale(instrumentation, web, fitScale * 2f)
+            awaitVisualViewportScale(instrumentation, web, fitScale * 4f)
             val zoomRequest = evaluateJson(instrumentation, web, "JSON.stringify(window.__docxZoomRequest)")
             assertTrue("Double-tap must compute its target from the measured fit scale: $zoomRequest fit=$fitScale",
                 kotlin.math.abs(zoomRequest.optDouble("fitScale") - fitScale) < .03 &&
-                    kotlin.math.abs(zoomRequest.optDouble("target") - fitScale * 2.0) < .04)
-            var anchorAt200Percent = documentPointAtTap()
+                    kotlin.math.abs(zoomRequest.optDouble("target") - fitScale * 4.0) < .04)
+            var anchorAt400Percent = documentPointAtTap()
             val anchorDeadline = SystemClock.elapsedRealtime() + 3_500L
-            while ((kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) >= 2.0 ||
-                    kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) >= 2.0) &&
+            while ((kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt400Percent.optDouble("x")) >= 2.0 ||
+                    kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt400Percent.optDouble("y")) >= 2.0) &&
                 SystemClock.elapsedRealtime() < anchorDeadline
             ) {
                 Thread.sleep(50)
-                anchorAt200Percent = documentPointAtTap()
+                anchorAt400Percent = documentPointAtTap()
             }
             val anchorCorrection = evaluateJson(instrumentation, web, "JSON.stringify(window.__docxAnchorCorrection||{})")
-            assertTrue("Double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt200Percent correction=$anchorCorrection",
-                kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) < 2.0 &&
-                    kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) < 2.0)
+            assertTrue("Animated double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt400Percent correction=$anchorCorrection",
+                kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt400Percent.optDouble("x")) < 2.0 &&
+                    kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt400Percent.optDouble("y")) < 2.0)
             assertTrue("Double-tap must not trigger focus mode", confirmedTaps.get() == 0)
             instrumentation.runOnMainSync {
                 val now = SystemClock.uptimeMillis()
@@ -176,6 +179,11 @@ class DocxPreviewInstrumentationTest {
             }
             awaitVisualViewportScale(instrumentation, web, fitScale)
             assertTrue("Second double-tap must return to 100% fit width", kotlin.math.abs(readVisualViewportScale(instrumentation, web) - fitScale) < .03f)
+            val pageTwoAfter = evaluateJson(instrumentation, web,
+                "(function(){var p=Array.from(document.querySelectorAll('#scaled-document p')).find(function(n){return n.textContent.indexOf('Second page marker')>=0}),s=document.getElementById('scroller');if(!p)return JSON.stringify({found:false});var r=p.getBoundingClientRect(),sr=s.getBoundingClientRect();return JSON.stringify({found:true,top:r.top-sr.top,scrollTop:s.scrollTop,text:p.textContent});})()")
+            assertTrue("Zooming back to fit must preserve the current page and paragraph: before=$pageTwoBefore after=$pageTwoAfter",
+                pageTwoAfter.optBoolean("found") && pageTwoAfter.optDouble("scrollTop") > 0.0 &&
+                    kotlin.math.abs(pageTwoBefore.optDouble("top") - pageTwoAfter.optDouble("top")) < 48.0)
 
             instrumentation.runOnMainSync { dispatchTap(web, SystemClock.uptimeMillis()) }
             assertTrue("A confirmed single tap must reach focus mode", tapConfirmed.await(2, TimeUnit.SECONDS))
@@ -195,7 +203,7 @@ class DocxPreviewInstrumentationTest {
             assertTrue("External intent must carry HTTPS ACTION_VIEW and the hyperlink URL",
                 launchedIntent.get()?.action == Intent.ACTION_VIEW && launchedIntent.get()?.dataString == "https://example.com/docx-test")
             val zoomInProgress = mutableListOf<Float>()
-            repeat(4) {
+            repeat(8) {
                 instrumentation.runOnMainSync {
                     dispatchPinch(web, SystemClock.uptimeMillis(), 40f * web.resources.displayMetrics.density, 160f * web.resources.displayMetrics.density)
                 }
@@ -203,8 +211,8 @@ class DocxPreviewInstrumentationTest {
                 zoomInProgress += readVisualViewportScale(instrumentation, web)
             }
             val maxZoom = readVisualViewportScale(instrumentation, web)
-            assertTrue("Native page zoom is capped at 500% of fit: $maxZoom after $zoomInProgress fit=$fitScale",
-                maxZoom <= 5.02f && maxZoom >= 4.9f)
+            assertTrue("Native page zoom is capped at 1000% of fit: $maxZoom after $zoomInProgress fit=$fitScale",
+                maxZoom <= 10.02f && maxZoom >= 9.8f)
             val zoomOutProgress = mutableListOf<Float>()
             repeat(6) {
                 instrumentation.runOnMainSync {
@@ -226,7 +234,7 @@ class DocxPreviewInstrumentationTest {
             }
             val recoveredZoom = readVisualViewportScale(instrumentation, web)
             assertTrue("Native pinch must recover toward fit from the 50% floor: $recoveredZoom fit=$fitScale",
-                recoveredZoom >= .9f && recoveredZoom <= 5.02f)
+                recoveredZoom >= .9f && recoveredZoom <= 10.02f)
 
             val panRead = CountDownLatch(1)
             val panJson = AtomicReference<String?>(null)
@@ -292,7 +300,7 @@ class DocxPreviewInstrumentationTest {
                 attachWebView(activity, this, (412 * density).toInt(), (915 * density).toInt())
                 loadDataWithBaseURL(
                     "https://appassets.androidplatform.net/",
-                    """<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes"><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%}#rootExtent{width:200vw;height:200vh;visibility:hidden}#scroller{position:absolute;inset:0;overflow:auto}</style><div id="rootExtent"></div><main id="scroller"><div style="width:200vw;height:200vh"></div></main>""",
+                    """<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=10.0, user-scalable=yes"><style>*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%}#rootExtent{width:200vw;height:200vh;visibility:hidden}#scroller{position:absolute;inset:0;overflow:auto}</style><div id="rootExtent"></div><main id="scroller"><div style="width:200vw;height:200vh"></div></main>""",
                     "text/html", "UTF-8", null
                 )
             }

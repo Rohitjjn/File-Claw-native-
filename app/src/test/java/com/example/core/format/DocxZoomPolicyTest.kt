@@ -13,9 +13,9 @@ class DocxZoomPolicyTest {
     }
 
     @Test
-    fun `coerce clamps to 50-500 percent`() {
+    fun `coerce clamps to 50-1000 percent`() {
         assertEquals(0.50f, DocxZoomPolicy.coerce(0.1f))
-        assertEquals(5.0f, DocxZoomPolicy.coerce(9f))
+        assertEquals(10.0f, DocxZoomPolicy.coerce(12f))
         assertEquals(1.00f, DocxZoomPolicy.coerce(1.00f))
     }
 
@@ -36,26 +36,26 @@ class DocxZoomPolicyTest {
     }
 
     @Test
-    fun `double tap toggles between fit-width and 200 percent steps`() {
-        assertEquals(2f, DocxZoomPolicy.doubleTapTarget(1f))
+    fun `double tap toggles between fit-width and 400 percent steps`() {
+        assertEquals(4f, DocxZoomPolicy.doubleTapTarget(1f))
         assertEquals(1f, DocxZoomPolicy.doubleTapTarget(1.5f))
         assertEquals(1f, DocxZoomPolicy.doubleTapTarget(2f))
         assertEquals(1f, DocxZoomPolicy.doubleTapTarget(5f))
-        assertEquals(2f, DocxZoomPolicy.doubleTapTarget(0.5f))
+        assertEquals(4f, DocxZoomPolicy.doubleTapTarget(0.5f))
     }
 
     @Test
     fun `double tap switches at the stable reading zoom threshold`() {
-        assertEquals(2f, DocxZoomPolicy.doubleTapTarget(1.49f))
+        assertEquals(4f, DocxZoomPolicy.doubleTapTarget(1.49f))
         assertEquals(1f, DocxZoomPolicy.doubleTapTarget(1.5f))
-        assertEquals(2f, DocxZoomPolicy.doubleTapTarget(Float.NaN))
+        assertEquals(4f, DocxZoomPolicy.doubleTapTarget(Float.NaN))
     }
 
     @Test
     fun `percent conversions round trip`() {
         assertEquals(1.00f, DocxZoomPolicy.fromPercent(100))
         assertEquals(125, DocxZoomPolicy.toPercent(1.25f))
-        assertEquals(500, DocxZoomPolicy.toPercent(9f))
+        assertEquals(1000, DocxZoomPolicy.toPercent(12f))
         assertTrue(DocxZoomPolicy.toPercent(DocxZoomPolicy.fromPercent(137)) == 137)
     }
 }
