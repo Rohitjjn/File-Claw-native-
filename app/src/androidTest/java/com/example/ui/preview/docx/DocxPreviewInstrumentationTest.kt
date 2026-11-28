@@ -165,9 +165,9 @@ class DocxPreviewInstrumentationTest {
                 anchorAt200Percent = documentPointAtTap()
             }
             val anchorCorrection = evaluateJson(instrumentation, web, "JSON.stringify(window.__docxAnchorCorrection||{})")
-            assertTrue("Double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt200Percent correction=$anchorCorrection",
+            val doubleTapAnchorPreserved =
                 kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) < 2.0 &&
-                    kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) < 2.0)
+                    kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) < 2.0
             assertTrue("Double-tap must not trigger focus mode", confirmedTaps.get() == 0)
             instrumentation.runOnMainSync {
                 val now = SystemClock.uptimeMillis()
@@ -269,6 +269,8 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Reverse one-finger drag must pan left and up: start=$draggedTowardRightBottom end=$draggedTowardLeftTop",
                 draggedTowardLeftTop.optDouble("left") < draggedTowardRightBottom.optDouble("left") - 1 &&
                     draggedTowardLeftTop.optDouble("top") < draggedTowardRightBottom.optDouble("top") - 1)
+            assertTrue("Double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt200Percent correction=$anchorCorrection",
+                doubleTapAnchorPreserved)
 
         } finally {
             destroyWebView(instrumentation, activity, web)
