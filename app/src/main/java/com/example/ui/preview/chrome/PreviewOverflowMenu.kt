@@ -153,7 +153,7 @@ fun PreviewOverflowMenu(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(42.dp)
-                                .clickable(role = Role.MenuItem) {
+                                .clickable(role = Role.Button) {
                                     onDismissRequest()
                                     item.onClick()
                                 }

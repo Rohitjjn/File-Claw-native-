@@ -330,4 +330,4 @@ hard-coded 500 ms splash wait (now 150 ms) and moving cache-directory I/O off th
 - Route DOCX Print/Save as PDF through a separate unscaled print WebView; validate prepared scale/full-width layout and preserve A4 with 12 mm margins.
 - Animate double-tap zoom over 260 ms with cubic-bezier easing and continuous focal correction; preserve Focus Mode and hyperlink behavior.
 - Keep the DOCX overflow menu white and compact with exactly five actions; add sizing/action source and instrumentation coverage.
-- Local verification: DOCX Node suite 33/33, viewer JavaScript syntax checks, and `git diff --check` passed. Java is absent; Android CI and PrintManager/device checks remain pending. No APK is verified.
+- Local verification: DOCX Node suite 33/33, viewer JavaScript syntax checks, and `git diff --check` passed. First Actions run [46133847067](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/46133847067) failed at Kotlin compilation (`Role.MenuItem` unavailable; local fallback declaration referenced before use); both compile errors were corrected. Follow-up CI and PrintManager/device checks remain pending. No APK is verified.

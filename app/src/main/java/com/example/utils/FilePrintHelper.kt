@@ -321,50 +321,6 @@ object FilePrintHelper {
                     }
                 }
 
-                var printVisualStateRequestId = 0L
-                fun triggerPrint() {
-                    if (printSubmitted || printPreparing || released) return
-                    printPreparing = true
-                    tempWebView.evaluateJavascript("JSON.stringify(DocxViewer.prepareForPrint())") { encoded ->
-                        if (released) return@evaluateJavascript
-                        val prepared = runCatching {
-                            org.json.JSONObject(org.json.JSONTokener(encoded).nextValue().toString())
-                        }.getOrNull()
-                        val scale = prepared?.optDouble("scale", Double.NaN) ?: Double.NaN
-                        val viewportWidth = prepared?.optDouble("viewportWidth", 0.0) ?: 0.0
-                        val rootWidth = prepared?.optDouble("rootWidth", 0.0) ?: 0.0
-                        val pageWidth = prepared?.optDouble("pageWidth", 0.0) ?: 0.0
-                        val valid = prepared != null && prepared.optBoolean("ready") &&
-                            DocxPrintLayoutPolicy.isReadyForPrint(
-                                scale = scale,
-                                viewportWidth = viewportWidth,
-                                rootWidth = rootWidth,
-                                pageWidth = pageWidth,
-                                transform = prepared.optString("transform")
-                            )
-                        DocxPreviewDiagnostics.log(
-                            "print_layout_prepared", "mode" to "print", "scale" to scale,
-                            "viewportWidthCss" to viewportWidth, "rootWidthCss" to rootWidth,
-                            "pageWidthCss" to pageWidth, "transform" to (prepared?.optString("transform") ?: "missing"),
-                            "layoutReady" to valid
-                        )
-                        if (!valid) {
-                            printPreparing = false
-                            fallbackTextPrint("Print layout did not reach full-width 100% scale")
-                            return@evaluateJavascript
-                        }
-                        tempWebView.postVisualStateCallback(
-                            ++printVisualStateRequestId,
-                            object : WebView.VisualStateCallback() {
-                                override fun onComplete(requestId: Long) {
-                                    printPreparing = false
-                                    submitWebViewForPrint()
-                                }
-                            }
-                        )
-                    }
-                }
-
                 fun fallbackTextPrint(reason: String) {
                     if (printSubmitted || released) return
                     printSubmitted = true
@@ -427,6 +383,50 @@ object FilePrintHelper {
                             "Printed with bounded text recovery ($reason)",
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
+                    }
+                }
+
+                var printVisualStateRequestId = 0L
+                fun triggerPrint() {
+                    if (printSubmitted || printPreparing || released) return
+                    printPreparing = true
+                    tempWebView.evaluateJavascript("JSON.stringify(DocxViewer.prepareForPrint())") { encoded ->
+                        if (released) return@evaluateJavascript
+                        val prepared = runCatching {
+                            org.json.JSONObject(org.json.JSONTokener(encoded).nextValue().toString())
+                        }.getOrNull()
+                        val scale = prepared?.optDouble("scale", Double.NaN) ?: Double.NaN
+                        val viewportWidth = prepared?.optDouble("viewportWidth", 0.0) ?: 0.0
+                        val rootWidth = prepared?.optDouble("rootWidth", 0.0) ?: 0.0
+                        val pageWidth = prepared?.optDouble("pageWidth", 0.0) ?: 0.0
+                        val valid = prepared != null && prepared.optBoolean("ready") &&
+                            DocxPrintLayoutPolicy.isReadyForPrint(
+                                scale = scale,
+                                viewportWidth = viewportWidth,
+                                rootWidth = rootWidth,
+                                pageWidth = pageWidth,
+                                transform = prepared.optString("transform")
+                            )
+                        DocxPreviewDiagnostics.log(
+                            "print_layout_prepared", "mode" to "print", "scale" to scale,
+                            "viewportWidthCss" to viewportWidth, "rootWidthCss" to rootWidth,
+                            "pageWidthCss" to pageWidth, "transform" to (prepared?.optString("transform") ?: "missing"),
+                            "layoutReady" to valid
+                        )
+                        if (!valid) {
+                            printPreparing = false
+                            fallbackTextPrint("Print layout did not reach full-width 100% scale")
+                            return@evaluateJavascript
+                        }
+                        tempWebView.postVisualStateCallback(
+                            ++printVisualStateRequestId,
+                            object : WebView.VisualStateCallback() {
+                                override fun onComplete(requestId: Long) {
+                                    printPreparing = false
+                                    submitWebViewForPrint()
+                                }
+                            }
+                        )
                     }
                 }
 
