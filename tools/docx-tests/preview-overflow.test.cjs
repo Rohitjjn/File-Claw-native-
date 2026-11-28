@@ -36,7 +36,8 @@ test('preview has one rounded white overflow popup with soft shadow and no theme
   }
   assert.match(menu, /PREVIEW_OVERFLOW_MENU_TEST_TAG/);
   assert.match(instrumentation, /docxOverflowMenuShowsFiveCompactActions/);
-  assert.match(instrumentation, /assertEquals\(5, composeRule\.onAllNodes\(hasClickAction\(\)\)\.fetchSemanticsNodes\(\)\.size\)/);
+  assert.match(instrumentation, /assertEquals\(5, labeledActions\)/);
+  assert.match(instrumentation, /assertHasClickAction\(\)/);
   assert.match(instrumentation, /widthDp in 180f\.\.215f/);
   assert.match(instrumentation, /heightDp in 40f\.\.44f/);
   assert.doesNotMatch(menu, /Dark Mode|Light Mode|docxNightModeOverride/);
