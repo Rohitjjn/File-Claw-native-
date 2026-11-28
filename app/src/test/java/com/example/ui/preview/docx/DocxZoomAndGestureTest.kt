@@ -13,7 +13,7 @@ class DocxNativeZoomPolicyTest {
 
     @Test fun nativeChromiumScalesAreSanitizedToViewportBounds() {
         assertEquals(.5f, DocxZoomPolicy.coerce(.1f), .001f)
-        assertEquals(5f, DocxZoomPolicy.coerce(9f), .001f)
+        assertEquals(10f, DocxZoomPolicy.coerce(12f), .001f)
         assertEquals(1f, DocxZoomPolicy.coerce(Float.NaN), .001f)
         assertEquals(1f, DocxZoomPolicy.coerce(Float.POSITIVE_INFINITY), .001f)
     }
