@@ -118,7 +118,7 @@ jobs:
           profile: pixel_2
           emulator-boot-timeout: 300
           emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect
-          disable-animations: true
+          # Keep Android animator scale enabled: DOCX double-tap instrumentation verifies its 260 ms animation.
           script: bash tools/docx-tests/run-android-instrumentation.sh
 
       - name: Surface Android instrumentation failures

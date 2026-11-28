@@ -107,8 +107,6 @@ class DocxPreviewInstrumentationTest {
                     android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
             }
         }
-        val originalAnimatorScale = android.animation.ValueAnimator.getDurationScale()
-        android.animation.ValueAnimator.setDurationScale(1f)
         try {
             assertTrue("DOCX render timed out: ${failures.get()}", ready.await(45, TimeUnit.SECONDS))
             assertTrue("DOCX renderer failed: ${failures.get()}", failures.get() == null)
@@ -295,7 +293,6 @@ class DocxPreviewInstrumentationTest {
 
         } finally {
             destroyWebView(instrumentation, activity, web)
-            android.animation.ValueAnimator.setDurationScale(originalAnimatorScale)
         }
     }
 

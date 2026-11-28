@@ -13,6 +13,7 @@ const html = read('app/src/main/assets/docx_viewer/index.html');
 const viewer = read('app/src/main/assets/docx_viewer/viewer.js');
 const viewportFit = read('app/src/main/assets/docx_viewer/viewport-fit.js');
 const instrumentation = read('app/src/androidTest/java/com/example/ui/preview/docx/DocxPreviewInstrumentationTest.kt');
+const workflow = read('.github/workflows/docx-verify.yml');
 const loadingInstrumentation = read('app/src/androidTest/java/com/example/ui/preview/docx/DocxLoadingInstrumentationTest.kt');
 const gestures = read('app/src/main/java/com/example/ui/preview/docx/DocxWebViewGestures.kt');
 const policy = read('app/src/main/java/com/example/core/format/DocxZoomPolicy.kt');
@@ -157,8 +158,8 @@ test('Android regression fixture checks native zoom defaults, bounds and both ho
   assert.match(instrumentation, /dispatchPan\(web/);
   assert.match(instrumentation, /Animated double-tap must keep the document point under the tap while zooming in/);
   assert.match(instrumentation, /correctionFrames >= 8/);
-  assert.match(instrumentation, /ValueAnimator\.setDurationScale\(1f\)/);
-  assert.match(instrumentation, /ValueAnimator\.setDurationScale\(originalAnimatorScale\)/);
+  assert.doesNotMatch(workflow, /disable-animations:\s*true/);
+  assert.match(workflow, /Keep Android animator scale enabled/);
   assert.match(instrumentation, /Zooming back to fit must preserve the current page and paragraph/);
   assert.match(instrumentation, /fitScale \* 4f/);
   assert.match(instrumentation, /Second double-tap must return to 100% fit width/);
