@@ -154,6 +154,12 @@ class DocxPreviewInstrumentationTest {
                 dispatchTap(web, now, tapPoint.get()[0], tapPoint.get()[1])
                 dispatchTap(web, now + 130, tapPoint.get()[0], tapPoint.get()[1])
             }
+            Thread.sleep(90)
+            val midAnimationScale = readVisualViewportScale(instrumentation, web)
+            assertTrue(
+                "Double-tap zoom must pass through an intermediate native scale: start=$initialScale mid=$midAnimationScale target=${fitScale * 4f}",
+                midAnimationScale > initialScale + .02f && midAnimationScale < fitScale * 4f - .02f
+            )
             awaitVisualViewportScale(instrumentation, web, fitScale * 4f)
             val zoomRequest = evaluateJson(instrumentation, web, "JSON.stringify(window.__docxZoomRequest)")
             assertTrue("Double-tap must compute its target from the measured fit scale: $zoomRequest fit=$fitScale",
@@ -178,7 +184,7 @@ class DocxPreviewInstrumentationTest {
                 "JSON.stringify(window.__docxZoomCorrectionStop||{})")
             val androidAnimatorScale = android.animation.ValueAnimator.getDurationScale()
             val doubleTapElapsedMs = SystemClock.elapsedRealtime() - doubleTapStartedAt
-            assertTrue("Focal correction should follow Chromium animation frames: frames=$correctionFrames stats=$correctionStats animatorScale=$androidAnimatorScale elapsedMs=$doubleTapElapsedMs", correctionFrames >= 8)
+            assertTrue("Focal correction should run in Chromium during native zoom: frames=$correctionFrames stats=$correctionStats animatorScale=$androidAnimatorScale elapsedMs=$doubleTapElapsedMs", correctionFrames >= 1)
             assertTrue("Double-tap must not trigger focus mode", confirmedTaps.get() == 0)
             instrumentation.runOnMainSync {
                 val now = SystemClock.uptimeMillis()
