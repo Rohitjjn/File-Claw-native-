@@ -235,6 +235,20 @@
         return fitScale;
     }
 
+    function refreshNativeZoomBounds() {
+        if (printMode || window.__docxNativeZoomBoundsRefreshed) return;
+        const viewport = document.getElementById('docx-viewport');
+        if (!viewport) return;
+        // Chromium may calculate native page-scale limits before docx-preview inserts
+        // the final document geometry. Re-apply the declared limits after that geometry
+        // and the fit transform have settled, without changing document layout.
+        const content = viewport.getAttribute('content');
+        if (!content) return;
+        viewport.setAttribute('content', content);
+        void document.documentElement.offsetWidth;
+        window.__docxNativeZoomBoundsRefreshed = true;
+    }
+
     function alignFittedPageToGutter() {
         const page = els.document.querySelector('.docx, section.docx');
         if (!page) return;
@@ -390,6 +404,7 @@
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         if (!pageCount()) throw new Error('EMPTY_DOCUMENT_WITHOUT_PAGES');
         const targetScale = applyInitialFit();
+        refreshNativeZoomBounds();
         const deadline = Date.now() + 3500;
         let stableFitFrames = 0;
         const verify = () => {
