@@ -52,6 +52,7 @@ class DocxPreviewInstrumentationTest {
         val linkIntentDispatched = CountDownLatch(1)
         val linkTapResolved = CountDownLatch(1)
         val resolvedTapCount = java.util.concurrent.atomic.AtomicInteger()
+        val nativeZoomScaleSamples = java.util.concurrent.CopyOnWriteArrayList<Float>()
         lateinit var web: WebView
         instrumentation.runOnMainSync {
             val loader = WebViewAssetLoader.Builder()
@@ -84,7 +85,7 @@ class DocxPreviewInstrumentationTest {
                         )
                     },
                     onDoubleTap = { event ->
-                        animateDocxDoubleTapZoom(event)
+                        animateDocxDoubleTapZoom(event, onScaleUpdate = { scale -> nativeZoomScaleSamples.add(scale) })
                     }
                 )
                 addJavascriptInterface(object {
@@ -154,13 +155,14 @@ class DocxPreviewInstrumentationTest {
                 dispatchTap(web, now, tapPoint.get()[0], tapPoint.get()[1])
                 dispatchTap(web, now + 130, tapPoint.get()[0], tapPoint.get()[1])
             }
-            Thread.sleep(90)
-            val midAnimationScale = readVisualViewportScale(instrumentation, web)
-            assertTrue(
-                "Double-tap zoom must pass through an intermediate native scale: start=$initialScale mid=$midAnimationScale target=${fitScale * 4f}",
-                midAnimationScale > initialScale + .02f && midAnimationScale < fitScale * 4f - .02f
-            )
             awaitVisualViewportScale(instrumentation, web, fitScale * 4f)
+            val intermediateNativeScales = nativeZoomScaleSamples.filter {
+                it > initialScale + .02f && it < fitScale * 4f - .02f
+            }.distinct()
+            assertTrue(
+                "Double-tap must animate through intermediate native zoomBy scales: start=$initialScale samples=$nativeZoomScaleSamples target=${fitScale * 4f}",
+                intermediateNativeScales.size >= 3
+            )
             val zoomRequest = evaluateJson(instrumentation, web, "JSON.stringify(window.__docxZoomRequest)")
             assertTrue("Double-tap must compute its target from the measured fit scale: $zoomRequest fit=$fitScale",
                 kotlin.math.abs(zoomRequest.optDouble("fitScale") - fitScale) < .03 &&

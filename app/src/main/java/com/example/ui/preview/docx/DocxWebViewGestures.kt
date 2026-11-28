@@ -71,7 +71,8 @@ private val activeDocxZoomAnimations = java.util.WeakHashMap<WebView, android.an
 
 internal fun WebView.animateDocxDoubleTapZoom(
     event: MotionEvent,
-    isActive: () -> Boolean = { true }
+    isActive: () -> Boolean = { true },
+    onScaleUpdate: (Float) -> Unit = {}
 ) {
     val webView = this
     activeDocxZoomAnimations.remove(webView)?.cancel()
@@ -119,6 +120,7 @@ internal fun WebView.animateDocxDoubleTapZoom(
                 if (increment.isFinite() && increment > 0f && kotlin.math.abs(increment - 1f) > 0.0001f) {
                     zoomBy(increment)
                     lastScale = desiredScale
+                    onScaleUpdate(desiredScale)
                 }
             }
             addListener(object : android.animation.AnimatorListenerAdapter() {
