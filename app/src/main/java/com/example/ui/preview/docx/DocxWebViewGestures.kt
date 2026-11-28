@@ -66,13 +66,13 @@ internal fun WebView.dispatchSingleTapIfNotLink(
     }
 }
 
-/** Animates native page scale, corrects the tap anchor each frame, and optionally reports each native scale update. */
+/** Animates the WebView render node around the tap, then commits the final scale to Chromium. */
 private val activeDocxZoomAnimations = java.util.WeakHashMap<WebView, android.animation.ValueAnimator>()
 
 internal fun WebView.animateDocxDoubleTapZoom(
     event: MotionEvent,
     isActive: () -> Boolean = { true },
-    onScaleUpdate: (Float) -> Unit = {}
+    onScaleFrame: (Float) -> Unit = {}
 ) {
     val webView = this
     activeDocxZoomAnimations.remove(webView)?.cancel()
@@ -105,6 +105,10 @@ internal fun WebView.animateDocxDoubleTapZoom(
             null
         )
 
+        pivotX = tapX.toFloat()
+        pivotY = tapY.toFloat()
+        scaleX = 1f
+        scaleY = 1f
         var lastScale = current
         val animator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 260L
@@ -118,15 +122,21 @@ internal fun WebView.animateDocxDoubleTapZoom(
                 val desiredScale = current + (target - current) * fraction
                 val increment = desiredScale / lastScale
                 if (increment.isFinite() && increment > 0f && kotlin.math.abs(increment - 1f) > 0.0001f) {
-                    zoomBy(increment)
+                    val renderScale = desiredScale / current
+                    scaleX = renderScale
+                    scaleY = renderScale
                     lastScale = desiredScale
-                    evaluateJavascript("if(window.DocxViewer)window.DocxViewer.correctZoomAnchorFrame()", null)
-                    onScaleUpdate(desiredScale)
+                    onScaleFrame(desiredScale)
                 }
             }
             addListener(object : android.animation.AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: android.animation.Animator) {
                     activeDocxZoomAnimations.remove(this@animateDocxDoubleTapZoom)
+                    zoomBy(target / current)
+                    scaleX = 1f
+                    scaleY = 1f
+                    pivotX = width / 2f
+                    pivotY = height / 2f
                     evaluateJavascript(
                         "(function(){if(window.DocxViewer)window.DocxViewer.stopZoomAnchorCorrection();var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;if(s&&d&&v){var stable=0,tries=0;function settle(){var r=d.getBoundingClientRect(),sr=s.getBoundingClientRect(),scale=v.scale,x=$tapX/($density*scale)+v.offsetLeft-(r.left-sr.left),y=$tapY/($density*scale)+v.offsetTop-(r.top-sr.top),dx=$anchorX-x,dy=$anchorY-y;window.__docxAnchorCorrection={x:x,y:y,dx:dx,dy:dy,scrollLeft:s.scrollLeft,scrollTop:s.scrollTop,maxScrollTop:s.scrollHeight-s.clientHeight,scale:scale};if(Math.abs(dx)>0.5||Math.abs(dy)>0.5){s.scrollLeft+=dx;s.scrollTop+=dy;stable=0;}else stable++;if(stable<3&&tries++<30){requestAnimationFrame(settle);return;}window.__docxDoubleTapZoomActive=false;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=0;}requestAnimationFrame(settle);}else{window.__docxDoubleTapZoomActive=false;}})()",
                         null
@@ -134,6 +144,10 @@ internal fun WebView.animateDocxDoubleTapZoom(
                 }
                 override fun onAnimationCancel(animation: android.animation.Animator) {
                     activeDocxZoomAnimations.remove(this@animateDocxDoubleTapZoom)
+                    scaleX = 1f
+                    scaleY = 1f
+                    pivotX = width / 2f
+                    pivotY = height / 2f
                     evaluateJavascript(
                         "(function(){if(window.DocxViewer)window.DocxViewer.stopZoomAnchorCorrection();window.__docxDoubleTapZoomActive=false;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=0;})()",
                         null
