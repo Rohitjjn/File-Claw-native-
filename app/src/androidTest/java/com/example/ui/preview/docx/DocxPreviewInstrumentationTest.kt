@@ -107,8 +107,8 @@ class DocxPreviewInstrumentationTest {
                     android.net.Uri.encode("https://appassets.androidplatform.net/docx-src/document.docx"))
             }
         }
-        val originalAnimatorScale = readGlobalSetting(instrumentation, "animator_duration_scale")
-        writeGlobalSetting(instrumentation, "animator_duration_scale", "1.0")
+        val originalAnimatorScale = android.animation.ValueAnimator.getDurationScale()
+        android.animation.ValueAnimator.setDurationScale(1f)
         try {
             assertTrue("DOCX render timed out: ${failures.get()}", ready.await(45, TimeUnit.SECONDS))
             assertTrue("DOCX renderer failed: ${failures.get()}", failures.get() == null)
@@ -295,7 +295,7 @@ class DocxPreviewInstrumentationTest {
 
         } finally {
             destroyWebView(instrumentation, activity, web)
-            writeGlobalSetting(instrumentation, "animator_duration_scale", originalAnimatorScale)
+            android.animation.ValueAnimator.setDurationScale(originalAnimatorScale)
         }
     }
 
@@ -636,17 +636,6 @@ class DocxPreviewInstrumentationTest {
                 "boundsDrift=$maxBoundsDrift baseline=$baseline",
             maxVisualScaleDrift < .001 && fitTransformStable && maxBoundsDrift < .1
         )
-    }
-
-    private fun readGlobalSetting(instrumentation: android.app.Instrumentation, name: String): String {
-        val descriptor = instrumentation.uiAutomation.executeShellCommand("settings get global $name")
-        return android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)
-            .bufferedReader().use { it.readText().trim() }
-    }
-
-    private fun writeGlobalSetting(instrumentation: android.app.Instrumentation, name: String, value: String) {
-        val descriptor = instrumentation.uiAutomation.executeShellCommand("settings put global $name $value")
-        android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
     }
 
     private fun readVisualViewportScale(instrumentation: android.app.Instrumentation, web: WebView): Float {
