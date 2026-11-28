@@ -24,9 +24,6 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(host, /useWideViewPort\s*=\s*true/);
   assert.match(host, /loadWithOverviewMode\s*=\s*false/);
   assert.doesNotMatch(html, /body::after[^}]*200vw/);
-  assert.match(html, /#native-zoom-extent \{[^}]*width:\s*200vw;\s*height:\s*200vh;\s*visibility:\s*hidden/s);
-  assert.match(html, /<div id="native-zoom-extent" aria-hidden="true"><\/div>/);
-  assert.match(html, /html, body \{[^}]*overflow:\s*visible/s);
   assert.match(host, /modifier = modifier\.fillMaxSize\(\)\.clipToBounds\(\)/);
   assert.match(client, /override fun onScaleChanged\(/);
   assert.match(client, /onExternalUrl\(uri\)/);
@@ -50,8 +47,6 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(gestures, /dx=\$anchorX-x,dy=\$anchorY-y/);
   assert.match(gestures, /s\.scrollLeft\+=dx/);
   assert.match(gestures, /s\.scrollTop\+=dy/);
-  assert.match(gestures, /window\.scrollBy\(dx,0\)/);
-  assert.match(gestures, /window\.scrollBy\(0,dy\)/);
   assert.match(gestures, /preservedAnchor/);
   assert.match(gestures, /\$tapX\/\(\$density\*scale\)/);
   assert.match(gestures, /v\.offsetLeft/);

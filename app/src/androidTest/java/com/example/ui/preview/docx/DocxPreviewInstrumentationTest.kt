@@ -165,9 +165,9 @@ class DocxPreviewInstrumentationTest {
                 anchorAt200Percent = documentPointAtTap()
             }
             val anchorCorrection = evaluateJson(instrumentation, web, "JSON.stringify(window.__docxAnchorCorrection||{})")
-            val doubleTapAnchorPreserved =
+            assertTrue("Double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt200Percent correction=$anchorCorrection",
                 kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt200Percent.optDouble("x")) < 2.0 &&
-                    kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) < 2.0
+                    kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt200Percent.optDouble("y")) < 2.0)
             assertTrue("Double-tap must not trigger focus mode", confirmedTaps.get() == 0)
             instrumentation.runOnMainSync {
                 val now = SystemClock.uptimeMillis()
@@ -215,10 +215,7 @@ class DocxPreviewInstrumentationTest {
             }
             val minZoom = readVisualViewportScale(instrumentation, web)
             val pinchBounds = evaluateJson(instrumentation, web,
-                "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document');return JSON.stringify({viewport:document.getElementById('docx-viewport').content,fit:DocxViewer.getState().fitScale,scale:visualViewport.scale,visualViewportWidth:visualViewport.width,layoutViewportWidth:document.documentElement.clientWidth,layoutViewportHeight:document.documentElement.clientHeight,htmlScrollWidth:document.documentElement.scrollWidth,htmlScrollHeight:document.documentElement.scrollHeight,bodyClientWidth:document.body.clientWidth,bodyScrollWidth:document.body.scrollWidth,bodyComputedWidth:getComputedStyle(document.body).width,scrollerClientWidth:s.clientWidth,scrollerScrollWidth:s.scrollWidth,documentClientWidth:d.clientWidth,documentScrollWidth:d.scrollWidth});})()")
-            assertTrue("DOCX native pinch fixture must retain a root-level zoom extent: $pinchBounds",
-                pinchBounds.optDouble("htmlScrollWidth") > pinchBounds.optDouble("layoutViewportWidth") ||
-                    pinchBounds.optDouble("htmlScrollHeight") > pinchBounds.optDouble("layoutViewportHeight"))
+                "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document');return JSON.stringify({viewport:document.getElementById('docx-viewport').content,fit:DocxViewer.getState().fitScale,scale:visualViewport.scale,visualViewportWidth:visualViewport.width,layoutViewportWidth:document.documentElement.clientWidth,htmlScrollWidth:document.documentElement.scrollWidth,bodyClientWidth:document.body.clientWidth,bodyScrollWidth:document.body.scrollWidth,bodyComputedWidth:getComputedStyle(document.body).width,scrollerClientWidth:s.clientWidth,scrollerScrollWidth:s.scrollWidth,documentClientWidth:d.clientWidth,documentScrollWidth:d.scrollWidth});})()")
             assertTrue("Native page zoom is floored at 50% of fit: $minZoom after $zoomOutProgress fit=$fitScale bounds=$pinchBounds",
                 minZoom >= .49f && minZoom <= .52f)
             repeat(4) {
@@ -269,8 +266,6 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Reverse one-finger drag must pan left and up: start=$draggedTowardRightBottom end=$draggedTowardLeftTop",
                 draggedTowardLeftTop.optDouble("left") < draggedTowardRightBottom.optDouble("left") - 1 &&
                     draggedTowardLeftTop.optDouble("top") < draggedTowardRightBottom.optDouble("top") - 1)
-            assertTrue("Double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt200Percent correction=$anchorCorrection",
-                doubleTapAnchorPreserved)
 
         } finally {
             destroyWebView(instrumentation, activity, web)

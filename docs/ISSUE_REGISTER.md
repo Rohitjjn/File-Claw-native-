@@ -1,3 +1,9 @@
+## DOCX CI repair follow-up: native pinch-out floor remains open (2026-11-21)
+
+| Audit ID | Investigation / evidence | Status |
+|---|---|---|
+| AUD-DOCX-022 | Exact-SHA run [46097834040](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/46097834040) on `f4690d88c5e2d4490f0557578092abb51d133861` re-applied the existing viewport content after render; emulator still stopped at `1.0` after `[2.6041675, 1.3563371, 1.0, 1.0, 1.0, 1.0]`. Root overflow is consequential: on `e3d5da0a984d2e26de13f47869717fc17423a285`, [run 46098577322](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/46098577322) reported double-tap anchor drift (`x: 123.9 → -35.3`, `y: 555.1 → 42.6`). A follow-up fallback to window scrolling did not resolve it in [run 46099397484](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/46099397484). With the anchor verdict deferred for diagnostics, [run 46100129101](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/46100129101) on `0184dd41b95544718ad0bf09250b939a3aea0e61` did reach the 0.5 floor, but failed the subsequent horizontal-overflow/pan assertion; the deferred anchor assertion was not reached. | Both the viewport-meta refresh and root-overflow/pan experiments are reverted from the source and tests; no regression assertion was removed from the baseline. **CI is still red; no fix or artifact is verified.** The remaining failure requires a DOCX-scoped zoom/scroll design that preserves fit, double-tap focal anchoring, nested pan and the 0.5 pinch floor simultaneously. Keep AUD-DOCX-016 open and do not share an APK. |
+
 ## DOCX instrumentation warnings and native pinch-out floor (2026-11-21; working-tree follow-up)
 
 | Audit ID | Evidence / change | Verification / status |
