@@ -184,6 +184,16 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Zooming back to fit must preserve the current page and paragraph: before=$pageTwoBefore after=$pageTwoAfter",
                 pageTwoAfter.optBoolean("found") && pageTwoAfter.optDouble("scrollTop") > 0.0 &&
                     kotlin.math.abs(pageTwoBefore.optDouble("top") - pageTwoAfter.optDouble("top")) < 48.0)
+            val zoomSettleDeadline = SystemClock.elapsedRealtime() + 5_000L
+            var zoomStillSettling = evaluateJson(instrumentation, web,
+                "JSON.stringify({active:!!window.__docxDoubleTapZoomActive})").optBoolean("active")
+            while (zoomStillSettling && SystemClock.elapsedRealtime() < zoomSettleDeadline) {
+                Thread.sleep(50)
+                zoomStillSettling = evaluateJson(instrumentation, web,
+                    "JSON.stringify({active:!!window.__docxDoubleTapZoomActive})").optBoolean("active")
+            }
+            assertFalse("Double-tap focal correction must settle before subsequent document navigation",
+                zoomStillSettling)
 
             instrumentation.runOnMainSync { dispatchTap(web, SystemClock.uptimeMillis()) }
             assertTrue("A confirmed single tap must reach focus mode", tapConfirmed.await(2, TimeUnit.SECONDS))

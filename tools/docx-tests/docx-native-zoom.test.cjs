@@ -152,6 +152,7 @@ test('Android regression fixture checks native zoom defaults, bounds and both ho
   assert.match(instrumentation, /fitScale \* 4f/);
   assert.match(instrumentation, /Second double-tap must return to 100% fit width/);
   assert.match(instrumentation, /Hyperlink tap must resolve without toggling focus/);
+  assert.match(instrumentation, /Double-tap focal correction must settle before subsequent document navigation/);
   assert.match(instrumentation, /hyperlink scrolled into view after page-preserving zoom-out/);
   assert.match(instrumentation, /DOCX HTTPS link must dispatch ACTION_VIEW/);
   assert.match(instrumentation, /missingExternalAppIsReportedToThePreview/);
