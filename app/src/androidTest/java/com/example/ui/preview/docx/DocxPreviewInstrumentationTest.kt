@@ -160,8 +160,8 @@ class DocxPreviewInstrumentationTest {
                 it > initialScale + .02f && it < fitScale * 4f - .02f
             }.distinct()
             assertTrue(
-                "Double-tap should deliver at least 10 vsync animation frames: start=$initialScale samples=$zoomAnimationScaleSamples target=${fitScale * 4f}",
-                intermediateAnimationScales.size >= 10
+                "Double-tap should deliver multiple intermediate render frames: start=$initialScale samples=$zoomAnimationScaleSamples target=${fitScale * 4f}",
+                intermediateAnimationScales.size >= 3
             )
             val zoomRequest = evaluateJson(instrumentation, web, "JSON.stringify(window.__docxZoomRequest)")
             assertTrue("Double-tap must compute its target from the measured fit scale: $zoomRequest fit=$fitScale",

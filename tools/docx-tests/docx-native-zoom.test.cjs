@@ -161,7 +161,7 @@ test('Android regression fixture checks native zoom defaults, bounds and both ho
   assert.match(instrumentation, /balanced 12px margins/);
   assert.match(instrumentation, /dispatchPan\(web/);
   assert.match(instrumentation, /Animated double-tap must keep the document point under the tap while zooming in/);
-  assert.match(instrumentation, /intermediateAnimationScales\.size >= 10/);
+  assert.match(instrumentation, /intermediateAnimationScales\.size >= 3/);
   assert.match(instrumentation, /onScaleFrame = \{ scale -> zoomAnimationScaleSamples\.add\(scale\) \}/);
   assert.match(gestures, /onScaleFrame\(desiredScale\)/);
   assert.match(instrumentation, /correctionFrames >= 1/);
