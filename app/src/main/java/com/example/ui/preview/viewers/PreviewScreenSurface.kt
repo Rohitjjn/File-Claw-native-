@@ -179,8 +179,6 @@ internal fun PreviewScreenSurface(
                 isDocx = fileState is MainViewModel.FileContentState.DocxSuccess,
                 hasOutline = activeFile?.extension?.lowercase() in setOf("md", "markdown", "txt") && !isEditMode,
                 isTextFile = activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"),
-                currentPage = screenState.currentPdfPage,
-                pageCount = screenState.totalPdfPages,
                 focusRequester = searchFieldFocusRequester
             )
         },

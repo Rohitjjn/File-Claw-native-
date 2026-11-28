@@ -1,12 +1,23 @@
 package com.example.ui.preview.chrome
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Toc
 import androidx.compose.material.icons.filled.Delete
@@ -19,7 +30,6 @@ import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Print
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,6 +48,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+
+const val PREVIEW_OVERFLOW_MENU_TEST_TAG = "preview_overflow_menu"
 
 /** Callbacks for preview actions; the chrome component owns no ViewModel or screen state. */
 data class PreviewOverflowMenuActions(
@@ -92,8 +104,6 @@ fun PreviewOverflowMenu(
     isEditMode: Boolean,
     hasOutline: Boolean,
     isTextFile: Boolean,
-    currentPage: Int,
-    pageCount: Int,
     actions: PreviewOverflowMenuActions
 ) {
     if (!expanded) return
@@ -106,8 +116,7 @@ fun PreviewOverflowMenu(
             add(MenuItemSpec("Export modified copy…", Icons.Outlined.DriveFileMove, actions.exportCopy))
         }
         if (isPdf || isDocx) {
-            val count = if (isDocx) "≈$pageCount" else "$pageCount"
-            add(MenuItemSpec("Go to Page ($currentPage / $count)", Icons.Outlined.InsertDriveFile, actions.jumpToPage))
+            add(MenuItemSpec("Go to Page", Icons.Outlined.InsertDriveFile, actions.jumpToPage))
             if (isPdf) add(MenuItemSpec("Open in System Viewer", Icons.Outlined.Language, actions.openSystemViewer))
         }
         if (hasOutline) add(MenuItemSpec("Document Outline", Icons.AutoMirrored.Outlined.Toc, actions.openOutline))
@@ -127,6 +136,7 @@ fun PreviewOverflowMenu(
     ) {
         MaterialTheme(colorScheme = lightColorScheme(), typography = typography) {
             Surface(
+                modifier = Modifier.testTag(PREVIEW_OVERFLOW_MENU_TEST_TAG),
                 shape = menuShape,
                 color = Color.White,
                 tonalElevation = 0.dp,
@@ -134,30 +144,35 @@ fun PreviewOverflowMenu(
             ) {
                 Column(
                     modifier = Modifier
-                        .widthIn(min = 196.dp, max = 280.dp)
+                        .widthIn(min = 180.dp, max = 215.dp)
                         .heightIn(max = 480.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
                     items.forEach { item ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    item.label,
-                                    style = typography.labelMedium.copy(
-                                        fontSize = 13.sp,
-                                        fontWeight = if (item.emphasized) androidx.compose.ui.text.font.FontWeight.SemiBold else typography.labelMedium.fontWeight
-                                    ),
-                                    color = Color.Black
-                                )
-                            },
-                            onClick = {
-                                onDismissRequest()
-                                item.onClick()
-                            },
-                            leadingIcon = {
-                                Icon(item.icon, contentDescription = item.label, tint = Color.Black, modifier = Modifier.size(18.dp))
-                            }
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .clickable(role = Role.MenuItem) {
+                                    onDismissRequest()
+                                    item.onClick()
+                                }
+                                .semantics(mergeDescendants = true) { }
+                                .padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(item.icon, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                item.label,
+                                style = typography.labelMedium.copy(
+                                    fontSize = 13.5.sp,
+                                    fontWeight = if (item.emphasized) androidx.compose.ui.text.font.FontWeight.SemiBold else typography.labelMedium.fontWeight
+                                ),
+                                color = Color.Black,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             }

@@ -13,6 +13,7 @@ import android.print.PrintDocumentInfo
 import android.print.PrintManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.example.core.format.DocxPrintLayoutPolicy
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -215,6 +216,7 @@ object FilePrintHelper {
                     })
                     .build()
 
+                tempWebView.setInitialScale(100)
                 tempWebView.settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
@@ -237,6 +239,7 @@ object FilePrintHelper {
                 )
 
                 var printSubmitted = false
+                var printPreparing = false
                 var fallbackPageLoaded = false
                 var released = false
                 var cleanupWatchdog: Runnable? = null
@@ -271,6 +274,8 @@ object FilePrintHelper {
                 }
 
                 fun submitWebViewForPrint() {
+                    if (released || printSubmitted) return
+                    printSubmitted = true
                     val delegate = tempWebView.createPrintDocumentAdapter(title)
                     val adapter = object : PrintDocumentAdapter() {
                         override fun onStart() = delegate.onStart()
@@ -316,10 +321,48 @@ object FilePrintHelper {
                     }
                 }
 
+                var printVisualStateRequestId = 0L
                 fun triggerPrint() {
-                    if (printSubmitted || released) return
-                    printSubmitted = true
-                    submitWebViewForPrint()
+                    if (printSubmitted || printPreparing || released) return
+                    printPreparing = true
+                    tempWebView.evaluateJavascript("JSON.stringify(DocxViewer.prepareForPrint())") { encoded ->
+                        if (released) return@evaluateJavascript
+                        val prepared = runCatching {
+                            org.json.JSONObject(org.json.JSONTokener(encoded).nextValue().toString())
+                        }.getOrNull()
+                        val scale = prepared?.optDouble("scale", Double.NaN) ?: Double.NaN
+                        val viewportWidth = prepared?.optDouble("viewportWidth", 0.0) ?: 0.0
+                        val rootWidth = prepared?.optDouble("rootWidth", 0.0) ?: 0.0
+                        val pageWidth = prepared?.optDouble("pageWidth", 0.0) ?: 0.0
+                        val valid = prepared != null && prepared.optBoolean("ready") &&
+                            DocxPrintLayoutPolicy.isReadyForPrint(
+                                scale = scale,
+                                viewportWidth = viewportWidth,
+                                rootWidth = rootWidth,
+                                pageWidth = pageWidth,
+                                transform = prepared.optString("transform")
+                            )
+                        DocxPreviewDiagnostics.log(
+                            "print_layout_prepared", "mode" to "print", "scale" to scale,
+                            "viewportWidthCss" to viewportWidth, "rootWidthCss" to rootWidth,
+                            "pageWidthCss" to pageWidth, "transform" to (prepared?.optString("transform") ?: "missing"),
+                            "layoutReady" to valid
+                        )
+                        if (!valid) {
+                            printPreparing = false
+                            fallbackTextPrint("Print layout did not reach full-width 100% scale")
+                            return@evaluateJavascript
+                        }
+                        tempWebView.postVisualStateCallback(
+                            ++printVisualStateRequestId,
+                            object : WebView.VisualStateCallback() {
+                                override fun onComplete(requestId: Long) {
+                                    printPreparing = false
+                                    submitWebViewForPrint()
+                                }
+                            }
+                        )
+                    }
                 }
 
                 fun fallbackTextPrint(reason: String) {

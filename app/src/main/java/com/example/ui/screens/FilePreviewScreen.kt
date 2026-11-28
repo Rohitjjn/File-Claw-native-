@@ -144,15 +144,13 @@ fun FilePreviewScreen(
     val context = LocalContext.current
     val printScope = rememberCoroutineScope()
 
-    LaunchedEffect(activeFile?.path, screenState.docxPreviewReady, screenState.docxPreviewWebView) {
+    LaunchedEffect(activeFile?.path) {
         docxViewerState.installPrintAction {
             activeFile?.let { entity ->
                 DocxPrintController.print(
                     context = context,
                     file = File(entity.path),
-                    title = entity.name,
-                    preview = screenState.docxPreviewWebView,
-                    previewReady = screenState.docxPreviewReady
+                    title = entity.name
                 )
             }
         }

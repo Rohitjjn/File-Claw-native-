@@ -44,7 +44,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(policy, /const val MAX_ZOOM = 10\.00f/);
   assert.match(policy, /fun doubleTapTarget\(zoom: Float\): Float = if \(coerce\(zoom\) < 1\.5f\) 4\.0f else DEFAULT_ZOOM/);
   assert.match(gestures, /ValueAnimator\.ofFloat\(0f, 1f\)/);
-  assert.match(gestures, /duration = 280L/);
+  assert.match(gestures, /duration = 260L/);
   assert.match(gestures, /zoomBy\(increment\)/);
   assert.match(viewer, /function applyFitToWidth\(viewportWidth\)[\s\S]*?els\.document\.style\.transform = `translateX\(\$\{translateX\}px\) scale\(\$\{fit\.fitScale\}\)`/);
   assert.match(gestures, /zoom-anchor-space/);
@@ -60,7 +60,15 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(instrumentation, /\+v\.offsetLeft/);
   assert.match(instrumentation, /\+v\.offsetTop/);
   assert.match(gestures, /cancelAnimationFrame\(window\.__docxAnchorFrame\)/);
-  assert.match(gestures, /duration:280/);
+  assert.match(gestures, /duration:260/);
+  assert.match(gestures, /PathInterpolator\(0\.25f, 0\.1f, 0\.25f, 1\.0f\)/);
+  const updateStart = gestures.indexOf('addUpdateListener { valueAnimator ->');
+  const listenerEnd = gestures.indexOf('addListener(object : android.animation.AnimatorListenerAdapter()', updateStart);
+  assert.ok(updateStart >= 0 && listenerEnd > updateStart, 'Native zoom animation listener must be present');
+  assert.doesNotMatch(gestures.slice(updateStart, listenerEnd), /evaluateJavascript/);
+  assert.match(gestures, /window\.DocxViewer\.startZoomAnchorCorrection/);
+  assert.match(html, /#scaled-document\.docx-zooming\s*\{\s*will-change:\s*transform/);
+  assert.match(viewer, /startZoomAnchorCorrection\(anchorX, anchorY, tapX, tapY, density\)/);
   assert.match(gestures, /stable<3/);
   assert.match(gestures, /scrollTop:s\?s\.scrollTop:0/);
   assert.match(gestures, /window\.DocxViewer\.getState\(\)/);
@@ -93,7 +101,7 @@ test('DOCX pinch and pan are delegated to native Chromium WebView zoom', () => {
   assert.match(viewportFit, /function calculate\(viewportWidth, pageWidth, visualMargin = 12\)/);
   assert.match(html, /name="viewport" content="width=device-width, initial-scale=1\.0, minimum-scale=0\.5, maximum-scale=10\.0, user-scalable=yes"/);
   assert.match(html, /min-width:\s*0/);
-  assert.doesNotMatch(html, /#scaled-document \.docx, #scaled-document section\.docx \{[^}]*max-width:\s*100%\s*!important/s);
+  assert.doesNotMatch(html.split('@media print')[0], /^\s*#scaled-document \.docx, #scaled-document section\.docx \{[^}]*max-width:\s*100%\s*!important/s);
   assert.match(html, /#scaled-document \{[^}]*width:\s*100%/);
   assert.match(html, /#scaled-document a \{[^}]*pointer-events:\s*auto/s);
   assert.match(html, /@media print\s*\{\s*html, body\s*\{[^}]*min-width:\s*0/s);
@@ -148,6 +156,7 @@ test('Android regression fixture checks native zoom defaults, bounds and both ho
   assert.match(instrumentation, /balanced 12px margins/);
   assert.match(instrumentation, /dispatchPan\(web/);
   assert.match(instrumentation, /Animated double-tap must keep the document point under the tap while zooming in/);
+  assert.match(instrumentation, /correctionFrames >= 8/);
   assert.match(instrumentation, /Zooming back to fit must preserve the current page and paragraph/);
   assert.match(instrumentation, /fitScale \* 4f/);
   assert.match(instrumentation, /Second double-tap must return to 100% fit width/);

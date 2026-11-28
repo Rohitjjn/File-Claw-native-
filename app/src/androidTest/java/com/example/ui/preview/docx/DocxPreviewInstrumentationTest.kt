@@ -171,6 +171,9 @@ class DocxPreviewInstrumentationTest {
             assertTrue("Animated double-tap must keep the document point under the tap while zooming in: before=$anchorBeforeZoom after=$anchorAt400Percent correction=$anchorCorrection",
                 kotlin.math.abs(anchorBeforeZoom.optDouble("x") - anchorAt400Percent.optDouble("x")) < 2.0 &&
                     kotlin.math.abs(anchorBeforeZoom.optDouble("y") - anchorAt400Percent.optDouble("y")) < 2.0)
+            val correctionFrames = evaluateJson(instrumentation, web,
+                "JSON.stringify({frames:window.__docxZoomCorrectionFrames||0})").optInt("frames")
+            assertTrue("Focal correction should follow Chromium animation frames, observed $correctionFrames", correctionFrames >= 8)
             assertTrue("Double-tap must not trigger focus mode", confirmedTaps.get() == 0)
             instrumentation.runOnMainSync {
                 val now = SystemClock.uptimeMillis()
@@ -713,7 +716,7 @@ class DocxPreviewInstrumentationTest {
         dispatch(MotionEvent.ACTION_UP, 1, arrayOf(first), arrayOf(coords(endDistance)[0]))
     }
 
-    @Test fun printModeUsesTheSameOfflineRendererAndReadinessCallback() {
+    @Test fun printPreparationResetsPreviewFitAndUsesFullPageWidth() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = launchTestActivity(instrumentation)
         val fixture = fixtureDocx()
@@ -762,16 +765,16 @@ class DocxPreviewInstrumentationTest {
         try {
             assertTrue("Print-mode render did not complete: ${failure.get()}", ready.await(45, TimeUnit.SECONDS))
             assertTrue("Print-mode document failure: ${failure.get()}", failure.get() == null)
-            val themeCheck = CountDownLatch(1)
-            val themeResult = AtomicReference<String?>(null)
-            instrumentation.runOnMainSync {
-                web.evaluateJavascript(
-                    "(function(){DocxViewer.setTheme(true,'#181715','#252320','#faf9f5','#2d2c2a');return getComputedStyle(document.documentElement).getPropertyValue('--paper').trim()+'|'+getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim()+'|'+(document.getElementById('spacer')===null)+'|'+document.getElementById('scaled-document').style.transform;})()"
-                ) { value -> themeResult.set(value); themeCheck.countDown() }
-            }
-            assertTrue("Theme and layout check timed out", themeCheck.await(5, TimeUnit.SECONDS))
-            assertTrue("Theme tokens or normal-flow zoom missing: ${themeResult.get()}",
-                themeResult.get()?.contains("#181715|#252320|true|") == true)
+            val prepared = evaluateJson(instrumentation, web,
+                "(function(){DocxViewer.setTheme(true,'#181715','#252320','#faf9f5','#2d2c2a');var d=document.getElementById('scaled-document');d.style.transform='translateX(12px) scale(0.5)';var state=DocxViewer.prepareForPrint();return JSON.stringify({ready:state.ready,printScale:state.scale,printPreparedWidth:state.rootWidth,pageWidth:state.pageWidth,viewportWidth:state.viewportWidth,transform:state.transform,inlineTransform:d.style.transform,prepared:document.documentElement.classList.contains('print-prepared'),paper:getComputedStyle(document.documentElement).getPropertyValue('--paper').trim(),pagePaper:getComputedStyle(document.documentElement).getPropertyValue('--page-paper').trim()});})()")
+            assertTrue("Print preparation should remove mobile scale and fill the page width: $prepared",
+                prepared.optBoolean("ready") && kotlin.math.abs(prepared.optDouble("printScale") - 1.0) < .01 &&
+                    prepared.optDouble("printPreparedWidth") >= prepared.optDouble("viewportWidth") * .99 &&
+                    prepared.optDouble("pageWidth") >= prepared.optDouble("viewportWidth") * .99 &&
+                    prepared.optString("transform") == "none" && prepared.optString("inlineTransform") == "none" &&
+                    prepared.optBoolean("prepared"))
+            assertTrue("Print preparation must retain the active theme and print paper tokens: $prepared",
+                prepared.optString("paper") == "#181715" && prepared.optString("pagePaper") == "#252320")
         } finally {
             destroyWebView(instrumentation, context, web)
         }

@@ -23,6 +23,7 @@
     let lastKnownScrollRatio = 0;
     let fitResizeObserver = null;
     let fitReflowTimer = 0;
+    let zoomAnchorFrame = 0;
 
     function send(method, payload) {
         try {
@@ -282,6 +283,88 @@
         fitResizeObserver.observe(els.scroller);
     }
 
+    function stopZoomAnchorCorrection() {
+        if (zoomAnchorFrame) cancelAnimationFrame(zoomAnchorFrame);
+        zoomAnchorFrame = 0;
+        if (els.document) els.document.classList.remove('docx-zooming');
+    }
+
+    function startZoomAnchorCorrection(anchorX, anchorY, tapX, tapY, density) {
+        stopZoomAnchorCorrection();
+        if (!els.scroller || !els.document) return false;
+        els.document.classList.add('docx-zooming');
+        const correct = () => {
+            if (!window.__docxDoubleTapZoomActive || !els.scroller.isConnected || !els.document.isConnected) {
+                stopZoomAnchorCorrection();
+                return;
+            }
+            const viewport = window.visualViewport;
+            if (viewport && viewport.scale > 0) {
+                const documentRect = els.document.getBoundingClientRect();
+                const scrollerRect = els.scroller.getBoundingClientRect();
+                const x = tapX / (density * viewport.scale) + viewport.offsetLeft - (documentRect.left - scrollerRect.left);
+                const y = tapY / (density * viewport.scale) + viewport.offsetTop - (documentRect.top - scrollerRect.top);
+                const dx = anchorX - x;
+                const dy = anchorY - y;
+                els.scroller.scrollLeft += dx;
+                els.scroller.scrollTop += dy;
+                window.__docxAnchorCorrection = {
+                    x, y, dx, dy, scrollLeft: els.scroller.scrollLeft, scrollTop: els.scroller.scrollTop,
+                    maxScrollTop: els.scroller.scrollHeight - els.scroller.clientHeight, scale: viewport.scale
+                };
+                window.__docxZoomCorrectionFrames = (window.__docxZoomCorrectionFrames || 0) + 1;
+            }
+            zoomAnchorFrame = requestAnimationFrame(correct);
+        };
+        window.__docxZoomCorrectionFrames = 0;
+        zoomAnchorFrame = requestAnimationFrame(correct);
+        return true;
+    }
+
+    function prepareForPrint() {
+        printMode = true;
+        if (fitResizeObserver) {
+            fitResizeObserver.disconnect();
+            fitResizeObserver = null;
+        }
+        if (fitReflowTimer) clearTimeout(fitReflowTimer);
+        fitReflowTimer = 0;
+        stopZoomAnchorCorrection();
+        if (els.scroller) {
+            els.scroller.classList.remove('zoom-anchor-space');
+            els.scroller.scrollLeft = 0;
+            els.scroller.scrollTop = 0;
+        }
+        const viewportMeta = document.getElementById('docx-viewport');
+        if (viewportMeta) {
+            viewportMeta.content = 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        }
+        document.documentElement.classList.add('print-prepared');
+        if (els.document) {
+            for (const property of ['transform', 'transform-origin', 'width', 'max-width', 'margin', 'margin-bottom']) {
+                els.document.style.removeProperty(property);
+            }
+            els.document.style.setProperty('transform', 'none', 'important');
+            els.document.style.setProperty('width', '100%', 'important');
+            els.document.style.setProperty('max-width', '100%', 'important');
+            els.document.style.setProperty('margin', '0', 'important');
+            els.document.style.setProperty('margin-bottom', '0', 'important');
+        }
+        const viewport = window.visualViewport;
+        const rootRect = els.document && els.document.getBoundingClientRect();
+        const page = els.document && els.document.querySelector('.docx, section.docx');
+        const pageRect = page && page.getBoundingClientRect();
+        const scale = viewport && viewport.scale || 1;
+        const viewportWidth = document.documentElement.clientWidth;
+        const rootWidth = rootRect && rootRect.width || 0;
+        const pageWidth = pageRect && pageRect.width || 0;
+        return {
+            ready: scale >= 0.99 && scale <= 1.01 && rootWidth > 0 && pageWidth > 0,
+            scale, viewportWidth, rootWidth, pageWidth,
+            transform: els.document ? getComputedStyle(els.document).transform : 'missing'
+        };
+    }
+
     async function readDocumentStream(response, generation) {
         const total = Math.max(0, Number(response.headers.get('content-length') || 0));
         if (total > MAX_BYTES) throw new Error('RESOURCE_LIMIT_EXCEEDED');
@@ -437,6 +520,11 @@
         },
         clearSearch() { clearHighlights(); send('onSearchResults', { total: 0, current: 0, truncated: false }); },
         recalculateFitToWidth() { return recalculateFitToWidth(); },
+        startZoomAnchorCorrection(anchorX, anchorY, tapX, tapY, density) {
+            return startZoomAnchorCorrection(anchorX, anchorY, tapX, tapY, density);
+        },
+        stopZoomAnchorCorrection() { stopZoomAnchorCorrection(); },
+        prepareForPrint() { return prepareForPrint(); },
         setTheme(dark, paper, pagePaper, ink, edge) {
             const root = document.documentElement;
             root.classList.toggle('dark', !!dark);

@@ -1,21 +1,14 @@
 package com.example.ui.preview.docx
 
 import android.content.Context
-import android.webkit.WebView
 import com.example.utils.FilePrintHelper
 import java.io.File
 
-/** Keeps the existing Android PrintManager pipeline behind the DOCX preview boundary. */
+/** Print DOCX in an isolated 100% print-mode WebView, never in the mobile fitted preview. */
 object DocxPrintController {
-    fun print(context: Context, file: File, title: String, preview: WebView?, previewReady: Boolean) {
-        if (!file.isFile || file.length() <= 0L) {
-            FilePrintHelper.printDocx(context, file, title)
-            return
-        }
-        if (previewReady && preview != null) {
-            FilePrintHelper.printWebView(context, preview, title)
-        } else {
-            FilePrintHelper.printDocx(context, file, title)
-        }
+    fun print(context: Context, file: File, title: String) {
+        // The preview owns a phone-width CSS fit transform and native zoom state. Reusing it for
+        // PrintManager leaked both into the A4 output; the dedicated renderer starts at 1x.
+        FilePrintHelper.printDocx(context, file, title)
     }
 }

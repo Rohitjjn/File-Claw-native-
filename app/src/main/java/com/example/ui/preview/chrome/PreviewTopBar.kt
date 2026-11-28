@@ -66,8 +66,6 @@ fun PreviewHeader(
     isDocx: Boolean,
     hasOutline: Boolean,
     isTextFile: Boolean,
-    currentPage: Int,
-    pageCount: Int,
     focusRequester: FocusRequester,
     modifier: Modifier = Modifier
 ) {
@@ -117,8 +115,6 @@ fun PreviewHeader(
                         isEditMode = state.isEditMode,
                         hasOutline = hasOutline,
                         isTextFile = isTextFile,
-                        currentPage = currentPage,
-                        pageCount = pageCount,
                         actions = actions.menu
                     )
                 }

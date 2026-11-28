@@ -67,6 +67,8 @@ internal fun DocxWebViewHost(
                         }.getOrNull()
                     }
                 }).build()
+            // This WebView is the phone preview only: its fit transform and native zoom are not
+            // printable state. DocxPrintController asks FilePrintHelper for a fresh print-mode WebView.
             web = WebView(context).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,

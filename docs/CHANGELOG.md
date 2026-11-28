@@ -324,3 +324,10 @@ hard-coded 500 ms splash wait (now 150 ms) and moving cache-directory I/O off th
 - Fixed the DOCX recovery instrumentation test's unsupported Compose test assertion; retained checks that recovered text stays hidden until requested and appears after the action.
 - Improved CI diagnostics so Android-test Kotlin compilation failures are shown in the workflow summary and annotations.
 - **CI PASS:** run [45164606478](https://github.com/Rohitjjn/File-Claw-native-/actions/runs/45164606478) passed unit tests, lint, Detekt, app/instrumentation compilation, debug APK assembly, emulator DOCX tests, and JS checks. Debug APK is in artifact `docx-rehabilitation-0a66dacae512fae600f13609366250afed25a963` (35,890,591 bytes). Physical-device testing remains pending.
+
+## [Unreleased] 2026-11-21 — DOCX print, zoom, and overflow follow-up
+
+- Route DOCX Print/Save as PDF through a separate unscaled print WebView; validate prepared scale/full-width layout and preserve A4 with 12 mm margins.
+- Animate double-tap zoom over 260 ms with cubic-bezier easing and continuous focal correction; preserve Focus Mode and hyperlink behavior.
+- Keep the DOCX overflow menu white and compact with exactly five actions; add sizing/action source and instrumentation coverage.
+- Local verification: DOCX Node suite 33/33, viewer JavaScript syntax checks, and `git diff --check` passed. Java is absent; Android CI and PrintManager/device checks remain pending. No APK is verified.

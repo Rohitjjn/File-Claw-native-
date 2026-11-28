@@ -2,6 +2,7 @@ package com.example.ui.preview.docx
 
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.animation.PathInterpolator
 import android.webkit.WebView
 import com.example.core.format.DocxZoomPolicy
 import org.json.JSONObject
@@ -99,14 +100,14 @@ internal fun WebView.animateDocxDoubleTapZoom(
         val anchorX = metrics.optDouble("anchorX", 0.0)
         val anchorY = metrics.optDouble("anchorY", 0.0)
         evaluateJavascript(
-            "(function(){window.__docxZoomRequest={current:$current,fitScale:$fitScale,targetZoom:$targetZoom,target:$target,duration:280};window.__docxDoubleTapZoomActive=true;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=setTimeout(function(){window.__docxDoubleTapZoomActive=false;window.__docxDoubleTapReleaseTimer=0;},5000);})()",
+            "(function(){window.__docxZoomRequest={current:$current,fitScale:$fitScale,targetZoom:$targetZoom,target:$target,duration:260,easing:'cubic-bezier(0.25,0.1,0.25,1)'};window.__docxDoubleTapZoomActive=true;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=setTimeout(function(){window.__docxDoubleTapZoomActive=false;window.__docxDoubleTapReleaseTimer=0;},5000);if(window.DocxViewer)window.DocxViewer.startZoomAnchorCorrection($anchorX,$anchorY,$tapX,$tapY,$density);})()",
             null
         )
 
         var lastScale = current
         val animator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 280L
-            interpolator = android.view.animation.DecelerateInterpolator()
+            duration = 260L
+            interpolator = PathInterpolator(0.25f, 0.1f, 0.25f, 1.0f)
             addUpdateListener { valueAnimator ->
                 if (!isActive()) {
                     cancel()
@@ -119,21 +120,21 @@ internal fun WebView.animateDocxDoubleTapZoom(
                     zoomBy(increment)
                     lastScale = desiredScale
                 }
-                evaluateJavascript(
-                    "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;if(!s||!d||!v)return;var scale=v.scale,r=d.getBoundingClientRect(),sr=s.getBoundingClientRect(),x=$tapX/($density*scale)+v.offsetLeft-(r.left-sr.left),y=$tapY/($density*scale)+v.offsetTop-(r.top-sr.top);s.scrollLeft+=($anchorX-x);s.scrollTop+=($anchorY-y);})()",
-                    null
-                )
             }
             addListener(object : android.animation.AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: android.animation.Animator) {
                     activeDocxZoomAnimations.remove(this@animateDocxDoubleTapZoom)
                     evaluateJavascript(
-                        "(function(){var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;if(s&&d&&v){var stable=0,tries=0;function settle(){var r=d.getBoundingClientRect(),sr=s.getBoundingClientRect(),scale=v.scale,x=$tapX/($density*scale)+v.offsetLeft-(r.left-sr.left),y=$tapY/($density*scale)+v.offsetTop-(r.top-sr.top),dx=$anchorX-x,dy=$anchorY-y;window.__docxAnchorCorrection={x:x,y:y,dx:dx,dy:dy,scrollLeft:s.scrollLeft,scrollTop:s.scrollTop,maxScrollTop:s.scrollHeight-s.clientHeight,scale:scale};if(Math.abs(dx)>0.5||Math.abs(dy)>0.5){s.scrollLeft+=dx;s.scrollTop+=dy;stable=0;}else stable++;if(stable<3&&tries++<30){requestAnimationFrame(settle);return;}window.__docxDoubleTapZoomActive=false;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=0;}requestAnimationFrame(settle);}else{window.__docxDoubleTapZoomActive=false;}})()",
+                        "(function(){if(window.DocxViewer)window.DocxViewer.stopZoomAnchorCorrection();var s=document.getElementById('scroller'),d=document.getElementById('scaled-document'),v=window.visualViewport;if(s&&d&&v){var stable=0,tries=0;function settle(){var r=d.getBoundingClientRect(),sr=s.getBoundingClientRect(),scale=v.scale,x=$tapX/($density*scale)+v.offsetLeft-(r.left-sr.left),y=$tapY/($density*scale)+v.offsetTop-(r.top-sr.top),dx=$anchorX-x,dy=$anchorY-y;window.__docxAnchorCorrection={x:x,y:y,dx:dx,dy:dy,scrollLeft:s.scrollLeft,scrollTop:s.scrollTop,maxScrollTop:s.scrollHeight-s.clientHeight,scale:scale};if(Math.abs(dx)>0.5||Math.abs(dy)>0.5){s.scrollLeft+=dx;s.scrollTop+=dy;stable=0;}else stable++;if(stable<3&&tries++<30){requestAnimationFrame(settle);return;}window.__docxDoubleTapZoomActive=false;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=0;}requestAnimationFrame(settle);}else{window.__docxDoubleTapZoomActive=false;}})()",
                         null
                     )
                 }
                 override fun onAnimationCancel(animation: android.animation.Animator) {
                     activeDocxZoomAnimations.remove(this@animateDocxDoubleTapZoom)
+                    evaluateJavascript(
+                        "(function(){if(window.DocxViewer)window.DocxViewer.stopZoomAnchorCorrection();window.__docxDoubleTapZoomActive=false;if(window.__docxDoubleTapReleaseTimer)clearTimeout(window.__docxDoubleTapReleaseTimer);window.__docxDoubleTapReleaseTimer=0;})()",
+                        null
+                    )
                 }
             })
         }
